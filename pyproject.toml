@@ -1,0 +1,17 @@
+[tool.black]
+line-length = 120
+target-version = ['py37']
+include = '\.pyi?$'
+force-exclude = '''
+/(
+    | venv/*
+    | templates/
+    | data/
+    | media/
+    | test-media/
+)/
+'''
+
+[tool.isort]
+profile = "black"
+extend_skip = "settings, templates"
