@@ -4,7 +4,7 @@ from core import models
 from core.tests.testcases import IntegrationTestCase
 
 
-class BlockTestCases(IntegrationTestCase):
+class BlockTest(IntegrationTestCase):
     def test_execute_action_NewAccount(self):
         block = models.Block.objects.create(
             hash="hash 0",
@@ -138,19 +138,24 @@ class BlockTestCases(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
+        models.Dao.objects.create(id="dao4", name="dao4 name", owner_id="acc3")
         models.Asset.objects.create(id=1, total_supply=150, owner_id="acc1", dao_id="dao1"),
         models.Asset.objects.create(id=2, total_supply=250, owner_id="acc2", dao_id="dao2"),
         models.Asset.objects.create(id=3, total_supply=300, owner_id="acc3", dao_id="dao3"),
+        models.Asset.objects.create(id=4, total_supply=400, owner_id="acc3", dao_id="dao4"),
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100),
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc3", balance=50),
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=200),
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc3", balance=50),
+        models.AssetHolding.objects.create(asset_id=3, owner_id="acc2", balance=50),
         models.AssetHolding.objects.create(asset_id=3, owner_id="acc3", balance=300),
+        models.AssetHolding.objects.create(asset_id=4, owner_id="acc3", balance=400),
         transfers = [
             {"asset_id": 1, "amount": 10, "from": "acc1", "to": "acc2", "not": "interesting"},
             {"asset_id": 1, "amount": 15, "from": "acc1", "to": "acc2", "not": "interesting"},
             {"asset_id": 1, "amount": 25, "from": "acc3", "to": "acc2", "not": "interesting"},
             {"asset_id": 2, "amount": 20, "from": "acc2", "to": "acc1", "not": "interesting"},
+            {"asset_id": 3, "amount": 50, "from": "acc3", "to": "acc2", "not": "interesting"},
         ]
         random.shuffle(transfers)  # order mustn't matter
         block = models.Block.objects.create(
@@ -175,7 +180,9 @@ class BlockTestCases(IntegrationTestCase):
             models.AssetHolding(asset_id=2, owner_id="acc1", balance=20),  # 0 + 20
             models.AssetHolding(asset_id=2, owner_id="acc2", balance=180),  # 200 - 20
             models.AssetHolding(asset_id=2, owner_id="acc3", balance=50),  # 50
-            models.AssetHolding(asset_id=3, owner_id="acc3", balance=300),  # 300
+            models.AssetHolding(asset_id=3, owner_id="acc2", balance=100),  # 50 + 50
+            models.AssetHolding(asset_id=3, owner_id="acc3", balance=250),  # 300 - 50
+            models.AssetHolding(asset_id=4, owner_id="acc3", balance=400),  # 300
         ]
         self.assertModelsEqual(
             models.AssetHolding.objects.order_by("asset_id", "owner_id"),

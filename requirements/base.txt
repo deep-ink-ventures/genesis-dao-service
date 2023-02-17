@@ -1,5 +1,7 @@
 # basics
 Django==4.1.6
+djangorestframework==3.14.0
+django-extensions==3.2.1
 psycopg2==2.9.5
 channels==4.0.0
 daphne==4.0.0

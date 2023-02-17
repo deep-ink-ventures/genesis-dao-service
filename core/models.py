@@ -20,23 +20,27 @@ class Account(TimestampableMixin):
 class Dao(TimestampableMixin):
     id = models.CharField(max_length=128, primary_key=True)
     name = models.CharField(max_length=128, null=True)
-    owner = models.ForeignKey(Account, on_delete=models.CASCADE)
+    owner = models.ForeignKey(Account, related_name="daos", on_delete=models.CASCADE)
 
 
 class Asset(TimestampableMixin):
     id = models.BigIntegerField(primary_key=True)
     total_supply = models.BigIntegerField()
-    dao = models.ForeignKey(Dao, on_delete=models.CASCADE)
-    owner = models.ForeignKey(Account, on_delete=models.CASCADE)
+    dao = models.OneToOneField(Dao, related_name="asset", on_delete=models.CASCADE)
+    owner = models.ForeignKey(Account, related_name="assets", on_delete=models.CASCADE)
 
 
 class AssetHolding(TimestampableMixin):
-    asset = models.ForeignKey(Asset, on_delete=models.CASCADE)
-    owner = models.ForeignKey(Account, on_delete=models.CASCADE)
+    asset = models.ForeignKey(Asset, related_name="holdings", on_delete=models.CASCADE)
+    owner = models.ForeignKey(Account, related_name="holdings", on_delete=models.CASCADE)
     balance = models.IntegerField()
 
     class Meta:
         db_table = "core_asset_holding"
+        unique_together = ("asset", "owner")
+
+    def __str__(self):
+        return f"{self.asset_id} | {self.owner_id} | {self.balance}"
 
 
 class Block(TimestampableMixin):
@@ -144,26 +148,25 @@ class Block(TimestampableMixin):
             ):
                 existing_holdings[asset_holding.asset_id][asset_holding.owner_id] = asset_holding
 
-            asset_holdings_to_update = {}
             asset_holdings_to_create = {}
             for asset_id, amount, from_acc, to_acc in asset_holding_data:
                 # subtract transferred amount from existing AssetHolding
-                from_acc_holding = existing_holdings[asset_id][from_acc]
-                from_acc_holding.balance -= amount
-                asset_holdings_to_update[(asset_id, from_acc)] = from_acc_holding
+                existing_holdings[asset_id][from_acc].balance -= amount
 
                 #  add transferred amount if AssetHolding already exists
                 if to_acc_holding := asset_holdings_to_create.get((asset_id, to_acc)):
                     to_acc_holding.balance += amount
-                elif to_acc_holding := existing_holdings.get((asset_id, to_acc), {}).get(to_acc):
+                elif to_acc_holding := existing_holdings.get(asset_id, {}).get(to_acc):
                     to_acc_holding.balance += amount
-                    asset_holdings_to_update[(asset_id, to_acc)] = to_acc_holding
                 # otherwise create a new AssetHolding with balance = transferred amount
                 else:
                     asset_holdings_to_create[(asset_id, to_acc)] = AssetHolding(
                         owner_id=to_acc, asset_id=asset_id, balance=amount
                     )
-            AssetHolding.objects.bulk_update(asset_holdings_to_update.values(), ["balance"])
+            AssetHolding.objects.bulk_update(
+                [holding for acc_to_holding in existing_holdings.values() for holding in acc_to_holding.values()],
+                ["balance"],
+            )
             AssetHolding.objects.bulk_create(asset_holdings_to_create.values())
 
         self.executed = True

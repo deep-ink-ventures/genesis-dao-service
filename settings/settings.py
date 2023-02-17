@@ -25,9 +25,10 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 # Application definition
-
 INSTALLED_APPS = [
     "daphne",
+    "django_extensions",
+    "rest_framework",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -51,7 +52,6 @@ ROOT_URLCONF = "service.urls"
 WSGI_APPLICATION = "service.wsgi.application"
 ASGI_APPLICATION = "service.asgi.application"
 
-
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -68,10 +68,8 @@ TEMPLATES = [
     },
 ]
 
-
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
-
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -85,7 +83,6 @@ DATABASES = {
 
 # Password validation
 # https://docs.djangoproject.com/en/4.1/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -98,14 +95,7 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "info").upper()
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "filters": {
-        "require_debug_false": {"()": "django.utils.log.RequireDebugFalse"},
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-        },
-    },
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
     "loggers": {
         "django.request": {
             "handlers": ["console"],
@@ -120,9 +110,20 @@ LOGGING = {
     },
 }
 
+# Rest Framework
+# http://www.django-rest-framework.org/
+REST_FRAMEWORK = {
+    # "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
+    "DEFAULT_PARSER_CLASSES": ("rest_framework.parsers.JSONParser",),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.AllowAny",),
+    "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.AnonRateThrottle",),
+    "DEFAULT_THROTTLE_RATES": {"anon": "1000/day"},
+    "PAGE_SIZE": 10,
+}
+
 # Internationalization
 # https://docs.djangoproject.com/en/4.1/topics/i18n/
-
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
@@ -130,20 +131,17 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
-
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "static"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # substrate
 BLOCKCHAIN_URL = os.environ.get("BLOCKCHAIN_URL")
 BLOCK_CREATION_INTERVAL = 6  # seconds
 TYPE_REGISTRY_PRESET = "polkadot"
-
 
 APPLICATION_STAGE = os.environ.get("APPLICATION_STAGE", "development")
 
