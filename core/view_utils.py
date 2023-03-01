@@ -53,18 +53,27 @@ class MultiQsLimitOffsetPagination(LimitOffsetPagination):
     request = None
     offset = None
     limit = None
-    qs_count = None
 
     def paginate_querysets(self, qss: Sequence[QuerySet], request, view=None) -> Optional[list]:
+        """
+        Args:
+            qss: Sequence of Querysets
+            request: request
+            view: view (not required)
+
+        Returns:
+            paginated list of objects
+
+        similar to LimitOffsetPagination.paginate_queryset except that it allows a Sequence of Querysets as input
+        """
         self.limit = self.get_limit(request)
         if self.limit is None:
             return None
 
-        self.qs_count = len(qss)
+        self.request = request
         self.counts = [self.get_count(qs) for qs in qss]
         self.count = sum(self.counts)
         self.offset = self.get_offset(request)
-        self.request = request
 
         page = []
         offset = self.offset

@@ -1,6 +1,7 @@
 from unittest.mock import Mock, call, patch
 
 from ddt import data, ddt
+from django.conf import settings
 from django.test import override_settings
 
 from core import models
@@ -17,6 +18,11 @@ class SubstrateServiceTests(IntegrationTestCase):
         self.substrate_exception = SubstrateException
         self.substrate_service = substrate_service
         self.si = self.substrate_service.substrate_interface = Mock()
+
+    def test___exit__(self):
+        self.substrate_service.__exit__(None, None, None)
+
+        self.si.close.assert_called_once_with()
 
     def assert_signed_extrinsic_submitted(self, keypair: object):
         self.si.create_signed_extrinsic.assert_called_once_with(call=self.si.compose_call(), keypair=keypair)
@@ -38,7 +44,7 @@ class SubstrateServiceTests(IntegrationTestCase):
 
         self.substrate_service.sync_initial_accs()
 
-        self.si.query_map.assert_called_once_with("System", "Account")
+        self.si.query_map.assert_called_once_with("System", "models.Account")
         self.assertCountEqual(
             models.Account.objects.all(),
             [
@@ -138,6 +144,23 @@ class SubstrateServiceTests(IntegrationTestCase):
                     call_params={"call": self.si.compose_call()},
                 ),
             ]
+        )
+        self.assert_signed_extrinsic_submitted(keypair=keypair)
+
+    def test_dao_set_metadata(self):
+        dao_id = 123
+        metadata_url = "some_url"
+        metadata_hash = "some_hash"
+        keypair = object()
+
+        self.substrate_service.dao_set_metadata(
+            dao_id=dao_id, metadata_url=metadata_url, metadata_hash=metadata_hash, keypair=keypair
+        )
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="DaoCore",
+            call_function="set_metadata",
+            call_params={"dao_id": dao_id, "meta": metadata_url, "hash": metadata_hash},
         )
         self.assert_signed_extrinsic_submitted(keypair=keypair)
 
@@ -647,3 +670,26 @@ class SubstrateServiceTests(IntegrationTestCase):
             models.Block(number=2, hash="hash 2", parent_hash="hash 1", executed=True),
         ]
         self.assertModelsEqual(models.Block.objects.all(), expected_blocks)
+
+    @patch("core.substrate.logger")
+    @patch("core.substrate.time.sleep")
+    def test_listen_sleep(self, sleep_mock, logger_mock):
+        models.Block.objects.create(number=0, hash="hash 0", parent_hash=None, executed=True)
+        self.si.get_block.side_effect = (
+            {"header": {"number": 0, "hash": "hash 0", "parentHash": None}, "extrinsics": []},
+            Exception("stop loop"),
+        )
+        self.si.get_events.return_value = []
+
+        with self.assertRaisesMessage(Exception, expected_message="Error while fetching block from chain."):
+            self.substrate_service.listen()
+
+        sleep_time = sleep_mock.call_args_list[0][0][0]
+        self.assertLess(sleep_time, settings.BLOCK_CREATION_INTERVAL)
+        self.assertGreaterEqual(sleep_time, settings.BLOCK_CREATION_INTERVAL - 0.01)
+        logger_mock.assert_has_calls(
+            [
+                call.info("waiting for new block | number 0 | hash: hash 0"),
+                call.exception("Error while fetching block from chain."),
+            ]
+        )

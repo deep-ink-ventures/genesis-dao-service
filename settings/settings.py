@@ -134,6 +134,22 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "static"
 
+# storage
+FILE_UPLOAD_CLASS = os.environ.get("FILE_UPLOAD_CLASS", "core.file_uploads.aws.s3_client")
+ENCRYPTION_ALGORITHM = os.environ.get("ENCRYPTION_ALGORITHM", "sha3_256")
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
+LOGO_SIZES = {
+    "small": (88, 88),
+    "medium": (104, 104),
+    "large": (124, 124),
+}
+# when using default s3 upload these have to be set
+AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME")
+AWS_S3_ACCESS_KEY_ID = os.environ.get("AWS_S3_ACCESS_KEY_ID")
+AWS_S3_SECRET_ACCESS_KEY = os.environ.get("AWS_S3_SECRET_ACCESS_KEY")
+AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME")
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

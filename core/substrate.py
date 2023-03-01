@@ -8,6 +8,7 @@ from django.conf import settings
 from substrateinterface import Keypair, SubstrateInterface
 
 from core import models
+from core.event_handler import substrate_event_handler
 
 logger = logging.getLogger("alerts")
 
@@ -38,7 +39,7 @@ class SubstrateService(object):
         models.Account.objects.bulk_create(
             [
                 models.Account(address=acc_addr)
-                for acc_addr, _ in self.substrate_interface.query_map("System", "Account")
+                for acc_addr, _ in self.substrate_interface.query_map("System", "models.Account")
             ],
             ignore_conflicts=True,
         )
@@ -192,6 +193,30 @@ class SubstrateService(object):
             )
         )
 
+    def dao_set_metadata(self, dao_id: str, metadata_url: str, metadata_hash: str, keypair: Keypair):
+        """
+        Args:
+            dao_id: dao to set metadata for
+            metadata_url: url of the metadata
+            metadata_hash: hash of the metadata
+            keypair: Keypair used to sign the extrinsic
+
+        Returns:
+            None
+
+        submits a singed extrinsic to set metadata on a given dao
+        """
+        self.substrate_interface.submit_extrinsic(
+            self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="DaoCore",
+                    call_function="set_metadata",
+                    call_params={"dao_id": dao_id, "meta": metadata_url, "hash": metadata_hash},
+                ),
+                keypair=keypair,
+            )
+        )
+
     def fetch_and_parse_block(
         self,
         block_hash: str = None,
@@ -277,8 +302,8 @@ class SubstrateService(object):
         while True:
             start_time = time.time()
             current_block = self.fetch_and_parse_block()
-            # this should not happen, unrecoverable short of a complete resync
-            # todo: clarify if we should auto resync
+            # this should not happen, unrecoverable, short of a complete resync
+            # todo : clarify if we should auto resync
             if last_block.number > current_block.number:
                 logger.error("DB and chain are unrecoverably out of sync!")
                 return
@@ -290,14 +315,14 @@ class SubstrateService(object):
             # can directly execute the current block
             elif last_block.number + 1 == current_block.number:
                 logger.info(f"processing latest block | number: {current_block.number} | hash: {current_block.hash}")
-                current_block.execute_actions()
+                substrate_event_handler.execute_actions(current_block)
                 last_block = current_block
             # our db is out of sync with the chain. we fetch and execute blocks until we caught up
             else:
                 while current_block.number > last_block.number:
                     logger.info(f"catching up | number: {last_block.number + 1}")
                     next_block = self.fetch_and_parse_block(block_number=last_block.number + 1)
-                    next_block.execute_actions()
+                    substrate_event_handler.execute_actions(next_block)
                     last_block = next_block
             # ensure at least 6 seconds sleep time before fetching the next block
             elapsed_time = time.time() - start_time

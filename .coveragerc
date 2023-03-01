@@ -1,0 +1,19 @@
+[run]
+source = .
+omit =
+    venv/*
+    resources/*
+    settings/*
+    */tests/*
+    */migrations/*
+    */urls.py
+    */admin.py
+    */admin/*
+    manage.py
+
+
+branch = True
+
+[report]
+skip_empty = True
+fail_under = 80

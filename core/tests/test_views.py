@@ -1,4 +1,6 @@
+import base64
 from collections.abc import Collection
+from unittest.mock import PropertyMock, patch
 
 from ddt import data, ddt
 from django.urls import reverse
@@ -40,7 +42,13 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertDictEqual(res.data, expected_res)
 
     def test_dao_get(self):
-        expected_res = {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"}
+        expected_res = {
+            "id": "dao1",
+            "name": "dao1 name",
+            "owner_id": "acc1",
+            "metadata_url": None,
+            "metadata_hash": None,
+        }
 
         with self.assertNumQueries(1):
             res = self.client.get(reverse("core-dao-detail", kwargs={"pk": "dao1"}))
@@ -79,21 +87,36 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertDictEqual(res.data, expected_res)
 
     @data(
-        # query_params
-        {"order_by": "id"},
-        {"order_by": "name"},
-        {"order_by": "owner_id"},
+        # query_params, expected_res
+        (
+            {"order_by": "id"},
+            [
+                {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
+                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
+                {"id": "dao3", "name": "3", "owner_id": "acc2"},
+            ],
+        ),
+        (
+            {"order_by": "name"},
+            [
+                {"id": "dao3", "name": "3", "owner_id": "acc2"},
+                {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
+                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
+            ],
+        ),
+        (
+            {"order_by": "owner_id,id"},
+            [
+                {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
+                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
+                {"id": "dao3", "name": "3", "owner_id": "acc2"},
+            ],
+        ),
     )
-    def test_dao_list_order_by(self, query_params):
-        models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc2")
+    def test_dao_list_order_by(self, case):
+        query_params, expected_res = case
+        models.Dao.objects.create(id="dao3", name="3", owner_id="acc2")
 
-        expected_res = [
-            {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
-            {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
-            {"id": "dao3", "name": "dao3 name", "owner_id": "acc2"},
-        ]
-
-        expected_res.sort(key=lambda entry: entry[query_params["order_by"]])
         expected_res = wrap_in_pagination_res(expected_res)
 
         with self.assertNumQueries(2):
@@ -148,6 +171,47 @@ class CoreViewSetTest(IntegrationTestCase):
 
         with self.assertNumQueries(expected_query_count):
             res = self.client.get(reverse("core-dao-list"), query_params)
+
+        self.assertDictEqual(res.data, expected_res)
+
+    @patch("core.view_utils.MultiQsLimitOffsetPagination.default_limit", PropertyMock(return_value=None))
+    def test_dao_list_no_limit(self):
+        expected_res = [
+            {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
+            {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
+        ]
+
+        with self.assertNumQueries(2):
+            res = self.client.get(reverse("core-dao-list"), {"prioritise_owner": "acc2"})
+
+        self.assertCountEqual(res.data, expected_res)
+
+    def test_dao_add_metadata(self):
+        with self.assertNumQueries(0):
+            with open("core/tests/test_file.jpeg", "rb") as f:
+                post_data = {
+                    "email": "some@email.com",
+                    "description": "some description",
+                    "logo": base64.b64encode(f.read()).decode(),
+                }
+        expected_res = {
+            "description": "some description",
+            "email": "some@email.com",
+            "images": {
+                "logo": {
+                    "content_type": "image/jpeg",
+                    "large": {"url": "https://some_storage.some_region.com/dao1/logo_large.jpeg"},
+                    "medium": {"url": "https://some_storage.some_region.com/dao1/logo_medium.jpeg"},
+                    "small": {"url": "https://some_storage.some_region.com/dao1/logo_small.jpeg"},
+                }
+            },
+            "metadata_hash": "958a03a103e4ddb3de044dea11d4e8cc946e50bfb9b6831af82a9c0054e344d6",
+            "metadata_url": "https://some_storage.some_region.com/dao1/metadata.json",
+        }
+
+        res = self.client.post(
+            reverse("core-dao-add-metadata", kwargs={"pk": "dao1"}), post_data, content_type="application/json"
+        )
 
         self.assertDictEqual(res.data, expected_res)
 

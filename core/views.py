@@ -1,10 +1,13 @@
 from itertools import chain
 
 from django.db.models import Q
+from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.status import HTTP_201_CREATED
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from core import models, serializers
+from core.file_uploads.upload_service import file_uploader
 from core.view_utils import FilterBackend, MultiQsLimitOffsetPagination
 
 
@@ -19,10 +22,15 @@ class AccountViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
 class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
     queryset = models.Dao.objects.all()
-    serializer_class = serializers.DaoSerializer
     allowed_filter_fields = ("id", "name", "owner_id")
     allowed_order_fields = ("id", "name", "owner_id")
     pagination_class = MultiQsLimitOffsetPagination
+
+    def get_serializer_class(self):
+        return {
+            "retrieve": serializers.DaoSerializerDetail,
+            "list": serializers.DaoSerializerList,
+        }.get(self.action)
 
     def list(self, request, *args, **kwargs):
         # nothing special to do here
@@ -57,6 +65,21 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
         serializer = self.get_serializer(chain(*qss), many=True)
         return Response(serializer.data)
+
+    @action(
+        methods=["POST"],
+        detail=True,
+        url_path="metadata",
+        serializer_class=serializers.MetadataSerializer,
+    )
+    def add_metadata(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        metadata = file_uploader.upload_metadata(
+            metadata=serializer.validated_data,
+            storage_destination=self.get_object().id,
+        )
+        return Response(metadata, status=HTTP_201_CREATED)
 
 
 class AssetViewSet(ReadOnlyModelViewSet, SearchableMixin):
