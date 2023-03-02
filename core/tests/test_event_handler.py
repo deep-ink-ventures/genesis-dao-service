@@ -90,7 +90,7 @@ class BlockTest(IntegrationTestCase):
             models.Dao(id="dao2", name="dao2 name", owner_id="acc2"),
         ]
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             substrate_event_handler._delete_daos(block)
 
         self.assertModelsEqual(models.Dao.objects.all(), expected_daos)

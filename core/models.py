@@ -41,6 +41,15 @@ class AssetHolding(TimestampableMixin):
         return f"{self.asset_id} | {self.owner_id} | {self.balance}"
 
 
+class Proposal(TimestampableMixin):
+    dao = models.ForeignKey(Dao, related_name="proposals", on_delete=models.CASCADE)
+    title = models.CharField(max_length=128)
+    discussion_url = models.CharField(max_length=128)
+    description = models.TextField(blank=True, null=True)
+    approved = models.BooleanField(blank=True, null=True)
+    votes = models.JSONField(blank=True, null=True)
+
+
 class Block(TimestampableMixin):
     hash = models.CharField(primary_key=True, max_length=128, unique=True, editable=False)
     number = models.BigIntegerField(unique=True, editable=False)

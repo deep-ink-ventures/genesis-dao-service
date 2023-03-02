@@ -90,3 +90,10 @@ class AssetViewSet(ReadOnlyModelViewSet, SearchableMixin):
 class AssetHoldingViewSet(ReadOnlyModelViewSet, SearchableMixin):
     queryset = models.AssetHolding.objects.all()
     serializer_class = serializers.AssetHoldingSerializer
+
+
+class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
+    queryset = models.Proposal.objects.all()
+    serializer_class = serializers.ProposalSerializer
+    allowed_filter_fields = ("id", "title", "dao_id", "discussion_link", "approved")
+    allowed_order_fields = ("id", "title", "dao_id", "discussion_link", "approved")

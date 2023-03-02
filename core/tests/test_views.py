@@ -24,6 +24,8 @@ class CoreViewSetTest(IntegrationTestCase):
         models.Asset.objects.create(id=2, owner_id="acc2", dao_id="dao2", total_supply=200)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=200)
+        models.Proposal.objects.create(id=1, dao_id="dao1", title="proposal1", discussion_url="some_url1")
+        models.Proposal.objects.create(id=2, dao_id="dao2", title="proposal2", discussion_url="some_url2")
 
     def test_account_get(self):
         expected_res = {"address": "acc1"}
@@ -232,5 +234,50 @@ class CoreViewSetTest(IntegrationTestCase):
         )
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-asset-list"))
+
+        self.assertDictEqual(res.data, expected_res)
+
+    def test_proposal_get(self):
+        expected_res = {
+            "id": 1,
+            "dao_id": "dao1",
+            "title": "proposal1",
+            "discussion_url": "some_url1",
+            "votes": None,
+            "description": None,
+            "approved": None,
+        }
+
+        with self.assertNumQueries(1):
+            res = self.client.get(reverse("core-proposal-detail", kwargs={"pk": 1}))
+
+        self.assertDictEqual(res.data, expected_res)
+
+    def test_proposal_list(self):
+        expected_res = wrap_in_pagination_res(
+            [
+                {
+                    "id": 1,
+                    "dao_id": "dao1",
+                    "title": "proposal1",
+                    "discussion_url": "some_url1",
+                    "votes": None,
+                    "description": None,
+                    "approved": None,
+                },
+                {
+                    "id": 2,
+                    "dao_id": "dao2",
+                    "title": "proposal2",
+                    "discussion_url": "some_url2",
+                    "votes": None,
+                    "description": None,
+                    "approved": None,
+                },
+            ]
+        )
+
+        with self.assertNumQueries(2):
+            res = self.client.get(reverse("core-proposal-list"))
 
         self.assertDictEqual(res.data, expected_res)
