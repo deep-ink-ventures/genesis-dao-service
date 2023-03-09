@@ -48,7 +48,7 @@ class SubstrateService(object):
         models.Account.objects.bulk_create(
             [
                 models.Account(address=acc_addr)
-                for acc_addr, _ in self.substrate_interface.query_map("System", "models.Account")
+                for acc_addr, _ in self.substrate_interface.query_map("System", "Account")
             ],
             ignore_conflicts=True,
         )
