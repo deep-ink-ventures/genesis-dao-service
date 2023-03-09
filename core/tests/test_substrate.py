@@ -49,7 +49,7 @@ class SubstrateServiceTests(IntegrationTestCase):
 
         self.substrate_service.sync_initial_accs()
 
-        self.si.query_map.assert_called_once_with("System", "models.Account")
+        self.si.query_map.assert_called_once_with("System", "Account")
         self.assertCountEqual(
             models.Account.objects.all(),
             [
