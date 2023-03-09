@@ -10,6 +10,7 @@ omit =
     */admin.py
     */admin/*
     manage.py
+    core/swagger.py
 
 
 branch = True

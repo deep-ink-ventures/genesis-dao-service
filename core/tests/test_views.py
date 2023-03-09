@@ -25,6 +25,13 @@ class CoreViewSetTest(IntegrationTestCase):
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=200)
 
+    def test_stats(self):
+        expected_res = {"account_count": 2, "dao_count": 2}
+        with self.assertNumQueries(2):
+            res = self.client.get(reverse("core-stats-list"))
+
+        self.assertDictEqual(res.data, expected_res)
+
     def test_account_get(self):
         expected_res = {"address": "acc1"}
 

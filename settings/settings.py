@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "daphne",
     "django_extensions",
     "rest_framework",
+    "drf_yasg",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -51,6 +52,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = "service.urls"
 WSGI_APPLICATION = "service.wsgi.application"
 ASGI_APPLICATION = "service.asgi.application"
+BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8000")
 
 TEMPLATES = [
     {
@@ -113,7 +115,6 @@ LOGGING = {
 # Rest Framework
 # http://www.django-rest-framework.org/
 REST_FRAMEWORK = {
-    # "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "DEFAULT_PARSER_CLASSES": ("rest_framework.parsers.JSONParser",),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.AllowAny",),
@@ -158,6 +159,36 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 BLOCKCHAIN_URL = os.environ.get("BLOCKCHAIN_URL")
 BLOCK_CREATION_INTERVAL = 6  # seconds
 TYPE_REGISTRY_PRESET = "polkadot"
+
+SWAGGER_SETTINGS = {
+    "DEFAULT_FIELD_INSPECTORS": [
+        "core.swagger.Base64ImageFieldInspector",
+        "drf_yasg.inspectors.CamelCaseJSONFilter",
+        "drf_yasg.inspectors.ReferencingSerializerInspector",
+        "drf_yasg.inspectors.RelatedFieldInspector",
+        "drf_yasg.inspectors.ChoiceFieldInspector",
+        "drf_yasg.inspectors.FileFieldInspector",
+        "drf_yasg.inspectors.DictFieldInspector",
+        "drf_yasg.inspectors.JSONFieldInspector",
+        "drf_yasg.inspectors.HiddenFieldInspector",
+        "drf_yasg.inspectors.RecursiveFieldInspector",
+        "drf_yasg.inspectors.SerializerMethodFieldInspector",
+        "drf_yasg.inspectors.SimpleFieldInspector",
+        "drf_yasg.inspectors.StringDefaultFieldInspector",
+    ],
+    "DEFAULT_PAGINATOR_INSPECTORS": [
+        "core.swagger.PaginationInspector",
+        "drf_yasg.inspectors.CoreAPICompatInspector",
+    ],
+    "SECURITY_DEFINITIONS": {
+        "Basic": {
+            "type": "allow any",
+        },
+        "PK": {
+            "type": "PK wip",
+        },
+    },
+}
 
 APPLICATION_STAGE = os.environ.get("APPLICATION_STAGE", "development")
 

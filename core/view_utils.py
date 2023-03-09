@@ -1,10 +1,14 @@
 from collections.abc import Sequence
 from itertools import chain
+from types import FunctionType
 from typing import Optional
 
 from django.core.exceptions import FieldError
 from django.db.models import QuerySet
+from drf_yasg import openapi
+from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.viewsets import GenericViewSet
 
 
 class FilterBackend:
@@ -54,12 +58,11 @@ class MultiQsLimitOffsetPagination(LimitOffsetPagination):
     offset = None
     limit = None
 
-    def paginate_querysets(self, qss: Sequence[QuerySet], request, view=None) -> Optional[list]:
+    def paginate_querysets(self, qss: Sequence[QuerySet], request, **_) -> Optional[list]:
         """
         Args:
             qss: Sequence of Querysets
             request: request
-            view: view (not required)
 
         Returns:
             paginated list of objects
@@ -98,3 +101,93 @@ class MultiQsLimitOffsetPagination(LimitOffsetPagination):
                 offset -= self.counts[idx]
 
         return page
+
+
+def swagger_query_param(**kwargs):
+    return openapi.Parameter(**{"in_": openapi.IN_QUERY, **kwargs})
+
+
+class SearchableMixin(GenericViewSet):
+    allowed_order_fields = ()
+    allowed_filter_fields = ()
+    filter_backends = [FilterBackend]
+
+    @staticmethod
+    def _copy_func(f):
+        return FunctionType(f.__code__, f.__globals__, f.__name__, f.__defaults__, f.__closure__)
+
+    def __init__(self, **kwargs):
+        """
+        adds swagger defaults retrieve and list views
+        can be replaced by a custom swagger generator at some point
+        """
+        super().__init__(**kwargs)
+        # we only need to update the auto_schema once
+        if getattr(self.__class__, "updated_swagger_auto_schema", False):
+            return
+
+        if get_fn := getattr(self.__class__, "retrieve", None):
+            if get_fn is RetrieveModelMixin.retrieve:
+                get_fn = self._copy_func(get_fn)
+            overrides = getattr(get_fn, "_swagger_auto_schema", {})
+            name = self.queryset.model._meta.verbose_name  # noqa
+            auto_schema = {
+                "operation_id": f"Retrieve {name}",
+                "operation_description": f"Retrieves a {name} instance.",
+                "security": [{"Basic": []}],
+                **overrides,
+            }
+            get_fn._swagger_auto_schema = auto_schema
+            self.__class__.retrieve = get_fn
+            self.__class__.updated_swagger_auto_schema = True
+
+        if list_fn := getattr(self.__class__, "list", None):
+            # if our function is the drf default we create a copy before altering it
+            if list_fn is ListModelMixin.list:
+                list_fn = self._copy_func(list_fn)
+
+            overrides = getattr(list_fn, "_swagger_auto_schema", {})
+            manual_parameters = overrides.pop("manual_parameters", [])
+
+            if self.allowed_order_fields:
+                manual_parameters.append(
+                    swagger_query_param(
+                        **{
+                            "name": "order_by",
+                            "description": "Comma separated list of parameters to order the results by.\n"
+                            '"-" reverses the order.',
+                            "type": openapi.TYPE_STRING,
+                            "required": False,
+                            "example": "-id,some_field",
+                            "enum": self.allowed_order_fields,
+                        }
+                    )
+                )
+            if self.allowed_filter_fields:
+                manual_parameters.extend(
+                    [
+                        swagger_query_param(
+                            **{
+                                "name": f"{filter_field}",
+                                "description": f"Filter results by {filter_field}.",
+                                "type": openapi.TYPE_STRING,
+                                "required": False,
+                                "example": "some_value",
+                            }
+                        )
+                        for filter_field in self.allowed_filter_fields
+                    ]
+                )
+
+            name = self.queryset.model._meta.verbose_name_plural  # noqa
+            auto_schema = {
+                "operation_id": f"List {name}",
+                "operation_description": f"Retrieves a list of {name}.",
+                "security": [{"Basic": []}],
+                "manual_parameters": manual_parameters,
+                **overrides,
+            }
+
+            list_fn._swagger_auto_schema = auto_schema
+            self.__class__.list = list_fn
+            self.__class__.updated_swagger_auto_schema = True

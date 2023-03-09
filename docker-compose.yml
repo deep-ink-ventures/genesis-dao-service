@@ -1,12 +1,10 @@
 version: "3.7"
 services:
-  web:
+  app:
     build:
       context: .
-      args:
-        GITHUB_TOKEN: ${GITHUB_TOKEN}
-    container_name: core-web
-    image: web:latest
+    container_name: app
+    image: app:latest
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     env_file:
       - .env
@@ -14,7 +12,7 @@ services:
       - .:/usr/src/app
     ports:
       - ${BASE_PORT:-8000}:8000
-    depends_on: &deps
+    depends_on:
       - postgres
 #      - redis
 #

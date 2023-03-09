@@ -5,7 +5,7 @@ from django.core.exceptions import FieldError
 from django.db import connection, models
 
 from core.tests.testcases import IntegrationTestCase, UnitTestCase
-from core.view_utils import FilterBackend, MultiQsLimitOffsetPagination
+from core.view_utils import FilterBackend, MultiQsLimitOffsetPagination, SearchableMixin
 
 
 @ddt
@@ -109,3 +109,24 @@ class MultiQsLimitOffsetPaginationTest(IntegrationTestCase):
             self.assertIsNone(
                 self.paginator.paginate_querysets(qss=[TestModel.objects.filter(id=1)], request=Mock(query_params={}))
             )
+
+
+class SearchableMixinTest(UnitTestCase):
+    @staticmethod
+    def test_empty_view():
+        # shouldn't raise
+        SearchableMixin(nice_kwarg="idd")
+
+    @staticmethod
+    def test_no_allowed_fields():
+        class _SearchableMixin(SearchableMixin):
+            queryset = Mock()
+
+            def retrieve(self, *args, **kwargs):
+                pass
+
+            def list(self, *args, **kwargs):
+                pass
+
+        # shouldn't raise
+        _SearchableMixin(nice_kwarg="idd")
