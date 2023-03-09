@@ -155,7 +155,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # substrate
 BLOCKCHAIN_URL = os.environ.get("BLOCKCHAIN_URL")
-BLOCK_CREATION_INTERVAL = 6  # seconds
+BLOCK_CREATION_INTERVAL = int(os.environ.get("BLOCK_CREATION_INTERVAL", 6))  # seconds
 TYPE_REGISTRY_PRESET = "polkadot"
 
 SWAGGER_SETTINGS = {

@@ -3,12 +3,7 @@
 SHELL := bash
 
 venv:
-	@if [ -z $(python-location) ]; then \
-		virtualenv venv; \
-	else \
-		virtualenv --python $(python-location) venv; \
-		./venv/bin/pip3 install --upgrade pip; \
-	fi;
+	python3 -m venv venv
 
 build:
 	pip install --upgrade pip
@@ -44,6 +39,9 @@ start-app:
 		source .env; \
 		python manage.py runserver; \
 	fi;
+
+start-listener:
+	./manage.py blockchain_event_listener
 
 start-dev: run-migration start-app
 
