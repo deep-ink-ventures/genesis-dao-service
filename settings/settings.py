@@ -19,8 +19,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = "django-insecure-#o1(0b09oa*+6bsbff@2zihq!flkkdqh9zoyj8_$xg)oe!d%v9"
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
 ALLOWED_HOSTS = []
 
@@ -191,6 +189,7 @@ SWAGGER_SETTINGS = {
 }
 
 APPLICATION_STAGE = os.environ.get("APPLICATION_STAGE", "development")
+DEBUG = APPLICATION_STAGE == "development"
 
 if APPLICATION_STAGE == "development":
     from .dev import *  # noqa: F401,F403

@@ -14,8 +14,13 @@ class SubstrateServiceTests(IntegrationTestCase):
         super().setUp()
 
         with patch("substrateinterface.SubstrateInterface"):
-            from core.substrate import SubstrateException, substrate_service
+            from core.substrate import (
+                OutOfSyncException,
+                SubstrateException,
+                substrate_service,
+            )
         self.substrate_exception = SubstrateException
+        self.oos_exception = OutOfSyncException
         self.substrate_service = substrate_service
         self.si = self.substrate_service.substrate_interface = Mock()
 
@@ -502,6 +507,25 @@ class SubstrateServiceTests(IntegrationTestCase):
         logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
         self.assertListEqual(list(models.Block.objects.all()), [])
 
+    @patch("core.substrate.logger")
+    def test_fetch_and_parse_block_block_already_exists(self, logger_mock: Mock):
+        models.Block.objects.create(number=1, hash="block hash")
+        block_data = {
+            "not": "interesting",
+            "header": {
+                "number": 1,
+                "hash": "block hash",
+                "parentHash": "parent hash",
+            },
+            "extrinsics": [],
+        }
+        event_data = {}
+        self.si.get_block.return_value = block_data
+        self.si.get_events.return_value = event_data
+
+        with self.assertNumQueries(2), self.assertRaises(self.oos_exception):
+            self.assertIsNone(self.substrate_service.fetch_and_parse_block())
+
     def test_fetch_and_parse_error_no_block_data(self):
         self.si.get_block.return_value = None
 
@@ -513,10 +537,12 @@ class SubstrateServiceTests(IntegrationTestCase):
     @patch("core.substrate.logger")
     def test_listen_last_block_not_executed(self, logger_mock: Mock):
         models.Block.objects.create(number=0, executed=False, hash="some hash")
+        expected_msg = "Last Block was not executed! number: 0 | hash: some hash"
 
-        self.substrate_service.listen()
+        with self.assertRaisesMessage(self.substrate_exception, expected_msg):
+            self.substrate_service.listen()
 
-        logger_mock.error.assert_called_once_with("Last Block was not executed! number: 0 | hash: some hash")
+        logger_mock.error.assert_called_once_with(expected_msg)
         self.si.get_block.assert_not_called()
 
     @patch("core.substrate.logger")
@@ -526,11 +552,13 @@ class SubstrateServiceTests(IntegrationTestCase):
             {"header": {"number": 0, "hash": "hash 0", "parentHash": None}, "extrinsics": []},
         )
         self.si.get_events.return_value = []
+        expected_msg = "DB and chain are unrecoverably out of sync!"
 
-        self.substrate_service.listen()
+        with self.assertRaisesMessage(self.oos_exception, expected_msg):
+            self.substrate_service.listen()
 
         self.si.get_block.assert_called_once_with(block_hash=None, block_number=None)
-        logger_mock.error.assert_called_once_with("DB and chain are unrecoverably out of sync!")
+        logger_mock.error.assert_called_once_with(expected_msg)
 
     @patch("core.substrate.logger")
     def test_listen_empty_db(self, logger_mock: Mock):

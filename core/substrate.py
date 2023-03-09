@@ -5,6 +5,7 @@ from functools import partial
 from typing import Optional
 
 from django.conf import settings
+from django.db import IntegrityError
 from substrateinterface import Keypair, SubstrateInterface
 
 from core import models
@@ -15,6 +16,14 @@ logger = logging.getLogger("alerts")
 
 class SubstrateException(Exception):
     pass
+
+
+class OutOfSyncException(SubstrateException):
+    msg = "DB and chain are unrecoverably out of sync!"
+
+    def __init__(self, *args):
+        args = (self.msg,) if not args else args
+        super().__init__(*args)
 
 
 class SubstrateService(object):
@@ -231,6 +240,8 @@ class SubstrateService(object):
 
         Returns:
             returns Block instance
+        Raises:
+            SubstrateException
 
         fetches the latest block / head of the chain
         parses the extrinsics and events
@@ -288,14 +299,26 @@ class SubstrateService(object):
         try:
             return models.Block.objects.get(**block_attrs)
         except models.Block.DoesNotExist:
-            return models.Block.objects.create(**block_attrs)
+            try:
+                return models.Block.objects.create(**block_attrs)
+            except IntegrityError:
+                logger.error("DB and chain are unrecoverably out of sync!")
+                raise OutOfSyncException
 
     def listen(self):
+        """
+        fetches and executes blocks from there chain in an endless loop
+
+        Raises:
+            SubstrateException
+        """
+
         last_block = models.Block.objects.order_by("-number").first()
         # we can't sync with the chain if we have unprocessed blocks in the db
         if last_block and not last_block.executed:
-            logger.error(f"Last Block was not executed! number: {last_block.number} | hash: {last_block.hash}")
-            return
+            msg = f"Last Block was not executed! number: {last_block.number} | hash: {last_block.hash}"
+            logger.error(msg)
+            raise SubstrateException(msg)
         # set start value for empty db
         if not last_block:
             last_block = models.Block(number=-1)
@@ -306,7 +329,7 @@ class SubstrateService(object):
             # todo : clarify if we should auto resync
             if last_block.number > current_block.number:
                 logger.error("DB and chain are unrecoverably out of sync!")
-                return
+                raise OutOfSyncException
             # we already processed this block
             # shouldn't normally happen due BLOCK_CREATION_INTERVAL sleep time
             if last_block.number == current_block.number:

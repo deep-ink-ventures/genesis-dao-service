@@ -20,7 +20,7 @@ build-image:
 
 run-migration:
 	@if [ $(use-docker) ]; then \
-		docker compose run --rm web sh -c "sleep 15; python manage.py migrate"; \
+		docker compose run --rm app sh -c "sleep 15; python manage.py migrate"; \
 	else \
 		python manage.py migrate; \
 	fi;
@@ -37,20 +37,20 @@ start-redis:
 
 start-databases: start-redis start-postgres
 
-start-web:
+start-app:
 	@if [ $(use-docker) ]; then \
-		docker compose up -d web; \
+		docker compose up -d app; \
 	else \
 		source .env; \
 		python manage.py runserver; \
 	fi;
 
-start-dev: run-migration run-populate run-setup start-web
+start-dev: run-migration start-app
 
 test:
 	@if [ $(use-docker) ]; then \
-		docker compose run --rm web sh -c "sleep 15; python manage.py migrate"; \
-		docker compose run -e "COVERAGE_FILES=$(coverage_files)" --rm web sh bin/run_tests_with_coverage.sh; \
+		docker compose run --rm app sh -c "sleep 15; python manage.py migrate"; \
+		docker compose run -e "COVERAGE_FILES=$(coverage_files)" --rm app sh bin/run_tests_with_coverage.sh; \
 	else \
 	  	set -a; source .env; set +a; \
 	  	export COVERAGE_FILES=$(shell git diff origin/master --name-only | awk '{print $0}'|  tr '\n' ','); \

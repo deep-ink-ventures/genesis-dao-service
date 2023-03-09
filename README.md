@@ -17,16 +17,53 @@ scource /venv/bin/active
 ```angular2html
 make build
 ```
-- start postgres container
+- start containers and app
 ```angular2html
-make start-postgres
+make start-dev
 ```
-- run tests
+some make commands can be used w/ or w/o docker for the app container:
+  - `start-app`, `start-dev`, `test`, `run-migration` 
+  - (when using docker the envvar `DATABASE_HOST` has to point to the name of the postgres container:
+    - `DATABASE_HOST=postgres`)
+- e.g.:
 ```angular2html
 make test
+make test use-docker=true
 ```
 
+## Documentation
+
+API documentation: `/redoc/`
+- default: http://127.0.0.1:8000/redoc/
+
+
 ## Environments Variables
+- APPLICATION_STAGE
+  - type: str
+  - default: `development`
+  - use `production` for prod
+- BASE_PORT
+  - type: int
+  - default: `8000`
+- BASE_URL
+  - type: str
+  - default: `http://127.0.0.1:8000`
+- DATABASE_HOST
+  - type: str
+  - default: `0.0.0.0`
+  - use `postgres` when working w/ docker
+- DATABASE_NAME
+  - type: str
+  - default: `core`
+- DATABASE_PORT
+  - type: int
+  - default: `5432`
+- DATABASE_USER
+  - type: str
+  - default: `postgres`
+- DATABASE_PASSWORD
+  - type: str
+  - default: `postgres`
 - FILE_UPLOAD_CLASS:
   - type: str
   - default: "core.file_uploads.aws.s3_client"
