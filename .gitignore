@@ -17,6 +17,10 @@ test-media/*
 /static/
 *.rb
 .coverage
+coverage-reports
+scripts
+x.py
+x2.py
 .envrc
 .direnv
 .devcontainer/
