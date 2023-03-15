@@ -1,10 +1,14 @@
 import collections
+import logging
 from functools import reduce
 
 from django.db import transaction
 from django.db.models import Q
 
 from core import models
+from core.file_handling.file_handler import HashMismatchException, file_handler
+
+logger = logging.getLogger("alerts")
 
 
 class SubstrateEventHandler:
@@ -199,19 +203,34 @@ class SubstrateEventHandler:
         updates Daos metadata_url and metadata_hash based on the Block's extrinsics and events
         """
         # DaoMetadataSet
-        dao_metadata = set()
+        dao_metadata = {}  # {dao_id: {"metadata_url": metadata_url, "metadata_hash": metadata_hash}}
         for dao_event in block.event_data.get("DaoCore", {}).get("DaoMetadataSet", []):
             for dao_extrinsic in block.extrinsic_data.get("DaoCore", {}).get("set_metadata", []):
                 if (dao_id := dao_event["dao_id"]) == dao_extrinsic["dao_id"]:
-                    dao_metadata.add((dao_id, dao_extrinsic["meta"], dao_extrinsic["hash"]))
+                    dao_metadata[dao_id] = {
+                        "metadata_url": dao_extrinsic["meta"],
+                        "metadata_hash": dao_extrinsic["hash"],
+                    }
         if dao_metadata:
-            models.Dao.objects.bulk_update(
-                [
-                    models.Dao(id=dao_id, metadata_url=metadata_url, metadata_hash=metadata_hash)
-                    for dao_id, metadata_url, metadata_hash in dao_metadata
-                ],
-                fields=["metadata_url", "metadata_hash"],
-            )
+            daos = set(models.Dao.objects.filter(id__in=dao_metadata.keys()))
+            # update DAOs w/ differing metadata_hash
+            for dao in (
+                daos_to_update := {dao for dao in daos if dao.metadata_hash != dao_metadata[dao.id]["metadata_hash"]}
+            ):
+                # todo add async task to fetch metadata
+                metadata_url = dao_metadata[dao.id]["metadata_url"]
+                metadata_hash = dao_metadata[dao.id]["metadata_hash"]
+                dao.metadata_url = metadata_url
+                dao.metadata_hash = metadata_hash
+                try:
+                    dao.metadata = file_handler.download_metadata(url=metadata_url, metadata_hash=metadata_hash)
+                except HashMismatchException:
+                    logger.error("Hash mismatch while fetching DAO metadata from provided url.")
+                except Exception:  # noqa
+                    logger.exception("Unexpected error while fetching DAO metadata from provided url.")
+
+            if daos_to_update:
+                models.Dao.objects.bulk_update(daos_to_update, fields=["metadata", "metadata_url", "metadata_hash"])
 
     @transaction.atomic
     def execute_actions(self, block: models.Block):

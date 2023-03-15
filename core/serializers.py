@@ -40,23 +40,26 @@ class MetadataSerializer(Serializer):  # noqa
     )
 
 
-class MetaDataResponseSerializer(Serializer):  # noqa
-    description = CharField(required=False)
-    email = EmailField(required=False)
+class MetadataResponseSerializer(Serializer):  # noqa
+    class MetadataSerializer(Serializer):  # noqa
+        description = CharField(required=False)
+        email = EmailField(required=False)
 
-    class ImagagesSerializer(Serializer):  # noqa
-        class LogoSerializer(Serializer):  # noqa
-            class UrlSerializer(Serializer):  # noqa
-                url = URLField()
+        class ImagagesSerializer(Serializer):  # noqa
+            class LogoSerializer(Serializer):  # noqa
+                class UrlSerializer(Serializer):  # noqa
+                    url = URLField()
 
-            content_type = CharField()
-            small = UrlSerializer()
-            medium = UrlSerializer()
-            large = UrlSerializer()
+                content_type = CharField()
+                small = UrlSerializer()
+                medium = UrlSerializer()
+                large = UrlSerializer()
 
-        logo = LogoSerializer()
+            logo = LogoSerializer()
 
-    images = ImagagesSerializer()
+        images = ImagagesSerializer()
+
+    metadata = MetadataSerializer()
     metadata_hash = CharField()
     metadata_url = URLField()
 

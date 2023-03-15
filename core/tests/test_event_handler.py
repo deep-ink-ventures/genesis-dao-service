@@ -1,8 +1,11 @@
+import json
 import random
+from io import BytesIO
 from unittest.mock import patch
 
 from core import models
 from core.event_handler import SubstrateEventHandler, substrate_event_handler
+from core.file_handling.file_handler import file_handler
 from core.tests.testcases import IntegrationTestCase
 
 
@@ -192,13 +195,22 @@ class BlockTest(IntegrationTestCase):
             ignore_fields=("id", "created_at", "updated_at"),
         )
 
-    def test__set_dao_metadata(self):
+    @patch("core.file_handling.file_handler.urlopen")
+    def test__set_dao_metadata(self, urlopen_mock):
         models.Account.objects.create(address="acc1")
         models.Account.objects.create(address="acc2")
         models.Account.objects.create(address="acc3")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
+        metadata_1 = {"a": 1}
+        file_1 = BytesIO(json.dumps(metadata_1).encode())
+        metadata_hash_1 = file_handler._hash(file_1.getvalue())
+        metadata_2 = {"a": 2}
+        file_2 = BytesIO(json.dumps(metadata_2).encode())
+        metadata_hash_2 = file_handler._hash(file_2.getvalue())
+
+        urlopen_mock.side_effect = lambda url: {"url1": file_1, "url2": file_2}.get(url)
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -207,8 +219,8 @@ class BlockTest(IntegrationTestCase):
                 "DaoCore": {
                     "not": "interesting",
                     "set_metadata": [
-                        {"dao_id": "dao1", "hash": "hash1", "meta": "url1", "not": "interesting"},
-                        {"dao_id": "dao2", "hash": "hash2", "meta": "url2", "not": "interesting"},
+                        {"dao_id": "dao1", "hash": metadata_hash_1, "meta": "url1", "not": "interesting"},
+                        {"dao_id": "dao2", "hash": metadata_hash_2, "meta": "url2", "not": "interesting"},
                         # should not be updated cause of missing corresponding event
                         {"dao_id": "dao3", "hash": "hash33", "meta": "url3", "not": "interesting"},
                     ],
@@ -226,12 +238,26 @@ class BlockTest(IntegrationTestCase):
             },
         )
         expected_daos = [
-            models.Dao(id="dao1", name="dao1 name", owner_id="acc1", metadata_hash="hash1", metadata_url="url1"),
-            models.Dao(id="dao2", name="dao2 name", owner_id="acc2", metadata_hash="hash2", metadata_url="url2"),
+            models.Dao(
+                id="dao1",
+                name="dao1 name",
+                owner_id="acc1",
+                metadata_hash=metadata_hash_1,
+                metadata_url="url1",
+                metadata=metadata_1,
+            ),
+            models.Dao(
+                id="dao2",
+                name="dao2 name",
+                owner_id="acc2",
+                metadata_hash=metadata_hash_2,
+                metadata_url="url2",
+                metadata=metadata_2,
+            ),
             models.Dao(id="dao3", name="dao3 name", owner_id="acc3", metadata_hash=None, metadata_url=None),
         ]
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             substrate_event_handler._set_dao_metadata(block)
 
         self.assertModelsEqual(models.Dao.objects.order_by("id"), expected_daos)

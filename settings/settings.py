@@ -134,7 +134,7 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "static"
 
 # storage
-FILE_UPLOAD_CLASS = os.environ.get("FILE_UPLOAD_CLASS", "core.file_uploads.aws.s3_client")
+FILE_UPLOAD_CLASS = os.environ.get("FILE_UPLOAD_CLASS", "core.file_handling.aws.s3_client")
 ENCRYPTION_ALGORITHM = os.environ.get("ENCRYPTION_ALGORITHM", "sha3_256")
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"

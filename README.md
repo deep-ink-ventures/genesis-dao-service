@@ -135,7 +135,7 @@ API documentation: `/redoc/`
 ### Storage
 - FILE_UPLOAD_CLASS:
   - type: str
-  - default: `"core.file_uploads.aws.s3_client"`
+  - default: `"core.file_handling.aws.s3_client"`
   - Class used to upload metadata. Requires a method: 
     ```    
     def upload_file(self, file, storage_destination=None) -> Optional[str]:
@@ -151,7 +151,7 @@ API documentation: `/redoc/`
 - ENCRYPTION_ALGORITHM:
   - type: str
   - default: "sha3_256"
-  - Hashlib encryption algorithm used to hash the uploaded metadata.
+  - Hashlib encryption algorithm used to hash the uploaded metadata. Uses `hexdigest()`.
 - LOGO_SIZES:
   - type: dict
   - default: `{"small": (88, 88), "medium": (104, 104), "large": (124, 124)}`

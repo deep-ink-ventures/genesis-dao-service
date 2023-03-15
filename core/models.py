@@ -21,6 +21,7 @@ class Dao(TimestampableMixin):
     id = models.CharField(max_length=128, primary_key=True)
     name = models.CharField(max_length=128, null=True)
     owner = models.ForeignKey(Account, related_name="daos", on_delete=models.CASCADE)
+    metadata = models.JSONField(null=True)
     metadata_url = models.CharField(max_length=256, null=True)
     metadata_hash = models.CharField(max_length=256, null=True)
 

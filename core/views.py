@@ -10,7 +10,7 @@ from rest_framework.status import HTTP_201_CREATED
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from core import models, serializers
-from core.file_uploads.upload_service import file_uploader
+from core.file_handling.file_handler import file_handler
 from core.view_utils import (
     MultiQsLimitOffsetPagination,
     SearchableMixin,
@@ -89,7 +89,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         owner_prio = owner_prio[-1] if owner_prio else owner_prio
         holder_prio = query_params.pop("prioritise_holder", [])
         holder_prio = holder_prio[-1] if holder_prio else holder_prio
-        self.request._request.GET = query_params
+        self.request._request.GET = query_params  # noqa
         qs = self.filter_queryset(self.get_queryset())
         qss = []
         if owner_prio:
@@ -116,7 +116,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         operation_id="Add DAO Metadata",
         operation_description="Adds metadata to a DAO.",
         security=[{"PK": []}],
-        responses={201: openapi.Response("", serializers.MetaDataResponseSerializer)},
+        responses={201: openapi.Response("", serializers.MetadataResponseSerializer)},
     )
     @action(
         methods=["POST"],
@@ -126,10 +126,16 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
     def add_metadata(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        metadata = file_uploader.upload_metadata(
+        dao = self.get_object()
+        # todo make async
+        metadata = file_handler.upload_metadata(
             metadata=serializer.validated_data,
-            storage_destination=self.get_object().id,
+            storage_destination=dao.id,
         )
+        dao.metadata = metadata["metadata"]
+        dao.metadata_url = metadata["metadata_url"]
+        dao.metadata_hash = metadata["metadata_hash"]
+        dao.save(update_fields=["metadata", "metadata_url", "metadata_hash"])
         return Response(metadata, status=HTTP_201_CREATED)
 
 

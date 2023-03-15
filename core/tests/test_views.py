@@ -202,15 +202,17 @@ class CoreViewSetTest(IntegrationTestCase):
                     "logo": base64.b64encode(f.read()).decode(),
                 }
         expected_res = {
-            "description": "some description",
-            "email": "some@email.com",
-            "images": {
-                "logo": {
-                    "content_type": "image/jpeg",
-                    "large": {"url": "https://some_storage.some_region.com/dao1/logo_large.jpeg"},
-                    "medium": {"url": "https://some_storage.some_region.com/dao1/logo_medium.jpeg"},
-                    "small": {"url": "https://some_storage.some_region.com/dao1/logo_small.jpeg"},
-                }
+            "metadata": {
+                "description": "some description",
+                "email": "some@email.com",
+                "images": {
+                    "logo": {
+                        "content_type": "image/jpeg",
+                        "large": {"url": "https://some_storage.some_region.com/dao1/logo_large.jpeg"},
+                        "medium": {"url": "https://some_storage.some_region.com/dao1/logo_medium.jpeg"},
+                        "small": {"url": "https://some_storage.some_region.com/dao1/logo_small.jpeg"},
+                    }
+                },
             },
             "metadata_hash": "958a03a103e4ddb3de044dea11d4e8cc946e50bfb9b6831af82a9c0054e344d6",
             "metadata_url": "https://some_storage.some_region.com/dao1/metadata.json",
