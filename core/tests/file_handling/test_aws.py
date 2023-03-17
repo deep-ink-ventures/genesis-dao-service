@@ -13,7 +13,7 @@ class AWSTest(UnitTestCase):
         self.s3_client.region_name = "region1"
         self.s3_client.client = Mock()
         self.s3_client.resource = Mock()
-        self.file = Mock()
+        self.file = "file"
 
     def test_upload_file(self):
         res = self.s3_client.upload_file(file=self.file, storage_destination="store/here")
@@ -29,17 +29,18 @@ class AWSTest(UnitTestCase):
     @patch("core.file_handling.aws.logger")
     def test_upload_file_fail(self, logger_mock):
         self.s3_client.client.upload_fileobj.side_effect = ClientError({"Error": {"Code": 123}}, "upload_fileobj")
+        kwargs = {
+            "Fileobj": self.file,
+            "Bucket": "bucket1",
+            "Key": "store/here",
+            "ExtraArgs": {"ACL": "public-read"},
+        }
 
         res = self.s3_client.upload_file(file=self.file, storage_destination="store/here")
 
-        self.s3_client.client.upload_fileobj.assert_called_once_with(
-            Fileobj=self.file,
-            Bucket="bucket1",
-            Key="store/here",
-            ExtraArgs={"ACL": "public-read"},
-        )
-        self.assertIsNone(res)
-        logger_mock.exception.assert_called_once_with("Error while uploading a file to s3.")
+        self.s3_client.client.upload_fileobj.assert_called_once_with(**kwargs)
+        self.assertEqual(res, "https://bucket1.s3.region1.amazonaws.com/store/here")
+        logger_mock.exception.assert_called_once_with(f"Error while uploading a file to s3. {str(kwargs)}")
 
     def test_delete_file(self):
         self.s3_client.delete_file(storage_destination="some_folder/")

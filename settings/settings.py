@@ -84,6 +84,7 @@ CELERY_BROKER_URL = f"{redis}/2"
 CELERY_BROKER_TRANSPORT_OPTIONS = {"fanout_prefix": True}
 CELERY_RESULT_BACKEND = None
 CELERY_REDIS_MAX_CONNECTIONS = 256
+CELERY_ACCEPT_CONTENT = ["json", "pickle"]
 
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases

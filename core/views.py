@@ -127,7 +127,6 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         dao = self.get_object()
-        # todo make async
         metadata = file_handler.upload_metadata(
             metadata=serializer.validated_data,
             storage_destination=dao.id,

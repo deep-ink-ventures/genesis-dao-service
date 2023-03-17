@@ -5,8 +5,7 @@ from functools import reduce
 from django.db import transaction
 from django.db.models import Q
 
-from core import models
-from core.file_handling.file_handler import HashMismatchException, file_handler
+from core import models, tasks
 
 logger = logging.getLogger("alerts")
 
@@ -212,25 +211,7 @@ class SubstrateEventHandler:
                         "metadata_hash": dao_extrinsic["hash"],
                     }
         if dao_metadata:
-            daos = set(models.Dao.objects.filter(id__in=dao_metadata.keys()))
-            # update DAOs w/ differing metadata_hash
-            for dao in (
-                daos_to_update := {dao for dao in daos if dao.metadata_hash != dao_metadata[dao.id]["metadata_hash"]}
-            ):
-                # todo add async task to fetch metadata
-                metadata_url = dao_metadata[dao.id]["metadata_url"]
-                metadata_hash = dao_metadata[dao.id]["metadata_hash"]
-                dao.metadata_url = metadata_url
-                dao.metadata_hash = metadata_hash
-                try:
-                    dao.metadata = file_handler.download_metadata(url=metadata_url, metadata_hash=metadata_hash)
-                except HashMismatchException:
-                    logger.error("Hash mismatch while fetching DAO metadata from provided url.")
-                except Exception:  # noqa
-                    logger.exception("Unexpected error while fetching DAO metadata from provided url.")
-
-            if daos_to_update:
-                models.Dao.objects.bulk_update(daos_to_update, fields=["metadata", "metadata_url", "metadata_hash"])
+            tasks.update_dao_metadata.delay(dao_metadata=dao_metadata)
 
     @transaction.atomic
     def execute_actions(self, block: models.Block):
