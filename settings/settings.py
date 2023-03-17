@@ -68,6 +68,23 @@ TEMPLATES = [
     },
 ]
 
+# Cache
+# https://docs.djangoproject.com/en/4.1/topics/cache/
+redis = f"redis://{os.environ.get('REDIS_HOST', '0.0.0.0')}:{os.environ.get('REDIS_PORT', '6379')}"
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"{redis}/1",
+    },
+}
+
+# Celery
+CELERY_BROKER_TRANSPORT = "redis"
+CELERY_BROKER_URL = f"{redis}/2"
+CELERY_BROKER_TRANSPORT_OPTIONS = {"fanout_prefix": True}
+CELERY_RESULT_BACKEND = None
+CELERY_REDIS_MAX_CONNECTIONS = 256
+
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 DATABASES = {

@@ -12,20 +12,19 @@ services:
       - .:/usr/src/app
     ports:
       - ${BASE_PORT:-8000}:8000
-    depends_on:
+    depends_on: &deps
       - postgres
-#      - redis
-#
-#  workerHighPriority:
-#    container_name: high-priority-worker
-#    image: web:latest
-#    command: ["workerHighPriority"]
-#    env_file:
-#      - .env
-#    volumes:
-#      - .:/usr/src/app
-#    depends_on: *deps
+      - redis
 
+  worker:
+    container_name: worker
+    image: app:latest
+    command: ["worker"]
+    env_file:
+      - .env
+    volumes:
+      - .:/usr/src/app
+    depends_on: *deps
 
   postgres:
     container_name: postgres
@@ -40,12 +39,12 @@ services:
     volumes:
       - postgres:/var/lib/postgresql
 
-#  redis:
-#    container_name: redis
-#    image: redis:5-alpine
-#    command: --port ${REDIS_PORT:-6379}
-#    ports:
-#      - ${REDIS_PORT:-6379}:${REDIS_PORT:-6379}
+  redis:
+    container_name: redis
+    image: redis:5-alpine
+    command: --port ${REDIS_PORT:-6379}
+    ports:
+      - ${REDIS_PORT:-6379}:${REDIS_PORT:-6379}
 
 volumes:
   postgres:
