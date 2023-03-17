@@ -12,7 +12,7 @@ import os
 from channels.routing import ProtocolTypeRouter
 from django.core.asgi import get_asgi_application
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "genesis-dao-service.settings.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "settings.settings")
 
 django_asgi_app = get_asgi_application()
 

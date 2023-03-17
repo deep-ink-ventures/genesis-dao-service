@@ -5,7 +5,7 @@ services:
       context: .
     container_name: app
     image: app:latest
-    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    command: ["web"]
     env_file:
       - .env
     volumes:
