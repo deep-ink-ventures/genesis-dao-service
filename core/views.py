@@ -19,12 +19,6 @@ from core.view_utils import (
 )
 
 
-@api_view()
-def healthcheck(request):
-    status, status_code, details = collect()
-    return Response(status=status_code, data={"status": status, "details": details})
-
-
 class StatsView(GenericViewSet):
     pagination_class = None
 
