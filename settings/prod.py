@@ -1,7 +1,7 @@
 import os
 
 DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-STATICFILES_STORAGE = 'storages.backends.s3boto3.S3StaticStorage'
+STATICFILES_STORAGE = "core.storage.S3StaticStorage"
 DEBUG = False
 
 SECRET_KEY = os.environ["SECRET"]
