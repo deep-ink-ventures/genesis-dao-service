@@ -45,7 +45,13 @@ class MetadataResponseSerializer(Serializer):  # noqa
         description = CharField(required=False)
         email = EmailField(required=False)
 
+        class Meta: # noqa
+            ref_name = "ResponseMetadataSerializer"
+
         class ImagagesSerializer(Serializer):  # noqa
+
+            class Meta:  # noqa
+                ref_name = "ResponseImageSerializer"
             class LogoSerializer(Serializer):  # noqa
                 class UrlSerializer(Serializer):  # noqa
                     url = URLField()
