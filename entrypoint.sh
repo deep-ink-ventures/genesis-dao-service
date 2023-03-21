@@ -6,7 +6,7 @@ if [  "$1" = "web" ]; then
 
 elif [ "$1" = "worker" ]; then
   python manage.py migrate
-  python manage.py collectstatic
+  python manage.py collectstatic --noinput
   set -- celery \
           -A service worker \
           -l INFO \
