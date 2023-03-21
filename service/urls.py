@@ -20,7 +20,6 @@ from drf_yasg.views import get_schema_view
 from rest_framework import permissions
 
 from core import urls as core_urls
-from core import views as core_views
 
 schema_view = get_schema_view(
     openapi.Info(

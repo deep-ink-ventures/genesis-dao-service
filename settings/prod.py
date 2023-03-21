@@ -8,4 +8,3 @@ SECRET_KEY = os.environ["SECRET"]
 AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME")
 AWS_IS_GZIPPED = True
 GZIP_CONTENT_TYPES = ("application/pdf",)
-
