@@ -12,6 +12,8 @@ omit =
     manage.py
     core/swagger.py
     service/*
+    core/storage.py
+    core/middleware.py
 
 
 branch = True

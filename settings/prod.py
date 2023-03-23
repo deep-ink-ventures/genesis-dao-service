@@ -1,6 +1,6 @@
 import os
 
-DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 STATICFILES_STORAGE = "core.storage.S3StaticStorage"
 DEBUG = False
 

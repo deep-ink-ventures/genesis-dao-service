@@ -4,14 +4,13 @@ from django.db.models import Q
 from django.utils.decorators import method_decorator
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.status import HTTP_201_CREATED
 from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
 
 from core import models, serializers
 from core.file_handling.file_handler import file_handler
-from core.healthcheck import collect
 from core.view_utils import (
     MultiQsLimitOffsetPagination,
     SearchableMixin,

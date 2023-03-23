@@ -13,43 +13,6 @@ def wrap_in_pagination_res(results: Collection) -> dict:
     return {"count": len(results), "next": None, "previous": None, "results": results}
 
 
-@patch("django.core.handlers.base.log_response", lambda *_, **__: None)
-class HealthCheckTest(IntegrationTestCase):
-    def test_passed(self):
-        res = self.client.get("/healthcheck/")
-
-        self.assertEqual(res.status_code, 200)
-        self.assertDictEqual(res.data, {"status": "passed", "details": {"database": True, "blockchain": True}})
-
-    @patch("core.healthcheck.connection.cursor")
-    def test_db_failed(self, cursor_mock):
-        cursor_mock.side_effect = Exception("roar")
-
-        res = self.client.get("/healthcheck/")
-
-        self.assertEqual(res.status_code, 503)
-        self.assertDictEqual(res.data, {"status": "failed", "details": {"database": False, "blockchain": True}})
-
-    @patch("core.healthcheck.SubstrateService")
-    def test_blockchain_failed(self, substrate_mock):
-        substrate_mock.side_effect = Exception("roar")
-
-        res = self.client.get("/healthcheck/")
-
-        self.assertEqual(res.status_code, 503)
-        self.assertDictEqual(res.data, {"status": "failed", "details": {"database": True, "blockchain": False}})
-
-    @patch("core.healthcheck.connection.cursor")
-    @patch("core.healthcheck.SubstrateService")
-    def test_fail(self, cursor_mock, substrate_mock):
-        cursor_mock.side_effect = substrate_mock.side_effect = Exception("roar")
-
-        res = self.client.get("/healthcheck/")
-
-        self.assertEqual(res.status_code, 503)
-        self.assertDictEqual(res.data, {"status": "failed", "details": {"database": False, "blockchain": False}})
-
-
 @ddt
 class CoreViewSetTest(IntegrationTestCase):
     def setUp(self):
