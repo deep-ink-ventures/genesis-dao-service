@@ -226,6 +226,75 @@ class SubstrateService(object):
             )
         )
 
+    def set_governance_majority_vote(
+        self,
+        dao_id: str,
+        proposal_duration: int,
+        proposal_token_deposit: int,
+        minimum_majority_per_256: int,
+        keypair: Keypair,
+    ):
+        """
+        Args:
+            dao_id: dao to governance type for
+            proposal_duration: the number of blocks a proposal is open for voting
+            proposal_token_deposit: the token deposit required to create a proposal
+            minimum_majority_per_256:
+                how many more ayes than nays there must be for proposal acceptance
+                thus proposal acceptance requires: ayes >= nays + token_supply / 256 * minimum_majority_per_256
+            keypair: Keypair used to sign the extrinsic
+
+        Returns:
+            None
+
+        submits a singed extrinsic to set governance type to majority vote for a given dao
+        """
+        self.substrate_interface.submit_extrinsic(
+            self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Votes",
+                    call_function="set_governance_majority_vote",
+                    call_params={
+                        "dao_id": dao_id,
+                        "proposal_duration": proposal_duration,
+                        "proposal_token_deposit": proposal_token_deposit,
+                        "minimum_majority_per_256": minimum_majority_per_256,
+                    },
+                ),
+                keypair=keypair,
+            )
+        )
+
+    def create_proposal(self, dao_id: str, proposal_id: str, metadata_url: str, metadata_hash: str, keypair: Keypair):
+        """
+        Args:
+            dao_id: dao to create proposal for
+            proposal_id: id of the proposal
+            metadata_url: url of the metadata
+            metadata_hash: hash of the metadata
+            keypair: Keypair used to sign the extrinsic
+
+        Returns:
+            None
+
+        submits a singed extrinsic to create a proposal for a given dao
+        """
+        self.substrate_interface.submit_extrinsic(
+            self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Votes",
+                    call_function="create_proposal",
+                    call_params={
+                        "dao_id": dao_id,
+                        "proposal_id": proposal_id,
+                        "meta": metadata_url,
+                        "hash": metadata_hash,
+                    },
+                ),
+                keypair=keypair,
+            )
+        )
+
     def fetch_and_parse_block(
         self,
         block_hash: str = None,
@@ -333,17 +402,17 @@ class SubstrateService(object):
             # we already processed this block
             # shouldn't normally happen due BLOCK_CREATION_INTERVAL sleep time
             if last_block.number == current_block.number:
-                logger.info(f"waiting for new block | number {current_block.number} | hash: {current_block.hash}")
+                logger.info(f"Waiting for new block | number {current_block.number} | hash: {current_block.hash}")
             # if the last processed block directly precedes the current block our db is in sync with the chain, and we
             # can directly execute the current block
             elif last_block.number + 1 == current_block.number:
-                logger.info(f"processing latest block | number: {current_block.number} | hash: {current_block.hash}")
+                logger.info(f"Processing latest block | number: {current_block.number} | hash: {current_block.hash}")
                 substrate_event_handler.execute_actions(current_block)
                 last_block = current_block
             # our db is out of sync with the chain. we fetch and execute blocks until we caught up
             else:
                 while current_block.number > last_block.number:
-                    logger.info(f"catching up | number: {last_block.number + 1}")
+                    logger.info(f"Catching up | number: {last_block.number + 1}")
                     next_block = self.fetch_and_parse_block(block_number=last_block.number + 1)
                     substrate_event_handler.execute_actions(next_block)
                     last_block = next_block

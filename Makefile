@@ -51,7 +51,7 @@ test:
 		docker compose run -e "COVERAGE_FILES=$(coverage_files)" --rm app sh bin/run_tests_with_coverage.sh; \
 	else \
 	  	set -a; source .env; set +a; \
-	  	export COVERAGE_FILES=$(shell git diff origin/master --name-only | awk '{print $0}'|  tr '\n' ','); \
+	  	export COVERAGE_FILES=$(shell git diff origin/main --name-only | awk '{print $0}'|  tr '\n' ','); \
 		sh bin/run_tests_with_coverage.sh; \
 	fi;
 

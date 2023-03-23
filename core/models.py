@@ -1,5 +1,7 @@
 from django.db import models
 
+from core.utils import ChoiceEnum
+
 
 class TimestampableMixin(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, editable=False)
@@ -30,6 +32,18 @@ class Dao(TimestampableMixin):
         verbose_name_plural = "DAOs"
 
 
+class GovernanceType(ChoiceEnum):
+    MAJORITY_VOTE = "majority vote"
+
+
+class Governance(TimestampableMixin):
+    dao = models.OneToOneField(Dao, related_name="governance", on_delete=models.CASCADE)
+    type = models.CharField(choices=GovernanceType.as_choices(), max_length=128)
+    proposal_duration = models.IntegerField()
+    proposal_token_deposit = models.IntegerField()
+    minimum_majority = models.IntegerField()
+
+
 class Asset(TimestampableMixin):
     id = models.PositiveBigIntegerField(primary_key=True)
     total_supply = models.PositiveBigIntegerField()
@@ -54,6 +68,14 @@ class AssetHolding(TimestampableMixin):
 
     def __str__(self):
         return f"{self.asset_id} | {self.owner_id} | {self.balance}"
+
+
+class Proposal(TimestampableMixin):
+    id = models.CharField(max_length=128, primary_key=True)
+    dao = models.ForeignKey(Dao, related_name="proposals", on_delete=models.CASCADE)
+    metadata = models.JSONField(null=True)
+    metadata_url = models.CharField(max_length=256, null=True)
+    metadata_hash = models.CharField(max_length=256, null=True)
 
 
 class Block(TimestampableMixin):

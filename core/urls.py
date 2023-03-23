@@ -8,5 +8,6 @@ router.register(r"accounts", views.AccountViewSet, "core-account")
 router.register(r"daos", views.DaoViewSet, "core-dao")
 router.register(r"assets", views.AssetViewSet, "core-asset")
 router.register(r"asset-holdings", views.AssetHoldingViewSet, "core-asset-holding")
+router.register(r"proposals", views.ProposalViewSet, "core-proposal")
 
 urlpatterns = router.urls

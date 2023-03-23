@@ -24,6 +24,12 @@ class CoreViewSetTest(IntegrationTestCase):
         models.Asset.objects.create(id=2, owner_id="acc2", dao_id="dao2", total_supply=200)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=200)
+        models.Proposal.objects.create(
+            id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash="hash1", metadata={"a": 1}
+        )
+        models.Proposal.objects.create(
+            id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash="hash2", metadata={"a": 2}
+        )
 
     def test_stats(self):
         expected_res = {"account_count": 2, "dao_count": 2}
@@ -241,5 +247,44 @@ class CoreViewSetTest(IntegrationTestCase):
         )
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-asset-list"))
+
+        self.assertDictEqual(res.data, expected_res)
+
+    def test_proposal_get(self):
+        expected_res = {
+            "id": "prop1",
+            "dao_id": "dao1",
+            "metadata": {"a": 1},
+            "metadata_url": "url1",
+            "metadata_hash": "hash1",
+        }
+
+        with self.assertNumQueries(1):
+            res = self.client.get(reverse("core-proposal-detail", kwargs={"pk": "prop1"}))
+
+        self.assertDictEqual(res.data, expected_res)
+
+    def test_proposal_list(self):
+        expected_res = wrap_in_pagination_res(
+            [
+                {
+                    "id": "prop1",
+                    "dao_id": "dao1",
+                    "metadata": {"a": 1},
+                    "metadata_url": "url1",
+                    "metadata_hash": "hash1",
+                },
+                {
+                    "id": "prop2",
+                    "dao_id": "dao2",
+                    "metadata": {"a": 2},
+                    "metadata_url": "url2",
+                    "metadata_hash": "hash2",
+                },
+            ]
+        )
+
+        with self.assertNumQueries(2):
+            res = self.client.get(reverse("core-proposal-list"))
 
         self.assertDictEqual(res.data, expected_res)

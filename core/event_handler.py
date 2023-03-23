@@ -2,12 +2,16 @@ import collections
 import logging
 from functools import reduce
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from core import models, tasks
 
 logger = logging.getLogger("alerts")
+
+
+class ParseBlockException(Exception):
+    pass
 
 
 class SubstrateEventHandler:
@@ -21,6 +25,8 @@ class SubstrateEventHandler:
             self._create_assets,
             self._transfer_assets,
             self._set_dao_metadata,
+            self._dao_set_governances,
+            self._create_proposals,
         )
 
     @staticmethod
@@ -199,7 +205,7 @@ class SubstrateEventHandler:
         Returns:
             None
 
-        updates Daos metadata_url and metadata_hash based on the Block's extrinsics and events
+        updates Daos' metadata_url and metadata_hash based on the Block's extrinsics and events
         """
         # DaoMetadataSet
         dao_metadata = {}  # {dao_id: {"metadata_url": metadata_url, "metadata_hash": metadata_hash}}
@@ -213,13 +219,82 @@ class SubstrateEventHandler:
         if dao_metadata:
             tasks.update_dao_metadata.delay(dao_metadata=dao_metadata)
 
+    @staticmethod
+    def _dao_set_governances(block: models.Block):
+        """
+        Args:
+            block: Block to set DAO's governance model from
+
+        Returns:
+            None
+
+        updates Daos' governance based on the Block's extrinsics and events
+        """
+        # SetGovernanceMajorityVote
+        governances = []
+        dao_ids = set()
+        for governance_event in block.event_data.get("Votes", {}).get("SetGovernanceMajorityVote", []):
+            dao_ids.add(governance_event["dao_id"])
+            governances.append(
+                models.Governance(
+                    dao_id=governance_event["dao_id"],
+                    proposal_duration=governance_event["proposal_duration"],
+                    proposal_token_deposit=governance_event["proposal_token_deposit"],
+                    minimum_majority=governance_event["minimum_majority_per_256"],
+                    type=models.GovernanceType.MAJORITY_VOTE,
+                )
+            )
+
+        if governances:
+            models.Governance.objects.filter(dao_id__in=dao_ids).delete()
+            models.Governance.objects.bulk_create(governances)
+
+    @staticmethod
+    def _create_proposals(block: models.Block):
+        """
+        Args:
+            block: Block to set DAO's governance model from
+
+        Returns:
+            None
+
+        create Proposal based on the Block's extrinsics and events
+        """
+        # ProposalCreated
+        proposals = []
+        proposal_ids = set()
+        for proposal_created_extrinsic in block.extrinsic_data.get("Votes", {}).get("create_proposal", []):
+            for proposal_created_event in block.event_data.get("Votes", {}).get("ProposalCreated", []):
+                if (proposal_id := proposal_created_extrinsic["proposal_id"]) == proposal_created_event["proposal_id"]:
+                    proposal_ids.add(proposal_id)
+                    proposals.append(
+                        models.Proposal(
+                            id=proposal_id,
+                            dao_id=proposal_created_extrinsic["dao_id"],
+                            metadata_url=proposal_created_extrinsic["meta"],
+                            metadata_hash=proposal_created_extrinsic["hash"],
+                        )
+                    )
+        if proposals:
+            models.Proposal.objects.bulk_create(proposals)
+            tasks.update_proposal_metadata.delay(proposal_ids=list(proposal_ids))
+
     @transaction.atomic
     def execute_actions(self, block: models.Block):
         """
         alters db's blockchain representation based on the Block's extrinsics and events
         """
         for block_action in self.block_actions:
-            block_action(block=block)
+            try:
+                block_action(block=block)
+            except IntegrityError:
+                msg = f"Database error while parsing Block #{block.number}."
+                logger.exception(msg)
+                raise ParseBlockException(msg)
+            except Exception:  # noqa
+                msg = f"Unexpected error while parsing Block #{block.number}."
+                logger.exception(msg)
+                raise ParseBlockException(msg)
 
         block.executed = True
         block.save(update_fields=["executed"])

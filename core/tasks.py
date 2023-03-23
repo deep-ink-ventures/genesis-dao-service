@@ -39,3 +39,33 @@ def update_dao_metadata(dao_metadata: dict):
 
     if daos_to_update:
         models.Dao.objects.bulk_update(daos_to_update, fields=["metadata", "metadata_url", "metadata_hash"])
+
+
+@shared_task()
+def update_proposal_metadata(proposal_ids: list):
+    """
+    Args:
+        proposal_ids: ids of Proposal to update metadata for
+
+    Returns:
+        None
+
+     fetches and updates Proposal.metadata for the given proposal_ids
+    """
+    from core.file_handling.file_handler import HashMismatchException, file_handler
+
+    proposals = set(models.Proposal.objects.filter(id__in=proposal_ids))
+    proposal_to_update = []
+    for proposal in proposals:
+        try:
+            proposal.metadata = file_handler.download_metadata(
+                url=proposal.metadata_url, metadata_hash=proposal.metadata_hash
+            )
+        except HashMismatchException:
+            logger.error("Hash mismatch while fetching Proposal metadata from provided url.")
+        except Exception:  # noqa
+            logger.exception("Unexpected error while fetching Proposal metadata from provided url.")
+        else:
+            proposal_to_update.append(proposal)
+    if proposal_to_update:
+        models.Proposal.objects.bulk_update(proposal_to_update, fields=["metadata"])

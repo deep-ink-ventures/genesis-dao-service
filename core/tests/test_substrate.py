@@ -153,7 +153,7 @@ class SubstrateServiceTests(IntegrationTestCase):
         self.assert_signed_extrinsic_submitted(keypair=keypair)
 
     def test_dao_set_metadata(self):
-        dao_id = 123
+        dao_id = "abc"
         metadata_url = "some_url"
         metadata_hash = "some_hash"
         keypair = object()
@@ -166,6 +166,55 @@ class SubstrateServiceTests(IntegrationTestCase):
             call_module="DaoCore",
             call_function="set_metadata",
             call_params={"dao_id": dao_id, "meta": metadata_url, "hash": metadata_hash},
+        )
+        self.assert_signed_extrinsic_submitted(keypair=keypair)
+
+    def test_set_governance_majority_vote(self):
+        dao_id = "abc"
+        proposal_duration = 123
+        proposal_token_deposit = 234
+        minimum_majority_per_256 = 345
+        keypair = object()
+
+        self.substrate_service.set_governance_majority_vote(
+            dao_id=dao_id,
+            proposal_duration=proposal_duration,
+            proposal_token_deposit=proposal_token_deposit,
+            minimum_majority_per_256=minimum_majority_per_256,
+            keypair=keypair,
+        )
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Votes",
+            call_function="set_governance_majority_vote",
+            call_params={
+                "dao_id": dao_id,
+                "proposal_duration": proposal_duration,
+                "proposal_token_deposit": proposal_token_deposit,
+                "minimum_majority_per_256": minimum_majority_per_256,
+            },
+        )
+        self.assert_signed_extrinsic_submitted(keypair=keypair)
+
+    def test_create_proposal(self):
+        dao_id = "abc"
+        proposal_id = "cba"
+        metadata_url = "some_url"
+        metadata_hash = "some_hash"
+        keypair = object()
+
+        self.substrate_service.create_proposal(
+            dao_id=dao_id,
+            proposal_id=proposal_id,
+            metadata_url=metadata_url,
+            metadata_hash=metadata_hash,
+            keypair=keypair,
+        )
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Votes",
+            call_function="create_proposal",
+            call_params={"dao_id": dao_id, "proposal_id": proposal_id, "meta": metadata_url, "hash": metadata_hash},
         )
         self.assert_signed_extrinsic_submitted(keypair=keypair)
 
@@ -579,9 +628,9 @@ class SubstrateServiceTests(IntegrationTestCase):
         logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
         logger_mock.info.assert_has_calls(
             [
-                call("processing latest block | number: 0 | hash: hash 0"),
-                call("processing latest block | number: 1 | hash: hash 1"),
-                call("processing latest block | number: 2 | hash: hash 2"),
+                call("Processing latest block | number: 0 | hash: hash 0"),
+                call("Processing latest block | number: 1 | hash: hash 1"),
+                call("Processing latest block | number: 2 | hash: hash 2"),
             ]
         )
         expected_blocks = [
@@ -611,9 +660,9 @@ class SubstrateServiceTests(IntegrationTestCase):
         logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
         logger_mock.info.assert_has_calls(
             [
-                call("processing latest block | number: 1 | hash: hash 1"),
-                call("processing latest block | number: 2 | hash: hash 2"),
-                call("processing latest block | number: 3 | hash: hash 3"),
+                call("Processing latest block | number: 1 | hash: hash 1"),
+                call("Processing latest block | number: 2 | hash: hash 2"),
+                call("Processing latest block | number: 3 | hash: hash 3"),
             ]
         )
         expected_blocks = [
@@ -625,7 +674,7 @@ class SubstrateServiceTests(IntegrationTestCase):
         self.assertModelsEqual(models.Block.objects.all(), expected_blocks)
 
     @patch("core.substrate.logger")
-    def test_listen_catching_up(self, logger_mock: Mock):
+    def test_listen_Catching_up(self, logger_mock: Mock):
         models.Block.objects.create(number=0, hash="hash 0", parent_hash=None, executed=True)
         self.si.get_block.side_effect = (
             {"header": {"number": 3, "hash": "hash 3", "parentHash": "hash 2"}, "extrinsics": []},
@@ -652,10 +701,10 @@ class SubstrateServiceTests(IntegrationTestCase):
         logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
         logger_mock.info.assert_has_calls(
             [
-                call("catching up | number: 1"),
-                call("catching up | number: 2"),
-                call("catching up | number: 3"),
-                call("processing latest block | number: 4 | hash: hash 4"),
+                call("Catching up | number: 1"),
+                call("Catching up | number: 2"),
+                call("Catching up | number: 3"),
+                call("Processing latest block | number: 4 | hash: hash 4"),
             ]
         )
         expected_blocks = [
@@ -687,9 +736,9 @@ class SubstrateServiceTests(IntegrationTestCase):
         logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
         logger_mock.info.assert_has_calls(
             [
-                call("processing latest block | number: 1 | hash: hash 1"),
-                call("waiting for new block | number 1 | hash: hash 1"),
-                call("processing latest block | number: 2 | hash: hash 2"),
+                call("Processing latest block | number: 1 | hash: hash 1"),
+                call("Waiting for new block | number 1 | hash: hash 1"),
+                call("Processing latest block | number: 2 | hash: hash 2"),
             ]
         )
         expected_blocks = [
@@ -717,7 +766,7 @@ class SubstrateServiceTests(IntegrationTestCase):
         self.assertGreaterEqual(sleep_time, settings.BLOCK_CREATION_INTERVAL - 0.01)
         logger_mock.assert_has_calls(
             [
-                call.info("waiting for new block | number 0 | hash: hash 0"),
+                call.info("Waiting for new block | number 0 | hash: hash 0"),
                 call.exception("Error while fetching block from chain."),
             ]
         )

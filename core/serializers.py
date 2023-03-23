@@ -88,4 +88,10 @@ class AssetHoldingSerializer(ModelSerializer):
 
     class Meta:
         model = models.AssetHolding
-        fields = ("asset_id", "owner_id", "balance")
+        fields = ("id", "asset_id", "owner_id", "balance")
+
+
+class ProposalSerializer(ModelSerializer):
+    class Meta:
+        model = models.Proposal
+        fields = ("id", "dao_id", "metadata", "metadata_url", "metadata_hash")
