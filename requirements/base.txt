@@ -1,5 +1,5 @@
 # basics
-Django==4.1.6
+Django==4.1.7
 djangorestframework==3.14.0
 django-extensions==3.2.1
 django-storages==1.13.2
