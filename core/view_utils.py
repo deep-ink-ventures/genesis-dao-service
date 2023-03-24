@@ -107,6 +107,16 @@ def swagger_query_param(**kwargs):
     return openapi.Parameter(**{"in_": openapi.IN_QUERY, **kwargs})
 
 
+signature_in_header = openapi.Parameter(
+    name="Signature",
+    in_=openapi.IN_HEADER,
+    description="Current /challenge signed with corresponding DAO's Account's private key, B64 encoded.",
+    required=True,
+    type=openapi.TYPE_STRING,
+    format=openapi.FORMAT_BASE64,
+)
+
+
 class SearchableMixin(GenericViewSet):
     allowed_order_fields = ()
     allowed_filter_fields = ()

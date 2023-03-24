@@ -1,9 +1,12 @@
 import base64
+import secrets
 from collections.abc import Collection
 from unittest.mock import PropertyMock, patch
 
 from ddt import data, ddt
 from django.urls import reverse
+from rest_framework.status import HTTP_201_CREATED, HTTP_403_FORBIDDEN
+from substrateinterface import Keypair
 
 from core import models
 from core.tests.testcases import IntegrationTestCase
@@ -16,6 +19,8 @@ def wrap_in_pagination_res(results: Collection) -> dict:
 @ddt
 class CoreViewSetTest(IntegrationTestCase):
     def setUp(self):
+        self.challenge_key = secrets.token_hex(64)
+        models.Challenge.objects.create(key=self.challenge_key)
         models.Account.objects.create(address="acc1")
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
@@ -31,10 +36,19 @@ class CoreViewSetTest(IntegrationTestCase):
             id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash="hash2", metadata={"a": 2}
         )
 
+    def test_challenge(self):
+        expected_res = {"key": self.challenge_key}
+
+        with self.assertNumQueries(1):
+            res = self.client.get(reverse("core-challenge"))
+
+        self.assertDictEqual(res.data, expected_res)
+
     def test_stats(self):
         expected_res = {"account_count": 2, "dao_count": 2}
+
         with self.assertNumQueries(2):
-            res = self.client.get(reverse("core-stats-list"))
+            res = self.client.get(reverse("core-stats"))
 
         self.assertDictEqual(res.data, expected_res)
 
@@ -200,13 +214,17 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertCountEqual(res.data, expected_res)
 
     def test_dao_add_metadata(self):
-        with self.assertNumQueries(0):
-            with open("core/tests/test_file.jpeg", "rb") as f:
-                post_data = {
-                    "email": "some@email.com",
-                    "description": "some description",
-                    "logo": base64.b64encode(f.read()).decode(),
-                }
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        acc = models.Account.objects.create(address=keypair.ss58_address)
+        models.Dao.objects.create(id="DAO1", name="dao1 name", owner=acc)
+
+        with open("core/tests/test_file.jpeg", "rb") as f:
+            post_data = {
+                "email": "some@email.com",
+                "description": "some description",
+                "logo": base64.b64encode(f.read()).decode(),
+            }
         expected_res = {
             "metadata": {
                 "description": "some description",
@@ -214,21 +232,43 @@ class CoreViewSetTest(IntegrationTestCase):
                 "images": {
                     "logo": {
                         "content_type": "image/jpeg",
-                        "large": {"url": "https://some_storage.some_region.com/dao1/logo_large.jpeg"},
-                        "medium": {"url": "https://some_storage.some_region.com/dao1/logo_medium.jpeg"},
-                        "small": {"url": "https://some_storage.some_region.com/dao1/logo_small.jpeg"},
+                        "large": {"url": "https://some_storage.some_region.com/DAO1/logo_large.jpeg"},
+                        "medium": {"url": "https://some_storage.some_region.com/DAO1/logo_medium.jpeg"},
+                        "small": {"url": "https://some_storage.some_region.com/DAO1/logo_small.jpeg"},
                     }
                 },
             },
-            "metadata_hash": "958a03a103e4ddb3de044dea11d4e8cc946e50bfb9b6831af82a9c0054e344d6",
-            "metadata_url": "https://some_storage.some_region.com/dao1/metadata.json",
+            "metadata_hash": "3082033b6fe930d0db400fc2ef465b25de2e68ef04ac745c349ff7673e3a1c46",
+            "metadata_url": "https://some_storage.some_region.com/DAO1/metadata.json",
         }
 
         res = self.client.post(
-            reverse("core-dao-add-metadata", kwargs={"pk": "dao1"}), post_data, content_type="application/json"
+            reverse("core-dao-add-metadata", kwargs={"pk": "DAO1"}),
+            post_data,
+            content_type="application/json",
+            HTTP_SIGNATURE=signature,
         )
 
+        self.assertEqual(res.status_code, HTTP_201_CREATED)
         self.assertDictEqual(res.data, expected_res)
+
+    def test_dao_add_metadata_403(self):
+        with open("core/tests/test_file.jpeg", "rb") as f:
+            post_data = {
+                "email": "some@email.com",
+                "description": "some description",
+                "logo": base64.b64encode(f.read()).decode(),
+            }
+
+        res = self.client.post(
+            reverse("core-dao-add-metadata", kwargs={"pk": "dao1"}),
+            post_data,
+            content_type="application/json",
+            HTTP_SIGNATURE="wrong signature",
+        )
+
+        self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
+        self.assertIsNone(res.data)
 
     def test_asset_get(self):
         expected_res = {"id": 1, "dao_id": "dao1", "owner_id": "acc1", "total_supply": 100}

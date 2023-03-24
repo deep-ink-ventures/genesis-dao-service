@@ -92,3 +92,7 @@ class Block(TimestampableMixin):
 
     def __str__(self):
         return f"{self.number}"
+
+
+class Challenge(TimestampableMixin):
+    key = models.CharField(max_length=128)

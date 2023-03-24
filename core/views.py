@@ -4,37 +4,44 @@ from django.db.models import Q
 from django.utils.decorators import method_decorator
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
-from rest_framework.status import HTTP_201_CREATED
-from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet
+from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
+from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from core import models, serializers
 from core.file_handling.file_handler import file_handler
+from core.substrate import substrate_service
 from core.view_utils import (
     MultiQsLimitOffsetPagination,
     SearchableMixin,
+    signature_in_header,
     swagger_query_param,
 )
 
 
-class StatsView(GenericViewSet):
-    pagination_class = None
+@swagger_auto_schema(
+    method="GET",
+    operation_id="Challenge",
+    operation_description="Retrieves current challenge.",
+    responses=openapi.Responses(responses={HTTP_200_OK: openapi.Response("", serializers.ChallengeSerializer)}),
+    security=[{"Basic": []}],
+)
+@api_view()
+def challenge(request):
+    return Response(status=HTTP_200_OK, data=serializers.ChallengeSerializer(models.Challenge.objects.get()).data)
 
-    @staticmethod
-    @swagger_auto_schema(
-        operation_id="Retrieve stats",
-        operation_description="Retrieves some stats.",
-        responses=openapi.Responses(responses={200: openapi.Response("", serializers.StatsSerializer)}),
-        security=[{"Basic": []}],
-    )
-    def list(request, *args, **kwargs):
-        return Response(
-            data={
-                "account_count": models.Account.objects.count(),
-                "dao_count": models.Dao.objects.count(),
-            }
-        )
+
+@swagger_auto_schema(
+    method="GET",
+    operation_id="Retrieve stats",
+    operation_description="Retrieves some stats.",
+    responses=openapi.Responses(responses={HTTP_200_OK: openapi.Response("", serializers.StatsSerializer)}),
+    security=[{"Basic": []}],
+)
+@api_view()
+def stats(request, *args, **kwargs):
+    return Response(data={"account_count": models.Account.objects.count(), "dao_count": models.Dao.objects.count()})
 
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Account."), "retrieve")
@@ -115,7 +122,8 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
     @swagger_auto_schema(
         operation_id="Add DAO Metadata",
         operation_description="Adds metadata to a DAO.",
-        security=[{"PK": []}],
+        manual_parameters=[signature_in_header],
+        security=[{"Signature": []}],
         responses={201: openapi.Response("", serializers.MetadataResponseSerializer)},
     )
     @action(
@@ -127,10 +135,10 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         dao = self.get_object()
-        metadata = file_handler.upload_metadata(
-            metadata=serializer.validated_data,
-            storage_destination=dao.id,
-        )
+        if not substrate_service.verify(address=dao.owner_id, signature=request.headers.get("Signature")):
+            return Response(status=HTTP_403_FORBIDDEN)
+
+        metadata = file_handler.upload_metadata(metadata=serializer.validated_data, storage_destination=dao.id)
         dao.metadata = metadata["metadata"]
         dao.metadata_url = metadata["metadata_url"]
         dao.metadata_hash = metadata["metadata_hash"]

@@ -1,8 +1,10 @@
+import base64
 from unittest.mock import Mock, call, patch
 
 from ddt import data, ddt
 from django.conf import settings
 from django.test import override_settings
+from substrateinterface import Keypair
 
 from core import models
 from core.tests.testcases import IntegrationTestCase
@@ -195,6 +197,22 @@ class SubstrateServiceTests(IntegrationTestCase):
             },
         )
         self.assert_signed_extrinsic_submitted(keypair=keypair)
+
+    def test_verify(self):
+        key = "something_to_sign"
+        models.Challenge.objects.create(key=key)
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        signature = base64.b64encode(keypair.sign(data=key)).decode()
+
+        self.assertTrue(self.substrate_service.verify(address=keypair.ss58_address, signature=signature))
+
+    def test_verify_fail(self):
+        key = "something_to_sign"
+        models.Challenge.objects.create(key=key)
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        signature = "wrong"
+
+        self.assertFalse(self.substrate_service.verify(address=keypair.ss58_address, signature=signature))
 
     def test_create_proposal(self):
         dao_id = "abc"
@@ -674,7 +692,7 @@ class SubstrateServiceTests(IntegrationTestCase):
         self.assertModelsEqual(models.Block.objects.all(), expected_blocks)
 
     @patch("core.substrate.logger")
-    def test_listen_Catching_up(self, logger_mock: Mock):
+    def test_listen_catching_up(self, logger_mock: Mock):
         models.Block.objects.create(number=0, hash="hash 0", parent_hash=None, executed=True)
         self.si.get_block.side_effect = (
             {"header": {"number": 3, "hash": "hash 3", "parentHash": "hash 2"}, "extrinsics": []},

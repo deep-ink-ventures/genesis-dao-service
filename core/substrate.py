@@ -1,3 +1,4 @@
+import base64
 import logging
 import time
 from collections import defaultdict
@@ -294,6 +295,24 @@ class SubstrateService(object):
                 keypair=keypair,
             )
         )
+
+    @staticmethod
+    def verify(address: str, signature: str) -> bool:
+        """
+        Args:
+            address: Account.address / public key
+            signature: b64 encoded, signed challenge key
+
+        Returns:
+            bool
+
+        verifies whether the given signature matches challenge key signed by address
+        """
+        challenge_key = str(models.Challenge.objects.get().key)
+        try:
+            return Keypair(address).verify(challenge_key, base64.b64decode(signature.encode()))
+        except Exception:  # noqa
+            return False
 
     def fetch_and_parse_block(
         self,

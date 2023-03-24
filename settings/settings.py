@@ -162,6 +162,7 @@ AWS_S3_ACCESS_KEY_ID = os.environ.get("AWS_S3_ACCESS_KEY_ID")
 AWS_S3_SECRET_ACCESS_KEY = os.environ.get("AWS_S3_SECRET_ACCESS_KEY")
 AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME")
 
+CHALLENGE_LIFETIME = 60  # seconds
 
 # storage
 FILE_UPLOAD_CLASS = os.environ.get("FILE_UPLOAD_CLASS", "core.file_handling.aws.s3_client")
@@ -207,8 +208,8 @@ SWAGGER_SETTINGS = {
         "Basic": {
             "type": "allow any",
         },
-        "PK": {
-            "type": "PK wip",
+        "Signature": {
+            "type": "Signature in Header",
         },
     },
 }
@@ -220,7 +221,7 @@ if APPLICATION_STAGE == "development":
     from .dev import *  # noqa: F401,F403
 
 if APPLICATION_STAGE == "production":
-    from .prod import *
+    from .prod import *  # noqa: F401,F403
 
 if "test" in sys.argv:
     from .testing import *  # noqa: F401,F403
