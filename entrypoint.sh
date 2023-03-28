@@ -12,6 +12,10 @@ elif [ "$1" = "worker" ]; then
           -l INFO \
           -Q celery \
           --autoscale=10,1
+
+elif [ "$1" = "listener" ]; then
+  python manage.py blockchain_event_listener
+
 fi
 
 exec "$@"

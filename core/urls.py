@@ -11,6 +11,5 @@ router.register(r"asset-holdings", views.AssetHoldingViewSet, "core-asset-holdin
 router.register(r"proposals", views.ProposalViewSet, "core-proposal")
 
 urlpatterns = router.urls + [
-    path(r"challenge/", views.challenge, name="core-challenge"),
     path(r"stats/", views.stats, name="core-stats"),
 ]

@@ -4,6 +4,7 @@ from collections.abc import Collection
 from unittest.mock import PropertyMock, patch
 
 from ddt import data, ddt
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework.status import HTTP_201_CREATED, HTTP_403_FORBIDDEN
 from substrateinterface import Keypair
@@ -20,7 +21,7 @@ def wrap_in_pagination_res(results: Collection) -> dict:
 class CoreViewSetTest(IntegrationTestCase):
     def setUp(self):
         self.challenge_key = secrets.token_hex(64)
-        models.Challenge.objects.create(key=self.challenge_key)
+        cache.set(key="acc1", value=self.challenge_key, timeout=60)
         models.Account.objects.create(address="acc1")
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
@@ -35,14 +36,6 @@ class CoreViewSetTest(IntegrationTestCase):
         models.Proposal.objects.create(
             id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash="hash2", metadata={"a": 2}
         )
-
-    def test_challenge(self):
-        expected_res = {"key": self.challenge_key}
-
-        with self.assertNumQueries(1):
-            res = self.client.get(reverse("core-challenge"))
-
-        self.assertDictEqual(res.data, expected_res)
 
     def test_stats(self):
         expected_res = {"account_count": 2, "dao_count": 2}
@@ -213,8 +206,15 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertCountEqual(res.data, expected_res)
 
+    def test_dao_challenge(self):
+        with self.assertNumQueries(1):
+            res = self.client.get(reverse("core-dao-challenge", kwargs={"pk": "dao1"}))
+
+        self.assertEqual(res.data["challenge"], cache.get("acc1"))
+
     def test_dao_add_metadata(self):
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
         acc = models.Account.objects.create(address=keypair.ss58_address)
         models.Dao.objects.create(id="DAO1", name="dao1 name", owner=acc)

@@ -1,5 +1,8 @@
+import secrets
 from itertools import chain
 
+from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Q
 from django.utils.decorators import method_decorator
 from drf_yasg import openapi
@@ -18,18 +21,6 @@ from core.view_utils import (
     signature_in_header,
     swagger_query_param,
 )
-
-
-@swagger_auto_schema(
-    method="GET",
-    operation_id="Challenge",
-    operation_description="Retrieves current challenge.",
-    responses=openapi.Responses(responses={HTTP_200_OK: openapi.Response("", serializers.ChallengeSerializer)}),
-    security=[{"Basic": []}],
-)
-@api_view()
-def challenge(request):
-    return Response(status=HTTP_200_OK, data=serializers.ChallengeSerializer(models.Challenge.objects.get()).data)
 
 
 @swagger_auto_schema(
@@ -144,6 +135,23 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         dao.metadata_hash = metadata["metadata_hash"]
         dao.save(update_fields=["metadata", "metadata_url", "metadata_hash"])
         return Response(metadata, status=HTTP_201_CREATED)
+
+    @swagger_auto_schema(
+        method="GET",
+        operation_id="Challenge",
+        operation_description="Retrieves current challenge.",
+        responses=openapi.Responses(responses={HTTP_200_OK: openapi.Response("", serializers.ChallengeSerializer)}),
+        security=[{"Basic": []}],
+    )
+    @action(
+        methods=["GET"],
+        detail=True,
+        url_path="challenge",
+    )
+    def challenge(self, request, **_):
+        challenge_token = secrets.token_hex(64)
+        cache.set(key=self.get_object().owner_id, value=challenge_token, timeout=settings.CHALLENGE_LIFETIME)
+        return Response(status=HTTP_200_OK, data={"challenge": challenge_token})
 
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Asset."), "retrieve")

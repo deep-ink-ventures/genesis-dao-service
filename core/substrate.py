@@ -6,7 +6,8 @@ from functools import partial
 from typing import Optional
 
 from django.conf import settings
-from django.db import IntegrityError
+from django.core.cache import cache
+from django.db import IntegrityError, connection
 from substrateinterface import Keypair, SubstrateInterface
 
 from core import models
@@ -46,6 +47,7 @@ class SubstrateService(object):
 
         fetches accounts from blockchain and creates an Account table entry for each
         """
+        logger.info("Syncing initial accounts...")
         models.Account.objects.bulk_create(
             [
                 models.Account(address=acc_addr)
@@ -308,9 +310,11 @@ class SubstrateService(object):
 
         verifies whether the given signature matches challenge key signed by address
         """
-        challenge_key = str(models.Challenge.objects.get().key)
+
+        if not (challenge_token := cache.get(address)):
+            return False
         try:
-            return Keypair(address).verify(challenge_key, base64.b64decode(signature.encode()))
+            return Keypair(address).verify(challenge_token, base64.b64decode(signature.encode()))
         except Exception:  # noqa
             return False
 
@@ -390,8 +394,33 @@ class SubstrateService(object):
             try:
                 return models.Block.objects.create(**block_attrs)
             except IntegrityError:
-                logger.error("DB and chain are unrecoverably out of sync!")
                 raise OutOfSyncException
+
+    @staticmethod
+    def sleep(start_time):
+        """
+        Args:
+            start_time: start time
+
+        Returns:
+            None
+
+        ensure at least BLOCK_CREATION_INTERVAL sleep time
+        """
+        elapsed_time = time.time() - start_time
+        if elapsed_time < settings.BLOCK_CREATION_INTERVAL:
+            time.sleep(settings.BLOCK_CREATION_INTERVAL - elapsed_time)
+
+    def clear_db(self):
+        logger.info("DB and chain are out of sync! Recreating DB...")
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                truncate core_block;
+                truncate core_account cascade;
+                """
+            )
+        self.sync_initial_accs()
 
     def listen(self):
         """
@@ -412,12 +441,22 @@ class SubstrateService(object):
             last_block = models.Block(number=-1)
         while True:
             start_time = time.time()
-            current_block = self.fetch_and_parse_block()
-            # this should not happen, unrecoverable, short of a complete resync
-            # todo : clarify if we should auto resync
+            try:
+                current_block = self.fetch_and_parse_block()
+            except OutOfSyncException:
+                self.clear_db()
+                self.sleep(start_time=start_time)
+                last_block = models.Block(number=-1)
+                continue
+
+            # shouldn't currently happen since fetch_and_parse_block would raise before this.
+            # might happen in the future if we decide to only keep the last x blocks.
+            # this happens if the chain restarts, we have to recreate the entire DB
             if last_block.number > current_block.number:
-                logger.error("DB and chain are unrecoverably out of sync!")
-                raise OutOfSyncException
+                self.clear_db()
+                self.sleep(start_time=start_time)
+                last_block = models.Block(number=-1)
+                continue
             # we already processed this block
             # shouldn't normally happen due BLOCK_CREATION_INTERVAL sleep time
             if last_block.number == current_block.number:
@@ -435,10 +474,8 @@ class SubstrateService(object):
                     next_block = self.fetch_and_parse_block(block_number=last_block.number + 1)
                     substrate_event_handler.execute_actions(next_block)
                     last_block = next_block
-            # ensure at least 6 seconds sleep time before fetching the next block
-            elapsed_time = time.time() - start_time
-            if elapsed_time < settings.BLOCK_CREATION_INTERVAL:
-                time.sleep(settings.BLOCK_CREATION_INTERVAL - elapsed_time)
+
+            self.sleep(start_time=start_time)
 
 
 substrate_service = SubstrateService()

@@ -97,7 +97,5 @@ class ProposalSerializer(ModelSerializer):
         fields = ("id", "dao_id", "metadata", "metadata_url", "metadata_hash")
 
 
-class ChallengeSerializer(ModelSerializer):
-    class Meta:
-        model = models.Challenge
-        fields = ("key",)
+class ChallengeSerializer(Serializer):  # noqa
+    challenge = CharField(required=True)

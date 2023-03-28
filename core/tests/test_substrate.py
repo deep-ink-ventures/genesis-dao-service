@@ -3,6 +3,8 @@ from unittest.mock import Mock, call, patch
 
 from ddt import data, ddt
 from django.conf import settings
+from django.core.cache import cache
+from django.db import connection
 from django.test import override_settings
 from substrateinterface import Keypair
 
@@ -11,7 +13,7 @@ from core.tests.testcases import IntegrationTestCase
 
 
 @ddt
-class SubstrateServiceTests(IntegrationTestCase):
+class SubstrateServiceTest(IntegrationTestCase):
     def setUp(self):
         super().setUp()
 
@@ -43,7 +45,8 @@ class SubstrateServiceTests(IntegrationTestCase):
         self.assertDictEqual(block_one.event_data, block_two.event_data)
         self.assertEqual(block_one.executed, block_two.executed)
 
-    def test_sync_initial_accs(self):
+    @patch("core.substrate.logger")
+    def test_sync_initial_accs(self, logger_mock):
         self.si.query_map.return_value = (
             ("addr1", "ignored"),
             ("addr2", "ignored"),
@@ -51,6 +54,7 @@ class SubstrateServiceTests(IntegrationTestCase):
 
         self.substrate_service.sync_initial_accs()
 
+        logger_mock.info.assert_called_once_with("Syncing initial accounts...")
         self.si.query_map.assert_called_once_with("System", "Account")
         self.assertCountEqual(
             models.Account.objects.all(),
@@ -199,18 +203,25 @@ class SubstrateServiceTests(IntegrationTestCase):
         self.assert_signed_extrinsic_submitted(keypair=keypair)
 
     def test_verify(self):
-        key = "something_to_sign"
-        models.Challenge.objects.create(key=key)
+        challenge_token = "something_to_sign"
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        signature = base64.b64encode(keypair.sign(data=key)).decode()
+        cache.set(key=keypair.ss58_address, value=challenge_token, timeout=1)
+        signature = base64.b64encode(keypair.sign(data=challenge_token)).decode()
 
         self.assertTrue(self.substrate_service.verify(address=keypair.ss58_address, signature=signature))
 
     def test_verify_fail(self):
-        key = "something_to_sign"
-        models.Challenge.objects.create(key=key)
+        challenge_token = "something_to_sign"
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=keypair.ss58_address, value=challenge_token, timeout=1)
         signature = "wrong"
+
+        self.assertFalse(self.substrate_service.verify(address=keypair.ss58_address, signature=signature))
+
+    def test_verify_no_key(self):
+        challenge_token = "something_to_sign"
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        signature = base64.b64encode(keypair.sign(data=challenge_token)).decode()
 
         self.assertFalse(self.substrate_service.verify(address=keypair.ss58_address, signature=signature))
 
@@ -565,7 +576,7 @@ class SubstrateServiceTests(IntegrationTestCase):
         self.si.get_block.assert_called_once_with(block_hash="block hash", block_number=None)
 
     @patch("core.substrate.logger")
-    def test_fetch_and_parse_error(self, logger_mock: Mock):
+    def test_fetch_and_parse_block_error(self, logger_mock: Mock):
         self.si.get_block.side_effect = Exception("whoops")
 
         with self.assertRaisesMessage(self.substrate_exception, "Error while fetching block from chain."):
@@ -574,8 +585,7 @@ class SubstrateServiceTests(IntegrationTestCase):
         logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
         self.assertListEqual(list(models.Block.objects.all()), [])
 
-    @patch("core.substrate.logger")
-    def test_fetch_and_parse_block_block_already_exists(self, logger_mock: Mock):
+    def test_fetch_and_parse_block_block_already_exists(self):
         models.Block.objects.create(number=1, hash="block hash")
         block_data = {
             "not": "interesting",
@@ -593,13 +603,63 @@ class SubstrateServiceTests(IntegrationTestCase):
         with self.assertNumQueries(2), self.assertRaises(self.oos_exception):
             self.assertIsNone(self.substrate_service.fetch_and_parse_block())
 
-    def test_fetch_and_parse_error_no_block_data(self):
+    def test_fetch_and_parse_block_error_no_block_data(self):
         self.si.get_block.return_value = None
 
         with self.assertRaisesMessage(self.substrate_exception, "SubstrateInterface.get_block returned no data."):
             self.assertIsNone(self.substrate_service.fetch_and_parse_block())
 
         self.assertListEqual(list(models.Block.objects.all()), [])
+
+    @patch("core.substrate.SubstrateService.sync_initial_accs")
+    @patch("core.substrate.logger")
+    def test_clear_db(self, logger_mock, sync_initial_accs_mock):
+        models.Account.objects.create(address="acc1")
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
+        models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
+        models.Proposal.objects.create(
+            id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash="hash1", metadata={"a": 1}
+        )
+        models.Governance.objects.create(
+            dao_id="dao1",
+            proposal_duration=1,
+            proposal_token_deposit=2,
+            minimum_majority=3,
+            type=models.GovernanceType.MAJORITY_VOTE,
+        )
+        with connection.cursor() as cursor:
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE;")
+
+        with self.assertNumQueries(1):
+            self.substrate_service.clear_db()
+
+        sync_initial_accs_mock.assert_called_once_with()
+        logger_mock.info.assert_called_once_with("DB and chain are out of sync! Recreating DB...")
+        self.assertListEqual(list(models.Account.objects.all()), [])
+        self.assertListEqual(list(models.Dao.objects.all()), [])
+        self.assertListEqual(list(models.Asset.objects.all()), [])
+        self.assertListEqual(list(models.AssetHolding.objects.all()), [])
+        self.assertListEqual(list(models.Proposal.objects.all()), [])
+        self.assertListEqual(list(models.Governance.objects.all()), [])
+
+    @patch("core.substrate.time.time")
+    @patch("core.substrate.time.sleep")
+    def test_sleep_longer_than_block_creation_interval(self, sleep_mock, time_mock):
+        start_time = 10
+        time_mock.return_value = start_time + settings.BLOCK_CREATION_INTERVAL
+
+        self.substrate_service.sleep(start_time=start_time)
+        sleep_mock.assert_not_called()
+
+    @patch("core.substrate.time.time")
+    @patch("core.substrate.time.sleep")
+    def test_sleep_shorter_than_block_creation_interval(self, sleep_mock, time_mock):
+        start_time = 10
+        time_mock.return_value = start_time + settings.BLOCK_CREATION_INTERVAL - 1
+
+        self.substrate_service.sleep(start_time=start_time)
+        sleep_mock.called_once_with(1)
 
     @patch("core.substrate.logger")
     def test_listen_last_block_not_executed(self, logger_mock: Mock):
@@ -613,19 +673,42 @@ class SubstrateServiceTests(IntegrationTestCase):
         self.si.get_block.assert_not_called()
 
     @patch("core.substrate.logger")
-    def test_listen_unrecoverably_out_of_sync(self, logger_mock: Mock):
+    def test_listen_oos(self, logger_mock):
+        self.substrate_service.clear_db = Mock()
+        models.Block.objects.create(number=0, hash="hash 0", executed=True)
+        self.si.get_block.side_effect = (
+            {"header": {"number": 0, "hash": "new hash", "parentHash": None}, "extrinsics": []},
+            Exception("roar"),
+        )
+        self.si.get_events.return_value = []
+
+        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(
+            self.substrate_exception, "Error while fetching block from chain."
+        ):
+            self.substrate_service.listen()
+
+        logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
+        self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 2)
+        self.substrate_service.clear_db.assert_called_once_with()
+
+    @patch("core.substrate.logger")
+    def test_listen_last_block_greater_current_block(self, logger_mock):
+        self.substrate_service.clear_db = Mock()
         models.Block.objects.create(number=1, executed=True, hash="some hash")
         self.si.get_block.side_effect = (
             {"header": {"number": 0, "hash": "hash 0", "parentHash": None}, "extrinsics": []},
+            Exception("roar"),
         )
         self.si.get_events.return_value = []
-        expected_msg = "DB and chain are unrecoverably out of sync!"
 
-        with self.assertRaisesMessage(self.oos_exception, expected_msg):
+        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(
+            self.substrate_exception, "Error while fetching block from chain."
+        ):
             self.substrate_service.listen()
 
-        self.si.get_block.assert_called_once_with(block_hash=None, block_number=None)
-        logger_mock.error.assert_called_once_with(expected_msg)
+        logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
+        self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 2)
+        self.substrate_service.clear_db.assert_called_once_with()
 
     @patch("core.substrate.logger")
     def test_listen_empty_db(self, logger_mock: Mock):
