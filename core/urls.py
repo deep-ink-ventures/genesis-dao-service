@@ -12,4 +12,5 @@ router.register(r"proposals", views.ProposalViewSet, "core-proposal")
 
 urlpatterns = router.urls + [
     path(r"stats/", views.stats, name="core-stats"),
+    path(r"config/", views.config, name="core-config"),
 ]

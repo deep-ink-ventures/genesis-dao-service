@@ -32,7 +32,34 @@ from core.view_utils import (
 )
 @api_view()
 def stats(request, *args, **kwargs):
-    return Response(data={"account_count": models.Account.objects.count(), "dao_count": models.Dao.objects.count()})
+    serializer = serializers.StatsSerializer(
+        data={
+            "account_count": models.Account.objects.count(),
+            "dao_count": models.Dao.objects.count(),
+        }
+    )
+    serializer.is_valid(raise_exception=True)
+    return Response(serializer.data)
+
+
+@swagger_auto_schema(
+    method="GET",
+    operation_id="Retrieve config",
+    operation_description="Retrieves config.",
+    responses=openapi.Responses(responses={HTTP_200_OK: openapi.Response("", serializers.ConfigSerializer)}),
+    security=[{"Basic": []}],
+)
+@api_view()
+def config(request, *args, **kwargs):
+    serializer = serializers.ConfigSerializer(
+        data={
+            "deposit_to_create_dao": settings.DEPOSIT_TO_CREATE_DAO,
+            "deposit_to_create_proposal": settings.DEPOSIT_TO_CREATE_PROPOSAL,
+            "block_creation_interval": settings.BLOCK_CREATION_INTERVAL,
+        }
+    )
+    serializer.is_valid(raise_exception=True)
+    return Response(serializer.data)
 
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Account."), "retrieve")

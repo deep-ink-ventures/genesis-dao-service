@@ -4,6 +4,7 @@ from collections.abc import Collection
 from unittest.mock import PropertyMock, patch
 
 from ddt import data, ddt
+from django.conf import settings
 from django.core.cache import cache
 from django.urls import reverse
 from rest_framework.status import HTTP_201_CREATED, HTTP_403_FORBIDDEN
@@ -42,6 +43,18 @@ class CoreViewSetTest(IntegrationTestCase):
 
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-stats"))
+
+        self.assertDictEqual(res.data, expected_res)
+
+    def test_config(self):
+        expected_res = {
+            "deposit_to_create_dao": settings.DEPOSIT_TO_CREATE_DAO,
+            "deposit_to_create_proposal": settings.DEPOSIT_TO_CREATE_PROPOSAL,
+            "block_creation_interval": settings.BLOCK_CREATION_INTERVAL,
+        }
+
+        with self.assertNumQueries(0):
+            res = self.client.get(reverse("core-config"))
 
         self.assertDictEqual(res.data, expected_res)
 

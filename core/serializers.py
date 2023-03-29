@@ -10,11 +10,21 @@ class StatsSerializer(Serializer):  # noqa
     account_count = IntegerField(min_value=0)
 
 
+class ConfigSerializer(Serializer):  # noqa
+    deposit_to_create_dao = IntegerField(
+        min_value=0, help_text="Amount of native balance required to deposit when creating a DAO."
+    )
+    deposit_to_create_proposal = IntegerField(
+        min_value=0, help_text="Amount of native balance required to deposit when creating a Proposal."
+    )
+    block_creation_interval = IntegerField(min_value=0, help_text="In seconds.")
+
+
 class BalanceSerializer(Serializer):  # noqa
-    free = IntegerField()
-    reserved = IntegerField()
-    misc_frozen = IntegerField()
-    fee_frozen = IntegerField()
+    free = IntegerField(min_value=0)
+    reserved = IntegerField(min_value=0)
+    misc_frozen = IntegerField(min_value=0)
+    fee_frozen = IntegerField(min_value=0)
 
 
 class AccountSerializerDetail(ModelSerializer):
