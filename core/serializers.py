@@ -10,7 +10,22 @@ class StatsSerializer(Serializer):  # noqa
     account_count = IntegerField(min_value=0)
 
 
-class AccountSerializer(ModelSerializer):
+class BalanceSerializer(Serializer):  # noqa
+    free = IntegerField()
+    reserved = IntegerField()
+    misc_frozen = IntegerField()
+    fee_frozen = IntegerField()
+
+
+class AccountSerializerDetail(ModelSerializer):
+    balance = BalanceSerializer(required=True)
+
+    class Meta:
+        model = models.Account
+        fields = ("address", "balance")
+
+
+class AccountSerializerList(ModelSerializer):
     class Meta:
         model = models.Account
         fields = ("address",)

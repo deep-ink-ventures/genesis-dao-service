@@ -45,6 +45,16 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.assertDictEqual(block_one.event_data, block_two.event_data)
         self.assertEqual(block_one.executed, block_two.executed)
 
+    def test_retrieve_account_balance(self):
+        account_address = "some_address"
+        expected_balance = {"free": 1, "reserved": 2, "misc_frozen": 3, "fee_frozen": 4}
+        self.si.query.return_value = Mock(value={"data": expected_balance})
+
+        self.assertEqual(
+            self.substrate_service.retrieve_account_balance(account_address=account_address), expected_balance
+        )
+        self.si.query.assert_called_once_with(module="System", storage_function="Account", params=[account_address])
+
     @patch("core.substrate.logger")
     def test_sync_initial_accs(self, logger_mock):
         self.si.query_map.return_value = (

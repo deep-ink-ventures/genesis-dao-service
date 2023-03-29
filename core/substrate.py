@@ -40,6 +40,26 @@ class SubstrateService(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.substrate_interface.close()
 
+    def retrieve_account_balance(self, account_address: str) -> dict:
+        """
+        Args:
+            account_address: Account's ss58_address
+
+        Returns:
+            balance dict
+            {
+                "free": int,
+                "reserved": int,
+                "misc_frozen": int,
+                "fee_frozen": int,
+            }
+
+        fetches Account's balance dict
+        """
+        return self.substrate_interface.query(
+            module="System", storage_function="Account", params=[account_address]
+        ).value["data"]
+
     def sync_initial_accs(self):
         """
         Returns:

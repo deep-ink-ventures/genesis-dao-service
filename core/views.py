@@ -40,7 +40,17 @@ class AccountViewSet(ReadOnlyModelViewSet, SearchableMixin):
     allowed_filter_fields = ("id",)
     allowed_order_fields = ("id",)
     queryset = models.Account.objects.all()
-    serializer_class = serializers.AccountSerializer
+
+    def get_serializer_class(self):
+        return {
+            "retrieve": serializers.AccountSerializerDetail,
+            "list": serializers.AccountSerializerList,
+        }.get(self.action)
+
+    def retrieve(self, request, *args, **kwargs):
+        account = self.get_object()
+        account.balance = substrate_service.retrieve_account_balance(account_address=account.address)
+        return Response(self.get_serializer(account).data)
 
 
 class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):

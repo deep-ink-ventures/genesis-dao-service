@@ -45,8 +45,11 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertDictEqual(res.data, expected_res)
 
-    def test_account_get(self):
-        expected_res = {"address": "acc1"}
+    @patch("core.views.substrate_service.retrieve_account_balance")
+    def test_account_get(self, retrieve_account_balance_mock):
+        expected_balance = {"free": 1, "reserved": 2, "misc_frozen": 3, "fee_frozen": 4}
+        retrieve_account_balance_mock.return_value = expected_balance
+        expected_res = {"address": "acc1", "balance": expected_balance}
 
         with self.assertNumQueries(1):
             res = self.client.get(reverse("core-account-detail", kwargs={"pk": "acc1"}))
