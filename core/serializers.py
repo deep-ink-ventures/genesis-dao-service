@@ -1,3 +1,4 @@
+from django.conf import settings
 from drf_extra_fields.fields import Base64ImageField
 from rest_framework.fields import CharField, EmailField, IntegerField, URLField
 from rest_framework.serializers import ModelSerializer, Serializer
@@ -69,7 +70,8 @@ class MetadataSerializer(Serializer):  # noqa
 
 class MetadataResponseSerializer(Serializer):  # noqa
     class MetadataSerializer(Serializer):  # noqa
-        description = CharField(required=False)
+        description_short = CharField(required=False)
+        description_long = CharField(required=False)
         email = EmailField(required=False)
 
         class Meta:  # noqa
@@ -125,4 +127,4 @@ class ProposalSerializer(ModelSerializer):
 
 
 class ChallengeSerializer(Serializer):  # noqa
-    challenge = CharField(required=True)
+    challenge = CharField(required=True, help_text=f"Valid for {settings.CHALLENGE_LIFETIME}s.")
