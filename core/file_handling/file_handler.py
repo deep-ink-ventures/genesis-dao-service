@@ -37,7 +37,8 @@ class FileHandler:
             metadata dict e.g.:
             {
                 "metadata": {
-                    "description": "some description",
+                    "description_short": "short description",
+                    "description_long": "long description",
                     "email": "some@email",
                     "images": {
                         "logo": {

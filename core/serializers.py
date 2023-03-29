@@ -59,7 +59,8 @@ class DaoSerializerList(ModelSerializer):
 
 
 class MetadataSerializer(Serializer):  # noqa
-    description = CharField(required=False)
+    description_short = CharField(required=False)
+    description_long = CharField(required=False)
     email = EmailField(required=False)
     logo = Base64ImageField(
         help_text=f"B64 encoded image string.\nAllowed image types are: {', '.join(Base64ImageField.ALLOWED_TYPES)}"

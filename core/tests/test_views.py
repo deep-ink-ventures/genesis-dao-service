@@ -239,12 +239,14 @@ class CoreViewSetTest(IntegrationTestCase):
         with open("core/tests/test_file.jpeg", "rb") as f:
             post_data = {
                 "email": "some@email.com",
-                "description": "some description",
+                "description_short": "short description",
+                "description_long": "long description",
                 "logo": base64.b64encode(f.read()).decode(),
             }
         expected_res = {
             "metadata": {
-                "description": "some description",
+                "description_short": "short description",
+                "description_long": "long description",
                 "email": "some@email.com",
                 "images": {
                     "logo": {
@@ -255,7 +257,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     }
                 },
             },
-            "metadata_hash": "3082033b6fe930d0db400fc2ef465b25de2e68ef04ac745c349ff7673e3a1c46",
+            "metadata_hash": "a1a0591662255e72aba330746eee9a50815d4580efaf3e60aa687c7ac12d473d",
             "metadata_url": "https://some_storage.some_region.com/DAO1/metadata.json",
         }
 
