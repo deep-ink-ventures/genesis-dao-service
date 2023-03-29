@@ -481,13 +481,13 @@ class EventHandlerTest(IntegrationTestCase):
                             "dao_id": "dao1",
                             "proposal_duration": 1,
                             "proposal_token_deposit": 2,
-                            "minimum_majority_per_256": 3,
+                            "minimum_majority_per_1024": 3,
                         },
                         {
                             "dao_id": "dao2",
                             "proposal_duration": 4,
                             "proposal_token_deposit": 5,
-                            "minimum_majority_per_256": 6,
+                            "minimum_majority_per_1024": 6,
                         },
                     ]
                 },

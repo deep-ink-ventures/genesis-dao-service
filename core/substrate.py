@@ -254,7 +254,7 @@ class SubstrateService(object):
         dao_id: str,
         proposal_duration: int,
         proposal_token_deposit: int,
-        minimum_majority_per_256: int,
+        minimum_majority_per_1024: int,
         keypair: Keypair,
     ):
         """
@@ -262,9 +262,9 @@ class SubstrateService(object):
             dao_id: dao to governance type for
             proposal_duration: the number of blocks a proposal is open for voting
             proposal_token_deposit: the token deposit required to create a proposal
-            minimum_majority_per_256:
+            minimum_majority_per_1024:
                 how many more ayes than nays there must be for proposal acceptance
-                thus proposal acceptance requires: ayes >= nays + token_supply / 256 * minimum_majority_per_256
+                thus proposal acceptance requires: ayes >= nays + token_supply / 1024 * minimum_majority_per_1024
             keypair: Keypair used to sign the extrinsic
 
         Returns:
@@ -281,7 +281,7 @@ class SubstrateService(object):
                         "dao_id": dao_id,
                         "proposal_duration": proposal_duration,
                         "proposal_token_deposit": proposal_token_deposit,
-                        "minimum_majority_per_256": minimum_majority_per_256,
+                        "minimum_majority_per_1024": minimum_majority_per_1024,
                     },
                 ),
                 keypair=keypair,

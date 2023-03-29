@@ -189,14 +189,14 @@ class SubstrateServiceTest(IntegrationTestCase):
         dao_id = "abc"
         proposal_duration = 123
         proposal_token_deposit = 234
-        minimum_majority_per_256 = 345
+        minimum_majority_per_1024 = 345
         keypair = object()
 
         self.substrate_service.set_governance_majority_vote(
             dao_id=dao_id,
             proposal_duration=proposal_duration,
             proposal_token_deposit=proposal_token_deposit,
-            minimum_majority_per_256=minimum_majority_per_256,
+            minimum_majority_per_1024=minimum_majority_per_1024,
             keypair=keypair,
         )
 
@@ -207,7 +207,7 @@ class SubstrateServiceTest(IntegrationTestCase):
                 "dao_id": dao_id,
                 "proposal_duration": proposal_duration,
                 "proposal_token_deposit": proposal_token_deposit,
-                "minimum_majority_per_256": minimum_majority_per_256,
+                "minimum_majority_per_1024": minimum_majority_per_1024,
             },
         )
         self.assert_signed_extrinsic_submitted(keypair=keypair)

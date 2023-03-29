@@ -45,7 +45,7 @@ class SubstrateEventHandler:
             models.Account(address=dao_event["account"])
             for dao_event in block.event_data.get("System", {}).get("NewAccount", [])
         ]:
-            models.Account.objects.bulk_create(accs)
+            models.Account.objects.bulk_create(accs, ignore_conflicts=True)
 
     @staticmethod
     def _create_daos(block: models.Block):
@@ -240,7 +240,7 @@ class SubstrateEventHandler:
                     dao_id=governance_event["dao_id"],
                     proposal_duration=governance_event["proposal_duration"],
                     proposal_token_deposit=governance_event["proposal_token_deposit"],
-                    minimum_majority=governance_event["minimum_majority_per_256"],
+                    minimum_majority=governance_event["minimum_majority_per_1024"],
                     type=models.GovernanceType.MAJORITY_VOTE,
                 )
             )
