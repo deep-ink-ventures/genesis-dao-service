@@ -18,10 +18,11 @@ class AccountSerializer(ModelSerializer):
 
 class DaoSerializerDetail(ModelSerializer):
     owner_id = CharField(required=True)
+    asset_id = IntegerField(source="asset.id", required=False)
 
     class Meta:
         model = models.Dao
-        fields = ("id", "name", "owner_id", "metadata_url", "metadata_hash")
+        fields = ("id", "name", "owner_id", "asset_id", "metadata_url", "metadata_hash")
 
 
 class DaoSerializerList(ModelSerializer):

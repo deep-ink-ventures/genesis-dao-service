@@ -66,6 +66,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "id": "dao1",
             "name": "dao1 name",
             "owner_id": "acc1",
+            "asset_id": 1,
             "metadata_url": None,
             "metadata_hash": None,
         }

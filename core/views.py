@@ -49,6 +49,9 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
     allowed_order_fields = ("id", "name", "owner_id")
     pagination_class = MultiQsLimitOffsetPagination
 
+    def get_queryset(self):
+        return self.queryset.select_related("asset")
+
     def get_serializer_class(self):
         return {
             "retrieve": serializers.DaoSerializerDetail,
