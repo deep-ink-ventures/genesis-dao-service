@@ -26,6 +26,31 @@ from core.view_utils import (
 
 @swagger_auto_schema(
     method="GET",
+    operation_id="Welcome",
+    operation_description="Shows welcome message.",
+    responses=openapi.Responses(
+        responses={
+            HTTP_200_OK: openapi.Response(
+                "",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        "success": openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                        "message": openapi.Schema(type=openapi.TYPE_STRING),
+                    },
+                ),
+            )
+        }
+    ),
+    security=[{"Basic": []}],
+)
+@api_view()
+def welcome(request, *args, **kwargs):
+    return Response(data={"success": True, "message": "Welcome traveler."})
+
+
+@swagger_auto_schema(
+    method="GET",
     operation_id="Retrieve stats",
     operation_description="Retrieves some stats.",
     responses=openapi.Responses(responses={HTTP_200_OK: openapi.Response("", serializers.StatsSerializer)}),

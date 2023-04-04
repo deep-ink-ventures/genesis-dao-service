@@ -11,6 +11,7 @@ router.register(r"asset-holdings", views.AssetHoldingViewSet, "core-asset-holdin
 router.register(r"proposals", views.ProposalViewSet, "core-proposal")
 
 urlpatterns = router.urls + [
+    path(r"", views.welcome, name="core-welcome"),
     path(r"stats/", views.stats, name="core-stats"),
     path(r"config/", views.config, name="core-config"),
 ]

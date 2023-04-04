@@ -39,6 +39,13 @@ class CoreViewSetTest(IntegrationTestCase):
             id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash="hash2", metadata={"a": 2}
         )
 
+    def test_welcome(self):
+        expected_res = {"success": True, "message": "Welcome traveler."}
+        with self.assertNumQueries(0):
+            res = self.client.get(reverse("core-welcome"))
+
+        self.assertDictEqual(res.data, expected_res)
+
     def test_stats(self):
         expected_res = {"account_count": 2, "dao_count": 2}
 
