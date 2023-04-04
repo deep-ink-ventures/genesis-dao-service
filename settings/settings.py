@@ -44,7 +44,7 @@ MIDDLEWARE = [
     "core.middleware.HealthCheckMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
-    'corsheaders.middleware.CorsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -168,7 +168,7 @@ STATIC_ROOT = BASE_DIR / "static"
 AWS_STORAGE_BUCKET_NAME = os.environ.get("AWS_STORAGE_BUCKET_NAME")
 AWS_S3_ACCESS_KEY_ID = os.environ.get("AWS_S3_ACCESS_KEY_ID")
 AWS_S3_SECRET_ACCESS_KEY = os.environ.get("AWS_S3_SECRET_ACCESS_KEY")
-AWS_S3_REGION_NAME = os.environ.get("AWS_S3_REGION_NAME")
+AWS_REGION = os.environ.get("AWS_REGION")
 
 CHALLENGE_LIFETIME = 60  # seconds
 

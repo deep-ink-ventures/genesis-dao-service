@@ -13,12 +13,12 @@ logger = logging.getLogger("alerts")
 class S3Client:
     def __init__(self):
         self.bucket_name = settings.AWS_STORAGE_BUCKET_NAME
-        self.region_name = settings.AWS_S3_REGION_NAME
+        self.region_name = settings.AWS_REGION
         s3_credentials = {
             "service_name": "s3",
             "aws_access_key_id": settings.AWS_S3_ACCESS_KEY_ID,
             "aws_secret_access_key": settings.AWS_S3_SECRET_ACCESS_KEY,
-            "region_name": settings.AWS_S3_REGION_NAME,
+            "region_name": self.region_name,
         }
         self.client = boto3.client(**s3_credentials)
         self.resource = boto3.resource(**s3_credentials)
