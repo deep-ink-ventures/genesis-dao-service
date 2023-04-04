@@ -330,8 +330,6 @@ class SubstrateService(object):
 
         verifies whether the given signature matches challenge key signed by address
         """
-        # Todo
-        return True
 
         if not (challenge_token := cache.get(address)):
             return False
