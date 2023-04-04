@@ -9,13 +9,14 @@ from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
+from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from core import models, serializers
 from core.file_handling.file_handler import file_handler
 from core.substrate import substrate_service
 from core.view_utils import (
+    IsDAOOwner,
     MultiQsLimitOffsetPagination,
     SearchableMixin,
     signature_in_header,
@@ -161,14 +162,13 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         methods=["POST"],
         detail=True,
         url_path="metadata",
+        permission_classes=[IsDAOOwner],
+        authentication_classes=[],
     )
     def add_metadata(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         dao = self.get_object()
-        if not substrate_service.verify(address=dao.owner_id, signature=request.headers.get("Signature")):
-            return Response(status=HTTP_403_FORBIDDEN)
-
         metadata = file_handler.upload_metadata(metadata=serializer.validated_data, storage_destination=dao.id)
         dao.metadata = metadata["metadata"]
         dao.metadata_url = metadata["metadata_url"]

@@ -8,7 +8,22 @@ from django.db.models import QuerySet
 from drf_yasg import openapi
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.permissions import BasePermission
 from rest_framework.viewsets import GenericViewSet
+
+from core.substrate import substrate_service
+
+
+class IsDAOOwner(BasePermission):
+    message = {
+        "error": "Only the DAO owner has access to this action. Header needs to contain signature=*signed-challenge*."
+    }
+
+    def has_permission(self, request, view):
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        return substrate_service.verify(address=obj.owner_id, signature=request.headers.get("Signature"))
 
 
 class FilterBackend:

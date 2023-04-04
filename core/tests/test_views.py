@@ -7,6 +7,7 @@ from ddt import data, ddt
 from django.conf import settings
 from django.core.cache import cache
 from django.urls import reverse
+from rest_framework.exceptions import ErrorDetail
 from rest_framework.status import HTTP_201_CREATED, HTTP_403_FORBIDDEN
 from substrateinterface import Keypair
 
@@ -287,7 +288,16 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
-        self.assertIsNone(res.data)
+        self.assertEqual(
+            res.data,
+            {
+                "error": ErrorDetail(
+                    code="permission_denied",
+                    string="Only the DAO owner has access to this action. "
+                    "Header needs to contain signature=*signed-challenge*.",
+                )
+            },
+        )
 
     def test_asset_get(self):
         expected_res = {"id": 1, "dao_id": "dao1", "owner_id": "acc1", "total_supply": 100}
