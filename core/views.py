@@ -117,8 +117,8 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
     def get_serializer_class(self):
         return {
-            "retrieve": serializers.DaoSerializerDetail,
-            "list": serializers.DaoSerializerList,
+            "retrieve": serializers.DaoSerializer,
+            "list": serializers.DaoSerializer,
             "add_metadata": serializers.MetadataSerializer,
         }.get(self.action)
 

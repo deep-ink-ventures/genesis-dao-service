@@ -35,7 +35,20 @@ class SubstrateServiceTest(IntegrationTestCase):
 
     def assert_signed_extrinsic_submitted(self, keypair: object):
         self.si.create_signed_extrinsic.assert_called_once_with(call=self.si.compose_call(), keypair=keypair)
-        self.si.submit_extrinsic.assert_called_once_with(self.si.create_signed_extrinsic())
+        self.si.submit_extrinsic.assert_called_once_with(
+            extrinsic=self.si.create_signed_extrinsic(),
+            wait_for_inclusion=False,
+        )
+
+    @patch("core.substrate.logger")
+    def test_submit_extrinsic(self, logger_mock):
+        extrinsic = Mock()
+        receipt = Mock(is_success=False, error_message={"name": "some error"})
+        self.si.submit_extrinsic.return_value = receipt
+
+        self.substrate_service.submit_extrinsic(extrinsic=extrinsic, wait_for_inclusion=True)
+
+        logger_mock.error.assert_called_once_with("Error during extrinsic submission: {'name': 'some error'}")
 
     def assert_blocks_equal(self, block_one: models.Block, block_two: models.Block):
         self.assertEqual(block_one.number, block_two.number)
@@ -85,6 +98,20 @@ class SubstrateServiceTest(IntegrationTestCase):
             call_module="DaoCore",
             call_function="create_dao",
             call_params={"dao_id": dao_id, "dao_name": dao_name},
+        )
+        self.assert_signed_extrinsic_submitted(keypair=keypair)
+
+    def test_transfer_dao_ownership(self):
+        dao_id = "some id"
+        new_owner_id = "new id"
+        keypair = object()
+
+        self.substrate_service.transfer_dao_ownership(dao_id=dao_id, new_owner_id=new_owner_id, keypair=keypair)
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="DaoCore",
+            call_function="change_owner",
+            call_params={"dao_id": dao_id, "new_owner": new_owner_id},
         )
         self.assert_signed_extrinsic_submitted(keypair=keypair)
 

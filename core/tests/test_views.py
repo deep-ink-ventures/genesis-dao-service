@@ -19,6 +19,24 @@ def wrap_in_pagination_res(results: Collection) -> dict:
     return {"count": len(results), "next": None, "previous": None, "results": results}
 
 
+expected_dao1_res = {
+    "id": "dao1",
+    "name": "dao1 name",
+    "owner_id": "acc1",
+    "asset_id": 1,
+    "metadata_url": None,
+    "metadata_hash": None,
+}
+expected_dao2_res = {
+    "id": "dao2",
+    "name": "dao2 name",
+    "owner_id": "acc2",
+    "asset_id": 2,
+    "metadata_url": None,
+    "metadata_hash": None,
+}
+
+
 @ddt
 class CoreViewSetTest(IntegrationTestCase):
     def setUp(self):
@@ -86,27 +104,13 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertDictEqual(res.data, expected_res)
 
     def test_dao_get(self):
-        expected_res = {
-            "id": "dao1",
-            "name": "dao1 name",
-            "owner_id": "acc1",
-            "asset_id": 1,
-            "metadata_url": None,
-            "metadata_hash": None,
-        }
-
         with self.assertNumQueries(1):
             res = self.client.get(reverse("core-dao-detail", kwargs={"pk": "dao1"}))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.data, expected_dao1_res)
 
     def test_dao_get_list(self):
-        expected_res = wrap_in_pagination_res(
-            [
-                {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
-                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
-            ]
-        )
+        expected_res = wrap_in_pagination_res([expected_dao1_res, expected_dao2_res])
 
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-dao-list"))
@@ -120,11 +124,7 @@ class CoreViewSetTest(IntegrationTestCase):
         {"name": "dao2 name"},
     )
     def test_dao_list_filter(self, query_params):
-        expected_res = wrap_in_pagination_res(
-            [
-                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
-            ]
-        )
+        expected_res = wrap_in_pagination_res([expected_dao2_res])
 
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-dao-list"), query_params)
@@ -136,25 +136,46 @@ class CoreViewSetTest(IntegrationTestCase):
         (
             {"order_by": "id"},
             [
-                {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
-                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
-                {"id": "dao3", "name": "3", "owner_id": "acc2"},
+                expected_dao1_res,
+                expected_dao2_res,
+                {
+                    "id": "dao3",
+                    "name": "3",
+                    "owner_id": "acc2",
+                    "asset_id": None,
+                    "metadata_url": None,
+                    "metadata_hash": None,
+                },
             ],
         ),
         (
             {"order_by": "name"},
             [
-                {"id": "dao3", "name": "3", "owner_id": "acc2"},
-                {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
-                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
+                {
+                    "id": "dao3",
+                    "name": "3",
+                    "owner_id": "acc2",
+                    "asset_id": None,
+                    "metadata_url": None,
+                    "metadata_hash": None,
+                },
+                expected_dao1_res,
+                expected_dao2_res,
             ],
         ),
         (
             {"order_by": "owner_id,id"},
             [
-                {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
-                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
-                {"id": "dao3", "name": "3", "owner_id": "acc2"},
+                expected_dao1_res,
+                expected_dao2_res,
+                {
+                    "id": "dao3",
+                    "name": "3",
+                    "owner_id": "acc2",
+                    "asset_id": None,
+                    "metadata_url": None,
+                    "metadata_hash": None,
+                },
             ],
         ),
     )
@@ -174,30 +195,72 @@ class CoreViewSetTest(IntegrationTestCase):
         (
             {"prioritise_owner": "acc2", "order_by": "-name"},
             [
-                {"id": "dao4", "name": "dao4 name", "owner_id": "acc2"},
-                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
-                {"id": "dao3", "name": "dao3 name", "owner_id": "acc1"},
-                {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
+                {
+                    "id": "dao4",
+                    "name": "dao4 name",
+                    "owner_id": "acc2",
+                    "asset_id": 4,
+                    "metadata_url": None,
+                    "metadata_hash": None,
+                },
+                expected_dao2_res,
+                {
+                    "id": "dao3",
+                    "name": "dao3 name",
+                    "owner_id": "acc1",
+                    "asset_id": 3,
+                    "metadata_url": None,
+                    "metadata_hash": None,
+                },
+                expected_dao1_res,
             ],
             4,
         ),
         (
             {"prioritise_holder": "acc3", "order_by": "-name"},
             [
-                {"id": "dao4", "name": "dao4 name", "owner_id": "acc2"},
-                {"id": "dao3", "name": "dao3 name", "owner_id": "acc1"},
-                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
-                {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
+                {
+                    "id": "dao4",
+                    "name": "dao4 name",
+                    "owner_id": "acc2",
+                    "asset_id": 4,
+                    "metadata_url": None,
+                    "metadata_hash": None,
+                },
+                {
+                    "id": "dao3",
+                    "name": "dao3 name",
+                    "owner_id": "acc1",
+                    "asset_id": 3,
+                    "metadata_url": None,
+                    "metadata_hash": None,
+                },
+                expected_dao2_res,
+                expected_dao1_res,
             ],
             4,
         ),
         (
             {"prioritise_owner": "acc2", "prioritise_holder": "acc3", "order_by": "name"},
             [
-                {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
-                {"id": "dao4", "name": "dao4 name", "owner_id": "acc2"},
-                {"id": "dao3", "name": "dao3 name", "owner_id": "acc1"},
-                {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
+                expected_dao2_res,
+                {
+                    "id": "dao4",
+                    "name": "dao4 name",
+                    "owner_id": "acc2",
+                    "asset_id": 4,
+                    "metadata_url": None,
+                    "metadata_hash": None,
+                },
+                {
+                    "id": "dao3",
+                    "name": "dao3 name",
+                    "owner_id": "acc1",
+                    "asset_id": 3,
+                    "metadata_url": None,
+                    "metadata_hash": None,
+                },
+                expected_dao1_res,
             ],
             6,
         ),
@@ -221,10 +284,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
     @patch("core.view_utils.MultiQsLimitOffsetPagination.default_limit", PropertyMock(return_value=None))
     def test_dao_list_no_limit(self):
-        expected_res = [
-            {"id": "dao1", "name": "dao1 name", "owner_id": "acc1"},
-            {"id": "dao2", "name": "dao2 name", "owner_id": "acc2"},
-        ]
+        expected_res = [expected_dao1_res, expected_dao2_res]
 
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-dao-list"), {"prioritise_owner": "acc2"})

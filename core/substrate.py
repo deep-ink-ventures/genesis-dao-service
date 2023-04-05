@@ -8,6 +8,7 @@ from typing import Optional
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, connection
+from scalecodec import GenericExtrinsic
 from substrateinterface import Keypair, SubstrateInterface
 
 from core import models
@@ -60,6 +61,21 @@ class SubstrateService(object):
             module="System", storage_function="Account", params=[account_address]
         ).value["data"]
 
+    def submit_extrinsic(self, extrinsic: GenericExtrinsic, wait_for_inclusion=True):
+        """
+        Args:
+            extrinsic: extrinsic to submit
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+        Returns:
+            None
+
+        submits extrinsic logs errors messages if wait_for_inclusion=True
+        """
+        receipt = self.substrate_interface.submit_extrinsic(extrinsic=extrinsic, wait_for_inclusion=wait_for_inclusion)
+        if wait_for_inclusion and not receipt.is_success:
+            logger.error(f"Error during extrinsic submission: {receipt.error_message}")
+
     def sync_initial_accs(self):
         """
         Returns:
@@ -76,33 +92,61 @@ class SubstrateService(object):
             ignore_conflicts=True,
         )
 
-    def create_dao(self, dao_id: str, dao_name: str, keypair: Keypair):
+    def create_dao(self, dao_id: str, dao_name: str, keypair: Keypair, wait_for_inclusion=False):
         """
         Args:
             dao_id: id of the new dao
             dao_name: name of the new dao
             keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
         Returns:
             None
 
         submits a signed extrinsic to create a new dao on the blockchain
         """
-        self.substrate_interface.submit_extrinsic(
-            self.substrate_interface.create_signed_extrinsic(
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
                 call=self.substrate_interface.compose_call(
                     call_module="DaoCore",
                     call_function="create_dao",
                     call_params={"dao_id": dao_id, "dao_name": dao_name},
                 ),
                 keypair=keypair,
-            )
+            ),
+            wait_for_inclusion=wait_for_inclusion,
         )
 
-    def destroy_dao(self, dao_id: str, keypair: Keypair):
+    def transfer_dao_ownership(self, dao_id: str, new_owner_id: str, keypair: Keypair, wait_for_inclusion=False):
+        """
+        Args:
+            dao_id: dao id to change ownership for
+            new_owner_id: new dao owner
+            keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+        Returns:
+            None
+
+        submits a singed extrinsic to change a dao's ownership on the blockchain
+        """
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="DaoCore",
+                    call_function="change_owner",
+                    call_params={"dao_id": dao_id, "new_owner": new_owner_id},
+                ),
+                keypair=keypair,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
+
+    def destroy_dao(self, dao_id: str, keypair: Keypair, wait_for_inclusion=False):
         """
         Args:
             dao_id: dao id to destroy
             keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
         Returns:
             None
@@ -110,23 +154,25 @@ class SubstrateService(object):
         submits a singed extrinsic to destroy a dao on the blockchain
         """
 
-        self.substrate_interface.submit_extrinsic(
-            self.substrate_interface.create_signed_extrinsic(
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
                 call=self.substrate_interface.compose_call(
                     call_module="DaoCore",
                     call_function="destroy_dao",
                     call_params={"dao_id": dao_id},
                 ),
                 keypair=keypair,
-            )
+            ),
+            wait_for_inclusion=wait_for_inclusion,
         )
 
-    def issue_tokens(self, dao_id: str, amount: int, keypair: Keypair):
+    def issue_tokens(self, dao_id: str, amount: int, keypair: Keypair, wait_for_inclusion=False):
         """
         Args:
             dao_id: dao id to issue tokens for
             amount: amount of tokens to be issued
             keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
         Returns:
             None
@@ -135,72 +181,78 @@ class SubstrateService(object):
         (creates a new asset and links it to the dao)
         """
 
-        self.substrate_interface.submit_extrinsic(
-            self.substrate_interface.create_signed_extrinsic(
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
                 call=self.substrate_interface.compose_call(
                     call_module="DaoCore",
                     call_function="issue_token",
                     call_params={"dao_id": dao_id, "supply": amount},
                 ),
                 keypair=keypair,
-            )
+            ),
+            wait_for_inclusion=wait_for_inclusion,
         )
 
-    def transfer_asset(self, asset_id: str, target: str, amount: int, keypair: Keypair):
+    def transfer_asset(self, asset_id: str, target: str, amount: int, keypair: Keypair, wait_for_inclusion=False):
         """
         Args:
             asset_id: asset to transfer balance from
             target: target address / account to transfer balance to
             amount: amount of balance to transfer
-            keypair: Keypair used to sign the extrinsic
+            keypair: Keypair used to sign the
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
         Returns:
             None
 
         submits a singed extrinsic to transfer balance from an asset to an address / account on the blockchain
         """
-        self.substrate_interface.submit_extrinsic(
-            self.substrate_interface.create_signed_extrinsic(
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
                 call=self.substrate_interface.compose_call(
                     call_module="Assets",
                     call_function="transfer",
                     call_params={"id": asset_id, "target": target, "amount": amount},
                 ),
                 keypair=keypair,
-            )
+            ),
+            wait_for_inclusion=wait_for_inclusion,
         )
 
-    def transfer_balance(self, target: str, value: int, keypair: Keypair):
+    def transfer_balance(self, target: str, value: int, keypair: Keypair, wait_for_inclusion=False):
         """
 
         Args:
             target: address / account to transfer balance to
             value: amount to transfer
-            keypair: Keypair used to sign the extrinsic
+            keypair: Keypair used to sign the
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
         Returns:
             None
 
         submits a singed extrinsic to transfer balance to a target address on the blockchain
         """
-        self.substrate_interface.submit_extrinsic(
-            self.substrate_interface.create_signed_extrinsic(
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
                 call=self.substrate_interface.compose_call(
                     call_module="Balances",
                     call_function="transfer",
                     call_params={"dest": target, "value": value},
                 ),
                 keypair=keypair,
-            )
+            ),
+            wait_for_inclusion=wait_for_inclusion,
         )
 
-    def set_balance(self, target: str, new_free: int, new_reserved: int, keypair: Keypair):
+    def set_balance(self, target: str, new_free: int, new_reserved: int, keypair: Keypair, wait_for_inclusion=False):
         """
         Args:
             target: address / account to set balance for
             new_free: new free balance
             new_reserved: new reserve balance
             keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
         Returns:
             None
@@ -208,8 +260,8 @@ class SubstrateService(object):
         submits a singed extrinsic to set new values for the balance (free and reserved)
         of the target address / account on the blockchain
         """
-        self.substrate_interface.submit_extrinsic(
-            self.substrate_interface.create_signed_extrinsic(
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
                 call=self.substrate_interface.compose_call(
                     call_module="Sudo",
                     call_function="sudo",
@@ -222,31 +274,36 @@ class SubstrateService(object):
                     },
                 ),
                 keypair=keypair,
-            )
+            ),
+            wait_for_inclusion=wait_for_inclusion,
         )
 
-    def dao_set_metadata(self, dao_id: str, metadata_url: str, metadata_hash: str, keypair: Keypair):
+    def dao_set_metadata(
+        self, dao_id: str, metadata_url: str, metadata_hash: str, keypair: Keypair, wait_for_inclusion=False
+    ):
         """
         Args:
             dao_id: dao to set metadata for
             metadata_url: url of the metadata
             metadata_hash: hash of the metadata
-            keypair: Keypair used to sign the extrinsic
+            keypair: Keypair used to sign the
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
         Returns:
             None
 
         submits a singed extrinsic to set metadata on a given dao
         """
-        self.substrate_interface.submit_extrinsic(
-            self.substrate_interface.create_signed_extrinsic(
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
                 call=self.substrate_interface.compose_call(
                     call_module="DaoCore",
                     call_function="set_metadata",
                     call_params={"dao_id": dao_id, "meta": metadata_url, "hash": metadata_hash},
                 ),
                 keypair=keypair,
-            )
+            ),
+            wait_for_inclusion=wait_for_inclusion,
         )
 
     def set_governance_majority_vote(
@@ -256,6 +313,7 @@ class SubstrateService(object):
         proposal_token_deposit: int,
         minimum_majority_per_1024: int,
         keypair: Keypair,
+        wait_for_inclusion=False,
     ):
         """
         Args:
@@ -266,14 +324,15 @@ class SubstrateService(object):
                 how many more ayes than nays there must be for proposal acceptance
                 thus proposal acceptance requires: ayes >= nays + token_supply / 1024 * minimum_majority_per_1024
             keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
         Returns:
             None
 
         submits a singed extrinsic to set governance type to majority vote for a given dao
         """
-        self.substrate_interface.submit_extrinsic(
-            self.substrate_interface.create_signed_extrinsic(
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
                 call=self.substrate_interface.compose_call(
                     call_module="Votes",
                     call_function="set_governance_majority_vote",
@@ -285,10 +344,19 @@ class SubstrateService(object):
                     },
                 ),
                 keypair=keypair,
-            )
+            ),
+            wait_for_inclusion=wait_for_inclusion,
         )
 
-    def create_proposal(self, dao_id: str, proposal_id: str, metadata_url: str, metadata_hash: str, keypair: Keypair):
+    def create_proposal(
+        self,
+        dao_id: str,
+        proposal_id: str,
+        metadata_url: str,
+        metadata_hash: str,
+        keypair: Keypair,
+        wait_for_inclusion=False,
+    ):
         """
         Args:
             dao_id: dao to create proposal for
@@ -296,14 +364,15 @@ class SubstrateService(object):
             metadata_url: url of the metadata
             metadata_hash: hash of the metadata
             keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
         Returns:
             None
 
         submits a singed extrinsic to create a proposal for a given dao
         """
-        self.substrate_interface.submit_extrinsic(
-            self.substrate_interface.create_signed_extrinsic(
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
                 call=self.substrate_interface.compose_call(
                     call_module="Votes",
                     call_function="create_proposal",
@@ -315,7 +384,8 @@ class SubstrateService(object):
                     },
                 ),
                 keypair=keypair,
-            )
+            ),
+            wait_for_inclusion=wait_for_inclusion,
         )
 
     @staticmethod

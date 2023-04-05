@@ -21,6 +21,7 @@ class SubstrateEventHandler:
         self.block_actions = (
             self._create_accounts,
             self._create_daos,
+            self._transfer_dao_ownerships,
             self._delete_daos,
             self._create_assets,
             self._transfer_assets,
@@ -73,6 +74,28 @@ class SubstrateEventHandler:
                     break
         if daos:
             models.Dao.objects.bulk_create(daos)
+
+    @staticmethod
+    def _transfer_dao_ownerships(block: models.Block):
+        """
+        Args:
+            block: Block to change Dao owners from
+
+        Returns:
+            None
+
+        transfers ownerships of a Daos to new Accounts based on the Block's events
+        """
+        # DaoCore.DaoOwnershipChanged
+        dao_id_to_new_owner_id = {}
+        for dao_event in block.event_data.get("DaoCore", {}).get("DaoOwnerChanged", []):
+            dao_id_to_new_owner_id[dao_event["dao_id"]] = dao_event["new_owner"]
+
+        for dao in (daos := list(models.Dao.objects.filter(id__in=dao_id_to_new_owner_id.keys()))):
+            dao.owner_id = dao_id_to_new_owner_id[dao.id]
+
+        if daos:
+            models.Dao.objects.bulk_update(daos, ["owner_id"])
 
     @staticmethod
     def _delete_daos(block: models.Block):
@@ -145,7 +168,7 @@ class SubstrateEventHandler:
             None
 
         transfers Assets based on the Block's extrinsics and events
-        rephrase: transfers ownership of an amount of tokens (models.AssetHolding) from one models.Account to another
+        rephrase: transfers ownership of an amount of tokens (models.AssetHolding) from one Account to another
         """
         # Assets.Transferred
         asset_holding_data = []  # [(asset_id, amount, from_acc, to_acc), ...]

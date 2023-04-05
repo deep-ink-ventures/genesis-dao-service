@@ -78,6 +78,36 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.Dao.objects.order_by("id"), expected_daos)
 
+    def test__transfer_dao_ownerships(self):
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner=models.Account.objects.create(address="acc1"))
+        models.Dao.objects.create(id="dao2", name="dao2 name", owner=models.Account.objects.create(address="acc2"))
+        models.Account.objects.create(address="acc3")
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            extrinsic_data={
+                "not": "interesting",
+            },
+            event_data={
+                "not": "interesting",
+                "DaoCore": {
+                    "DaoOwnerChanged": [
+                        {"new_owner": "acc3", "dao_id": "dao1", "not": "interesting"},
+                        {"new_owner": "acc1", "dao_id": "dao2", "not": "interesting"},
+                    ]
+                },
+            },
+        )
+        expected_daos = [
+            models.Dao(id="dao1", name="dao1 name", owner_id="acc3"),
+            models.Dao(id="dao2", name="dao2 name", owner_id="acc1"),
+        ]
+
+        with self.assertNumQueries(2):
+            substrate_event_handler._transfer_dao_ownerships(block)
+
+        self.assertModelsEqual(models.Dao.objects.order_by("id"), expected_daos)
+
     def test__delete_daos(self):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner=models.Account.objects.create(address="acc1"))
         models.Dao.objects.create(id="dao2", name="dao2 name", owner=models.Account.objects.create(address="acc2"))
@@ -851,6 +881,7 @@ class EventHandlerTest(IntegrationTestCase):
 
     @patch("core.event_handler.SubstrateEventHandler._create_accounts")
     @patch("core.event_handler.SubstrateEventHandler._create_daos")
+    @patch("core.event_handler.SubstrateEventHandler._transfer_dao_ownerships")
     @patch("core.event_handler.SubstrateEventHandler._delete_daos")
     @patch("core.event_handler.SubstrateEventHandler._create_assets")
     @patch("core.event_handler.SubstrateEventHandler._transfer_assets")
