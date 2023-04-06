@@ -81,6 +81,7 @@ class EventHandlerTest(IntegrationTestCase):
     def test__transfer_dao_ownerships(self):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner=models.Account.objects.create(address="acc1"))
         models.Dao.objects.create(id="dao2", name="dao2 name", owner=models.Account.objects.create(address="acc2"))
+        models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc2")
         models.Account.objects.create(address="acc3")
         block = models.Block.objects.create(
             hash="hash 0",
@@ -94,6 +95,7 @@ class EventHandlerTest(IntegrationTestCase):
                     "DaoOwnerChanged": [
                         {"new_owner": "acc3", "dao_id": "dao1", "not": "interesting"},
                         {"new_owner": "acc1", "dao_id": "dao2", "not": "interesting"},
+                        {"new_owner": "acc4", "dao_id": "dao3", "not": "interesting"},
                     ]
                 },
             },
@@ -101,12 +103,20 @@ class EventHandlerTest(IntegrationTestCase):
         expected_daos = [
             models.Dao(id="dao1", name="dao1 name", owner_id="acc3"),
             models.Dao(id="dao2", name="dao2 name", owner_id="acc1"),
+            models.Dao(id="dao3", name="dao3 name", owner_id="acc4"),
+        ]
+        expected_accounts = [
+            models.Account(address="acc1"),
+            models.Account(address="acc2"),
+            models.Account(address="acc3"),
+            models.Account(address="acc4"),
         ]
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             substrate_event_handler._transfer_dao_ownerships(block)
 
         self.assertModelsEqual(models.Dao.objects.order_by("id"), expected_daos)
+        self.assertModelsEqual(models.Account.objects.order_by("address"), expected_accounts)
 
     def test__delete_daos(self):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner=models.Account.objects.create(address="acc1"))

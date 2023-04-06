@@ -87,7 +87,7 @@ class SubstrateEventHandler:
         transfers ownerships of a Daos to new Accounts based on the Block's events
         """
         # DaoCore.DaoOwnershipChanged
-        dao_id_to_new_owner_id = {}
+        dao_id_to_new_owner_id = {}  # {dao_id: new_owner_id}
         for dao_event in block.event_data.get("DaoCore", {}).get("DaoOwnerChanged", []):
             dao_id_to_new_owner_id[dao_event["dao_id"]] = dao_event["new_owner"]
 
@@ -95,6 +95,11 @@ class SubstrateEventHandler:
             dao.owner_id = dao_id_to_new_owner_id[dao.id]
 
         if daos:
+            # try creating Accounts, needed for multi signature wallets
+            models.Account.objects.bulk_create(
+                [models.Account(address=address) for address in dao_id_to_new_owner_id.values()],
+                ignore_conflicts=True,
+            )
             models.Dao.objects.bulk_update(daos, ["owner_id"])
 
     @staticmethod
