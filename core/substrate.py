@@ -564,7 +564,7 @@ class SubstrateService(object):
                     next_block = self.fetch_and_parse_block(block_number=last_block.number + 1)
                     substrate_event_handler.execute_actions(next_block)
                     last_block = next_block
-                    time.sleep(0.1)  # todo implement non shitty solution
+                    time.sleep(1)  # todo implement non shitty solution
 
             self.sleep(start_time=start_time)
 
