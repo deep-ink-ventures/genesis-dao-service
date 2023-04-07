@@ -1,5 +1,5 @@
 import base64
-from unittest.mock import Mock, call, patch
+from unittest.mock import ANY, Mock, call, patch
 
 from ddt import data, ddt
 from django.conf import settings
@@ -9,6 +9,7 @@ from django.test import override_settings
 from substrateinterface import Keypair
 
 from core import models
+from core.substrate import OutOfSyncException, SubstrateException, substrate_service
 from core.tests.testcases import IntegrationTestCase
 
 
@@ -16,17 +17,12 @@ from core.tests.testcases import IntegrationTestCase
 class SubstrateServiceTest(IntegrationTestCase):
     def setUp(self):
         super().setUp()
-
-        with patch("substrateinterface.SubstrateInterface"):
-            from core.substrate import (
-                OutOfSyncException,
-                SubstrateException,
-                substrate_service,
-            )
+        self.substrate_service = substrate_service
         self.substrate_exception = SubstrateException
         self.oos_exception = OutOfSyncException
-        self.substrate_service = substrate_service
         self.si = self.substrate_service.substrate_interface = Mock()
+        self.keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        self.retry_msg = "Unexpected error while fetching block from chain. Retrying in 0s ..."
 
     def test___exit__(self):
         self.substrate_service.__exit__(None, None, None)
@@ -90,94 +86,89 @@ class SubstrateServiceTest(IntegrationTestCase):
     def test_create_dao(self):
         dao_id = "some id"
         dao_name = "some name"
-        keypair = object()
 
-        self.substrate_service.create_dao(dao_id=dao_id, dao_name=dao_name, keypair=keypair)
+        self.substrate_service.create_dao(dao_id=dao_id, dao_name=dao_name, keypair=self.keypair)
 
         self.si.compose_call.assert_called_once_with(
             call_module="DaoCore",
             call_function="create_dao",
             call_params={"dao_id": dao_id, "dao_name": dao_name},
         )
-        self.assert_signed_extrinsic_submitted(keypair=keypair)
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
     def test_transfer_dao_ownership(self):
         dao_id = "some id"
         new_owner_id = "new id"
-        keypair = object()
 
-        self.substrate_service.transfer_dao_ownership(dao_id=dao_id, new_owner_id=new_owner_id, keypair=keypair)
+        self.substrate_service.transfer_dao_ownership(dao_id=dao_id, new_owner_id=new_owner_id, keypair=self.keypair)
 
         self.si.compose_call.assert_called_once_with(
             call_module="DaoCore",
             call_function="change_owner",
             call_params={"dao_id": dao_id, "new_owner": new_owner_id},
         )
-        self.assert_signed_extrinsic_submitted(keypair=keypair)
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
     def test_destroy_dao(self):
         dao_id = "some id"
-        keypair = object()
 
-        self.substrate_service.destroy_dao(dao_id=dao_id, keypair=keypair)
+        self.substrate_service.destroy_dao(dao_id=dao_id, keypair=self.keypair)
 
         self.si.compose_call.assert_called_once_with(
             call_module="DaoCore",
             call_function="destroy_dao",
             call_params={"dao_id": dao_id},
         )
-        self.assert_signed_extrinsic_submitted(keypair=keypair)
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
     def test_issue_tokens(self):
         dao_id = "some id"
         amount = 123
-        keypair = object()
 
-        self.substrate_service.issue_tokens(dao_id=dao_id, amount=amount, keypair=keypair)
+        self.substrate_service.issue_tokens(dao_id=dao_id, amount=amount, keypair=self.keypair)
 
         self.si.compose_call.assert_called_once_with(
             call_module="DaoCore",
             call_function="issue_token",
             call_params={"dao_id": dao_id, "supply": amount},
         )
-        self.assert_signed_extrinsic_submitted(keypair=keypair)
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
     def test_transfer_asset(self):
-        asset_id = 123
+        asset_id = "123"
         target = "some acc addr"
         amount = 321
-        keypair = object()
 
-        self.substrate_service.transfer_asset(asset_id=asset_id, target=target, amount=amount, keypair=keypair)
+        self.substrate_service.transfer_asset(asset_id=asset_id, target=target, amount=amount, keypair=self.keypair)
 
         self.si.compose_call.assert_called_once_with(
             call_module="Assets",
             call_function="transfer",
             call_params={"id": asset_id, "target": target, "amount": amount},
         )
-        self.assert_signed_extrinsic_submitted(keypair=keypair)
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
     def test_transfer_balance(self):
         target = "some acc addr"
         value = 123
-        keypair = object()
 
-        self.substrate_service.transfer_balance(target=target, value=value, keypair=keypair)
+        self.substrate_service.transfer_balance(target=target, value=value, keypair=self.keypair)
 
         self.si.compose_call.assert_called_once_with(
             call_module="Balances",
             call_function="transfer",
             call_params={"dest": target, "value": value},
         )
-        self.assert_signed_extrinsic_submitted(keypair=keypair)
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
     def test_set_balance(self):
         target = "some acc addr"
         new_free = 123
         new_reserved = 321
-        keypair = object()
 
-        self.substrate_service.set_balance(target=target, new_free=new_free, new_reserved=new_reserved, keypair=keypair)
+        self.substrate_service.set_balance(
+            target=target, new_free=new_free, new_reserved=new_reserved, keypair=self.keypair
+        )
 
         self.si.compose_call.assert_has_calls(
             [
@@ -193,16 +184,15 @@ class SubstrateServiceTest(IntegrationTestCase):
                 ),
             ]
         )
-        self.assert_signed_extrinsic_submitted(keypair=keypair)
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
     def test_dao_set_metadata(self):
         dao_id = "abc"
         metadata_url = "some_url"
         metadata_hash = "some_hash"
-        keypair = object()
 
         self.substrate_service.dao_set_metadata(
-            dao_id=dao_id, metadata_url=metadata_url, metadata_hash=metadata_hash, keypair=keypair
+            dao_id=dao_id, metadata_url=metadata_url, metadata_hash=metadata_hash, keypair=self.keypair
         )
 
         self.si.compose_call.assert_called_once_with(
@@ -210,21 +200,20 @@ class SubstrateServiceTest(IntegrationTestCase):
             call_function="set_metadata",
             call_params={"dao_id": dao_id, "meta": metadata_url, "hash": metadata_hash},
         )
-        self.assert_signed_extrinsic_submitted(keypair=keypair)
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
     def test_set_governance_majority_vote(self):
         dao_id = "abc"
         proposal_duration = 123
         proposal_token_deposit = 234
         minimum_majority_per_1024 = 345
-        keypair = object()
 
         self.substrate_service.set_governance_majority_vote(
             dao_id=dao_id,
             proposal_duration=proposal_duration,
             proposal_token_deposit=proposal_token_deposit,
             minimum_majority_per_1024=minimum_majority_per_1024,
-            keypair=keypair,
+            keypair=self.keypair,
         )
 
         self.si.compose_call.assert_called_once_with(
@@ -237,7 +226,7 @@ class SubstrateServiceTest(IntegrationTestCase):
                 "minimum_majority_per_1024": minimum_majority_per_1024,
             },
         )
-        self.assert_signed_extrinsic_submitted(keypair=keypair)
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
     def test_verify(self):
         challenge_token = "something_to_sign"
@@ -274,7 +263,7 @@ class SubstrateServiceTest(IntegrationTestCase):
             proposal_id=proposal_id,
             metadata_url=metadata_url,
             metadata_hash=metadata_hash,
-            keypair=keypair,
+            keypair=keypair,  # noqa
         )
 
         self.si.compose_call.assert_called_once_with(
@@ -612,14 +601,18 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.si.get_block_hash.assert_not_called()
         self.si.get_block.assert_called_once_with(block_hash="block hash", block_number=None)
 
+    @patch("core.substrate.time.sleep")
     @patch("core.substrate.logger")
-    def test_fetch_and_parse_block_error(self, logger_mock: Mock):
+    def test_fetch_and_parse_block_error(self, logger_mock, sleep_mock):
         self.si.get_block.side_effect = Exception("whoops")
+        sleep_mock.side_effect = Exception("break")
 
-        with self.assertRaisesMessage(self.substrate_exception, "Error while fetching block from chain."):
+        with self.assertRaisesMessage(Exception, "break"):
             self.assertIsNone(self.substrate_service.fetch_and_parse_block())
 
-        logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
+        logger_mock.exception.assert_called_once_with(
+            "Unexpected error while fetching block from chain. Retrying in 0s ..."
+        )
         self.assertListEqual(list(models.Block.objects.all()), [])
 
     def test_fetch_and_parse_block_block_already_exists(self):
@@ -698,72 +691,89 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.substrate_service.sleep(start_time=start_time)
         sleep_mock.called_once_with(1)
 
+    @patch("core.substrate.time.time")
+    @patch("core.substrate.substrate_event_handler.execute_actions")
     @patch("core.substrate.logger")
-    def test_listen_last_block_not_executed(self, logger_mock: Mock):
-        models.Block.objects.create(number=0, executed=False, hash="some hash")
-        expected_msg = "Last Block was not executed! number: 0 | hash: some hash"
+    def test_listen_last_block_not_executed_success(self, logger_mock, execute_actions_mock, time_mock):
+        time_mock.side_effect = Exception("break")
+        block = models.Block.objects.create(number=0, executed=False, hash="some hash")
+        expected_msg = "Last Block was not executed. Retrying... number: 0 | hash: some hash"
 
-        with self.assertRaisesMessage(self.substrate_exception, expected_msg):
+        with self.assertRaisesMessage(Exception, "break"):
             self.substrate_service.listen()
 
         logger_mock.error.assert_called_once_with(expected_msg)
-        self.si.get_block.assert_not_called()
+        execute_actions_mock.assert_called_once_with(block)
 
+    @patch("core.substrate.substrate_event_handler.execute_actions")
     @patch("core.substrate.logger")
-    def test_listen_oos(self, logger_mock):
+    def test_listen_last_block_not_executed_failure(self, logger_mock, execute_actions_mock):
+        self.substrate_service.clear_db = Mock(side_effect=Exception("break"))
+        execute_actions_mock.side_effect = Exception("failure")
+        block = models.Block.objects.create(number=0, executed=False, hash="some hash")
+        expected_msg = "Last Block was not executed. Retrying... number: 0 | hash: some hash"
+
+        with self.assertRaisesMessage(Exception, "break"):
+            self.substrate_service.listen()
+
+        logger_mock.error.assert_called_once_with(expected_msg)
+        execute_actions_mock.assert_called_once_with(block)
+
+    @patch("core.substrate.time.sleep")
+    @patch("core.substrate.logger")
+    def test_listen_oos(self, logger_mock, sleep_mock):
+        sleep_mock.side_effect = Exception("break retry")
         self.substrate_service.clear_db = Mock()
         models.Block.objects.create(number=0, hash="hash 0", executed=True)
         self.si.get_block.side_effect = (
             {"header": {"number": 0, "hash": "new hash", "parentHash": None}, "extrinsics": []},
-            Exception("roar"),
+            Exception("break"),
         )
         self.si.get_events.return_value = []
 
-        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(
-            self.substrate_exception, "Error while fetching block from chain."
-        ):
+        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(Exception, "break retry"):
             self.substrate_service.listen()
 
-        logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
+        logger_mock.exception.assert_called_once_with(self.retry_msg)
         self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 2)
-        self.substrate_service.clear_db.assert_called_once_with()
+        self.substrate_service.clear_db.assert_called_once_with(start_time=ANY)
 
+    @patch("core.substrate.time.sleep")
     @patch("core.substrate.logger")
-    def test_listen_last_block_greater_current_block(self, logger_mock):
+    def test_listen_last_block_greater_current_block(self, logger_mock, sleep_mock):
+        sleep_mock.side_effect = Exception("break retry")
         self.substrate_service.clear_db = Mock()
         models.Block.objects.create(number=1, executed=True, hash="some hash")
         self.si.get_block.side_effect = (
             {"header": {"number": 0, "hash": "hash 0", "parentHash": None}, "extrinsics": []},
-            Exception("roar"),
+            Exception("break"),
         )
         self.si.get_events.return_value = []
 
-        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(
-            self.substrate_exception, "Error while fetching block from chain."
-        ):
+        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(Exception, "break retry"):
             self.substrate_service.listen()
 
-        logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
+        logger_mock.exception.assert_called_once_with(self.retry_msg)
         self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 2)
-        self.substrate_service.clear_db.assert_called_once_with()
+        self.substrate_service.clear_db.assert_called_once_with(start_time=ANY)
 
+    @patch("core.substrate.time.sleep")
     @patch("core.substrate.logger")
-    def test_listen_empty_db(self, logger_mock: Mock):
+    def test_listen_empty_db(self, logger_mock, sleep_mock):
+        sleep_mock.side_effect = Exception("break retry")
         self.si.get_block.side_effect = (
             {"header": {"number": 0, "hash": "hash 0", "parentHash": None}, "extrinsics": []},
             {"header": {"number": 1, "hash": "hash 1", "parentHash": "hash 0"}, "extrinsics": []},
             {"header": {"number": 2, "hash": "hash 2", "parentHash": "hash 1"}, "extrinsics": []},
-            Exception("stop loop"),
+            Exception("break"),
         )
         self.si.get_events.return_value = []
 
-        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(
-            Exception, expected_message="Error while fetching block from chain."
-        ):
+        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(Exception, "break retry"):
             self.substrate_service.listen()
 
         self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 4)
-        logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
+        logger_mock.exception.assert_called_once_with(self.retry_msg)
         logger_mock.info.assert_has_calls(
             [
                 call("Processing latest block | number: 0 | hash: hash 0"),
@@ -778,24 +788,24 @@ class SubstrateServiceTest(IntegrationTestCase):
         ]
         self.assertModelsEqual(models.Block.objects.all(), expected_blocks)
 
+    @patch("core.substrate.time.sleep")
     @patch("core.substrate.logger")
-    def test_listen_in_sync(self, logger_mock: Mock):
+    def test_listen_in_sync(self, logger_mock, sleep_mock):
+        sleep_mock.side_effect = Exception("break retry")
         models.Block.objects.create(number=0, hash="hash 0", parent_hash=None, executed=True)
         self.si.get_block.side_effect = (
             {"header": {"number": 1, "hash": "hash 1", "parentHash": "hash 0"}, "extrinsics": []},
             {"header": {"number": 2, "hash": "hash 2", "parentHash": "hash 1"}, "extrinsics": []},
             {"header": {"number": 3, "hash": "hash 3", "parentHash": "hash 2"}, "extrinsics": []},
-            Exception("stop loop"),
+            Exception("break"),
         )
         self.si.get_events.return_value = []
 
-        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(
-            Exception, expected_message="Error while fetching block from chain."
-        ):
+        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(Exception, "break retry"):
             self.substrate_service.listen()
 
         self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 4)
-        logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
+        logger_mock.exception.assert_called_once_with(self.retry_msg)
         logger_mock.info.assert_has_calls(
             [
                 call("Processing latest block | number: 1 | hash: hash 1"),
@@ -811,21 +821,25 @@ class SubstrateServiceTest(IntegrationTestCase):
         ]
         self.assertModelsEqual(models.Block.objects.all(), expected_blocks)
 
+    @patch("core.substrate.time.sleep")
     @patch("core.substrate.logger")
-    def test_listen_catching_up(self, logger_mock: Mock):
+    def test_listen_catching_up(
+        self,
+        logger_mock,
+        sleep_mock,
+    ):
+        sleep_mock.side_effect = None, None, None, Exception("break retry")  # 3 sleeps while catching up + 1 in retry
         models.Block.objects.create(number=0, hash="hash 0", parent_hash=None, executed=True)
         self.si.get_block.side_effect = (
             {"header": {"number": 3, "hash": "hash 3", "parentHash": "hash 2"}, "extrinsics": []},
             {"header": {"number": 1, "hash": "hash 1", "parentHash": "hash 0"}, "extrinsics": []},
             {"header": {"number": 2, "hash": "hash 2", "parentHash": "hash 1"}, "extrinsics": []},
             {"header": {"number": 4, "hash": "hash 4", "parentHash": "hash 3"}, "extrinsics": []},
-            Exception("stop loop"),
+            Exception("break"),
         )
         self.si.get_events.return_value = []
 
-        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(
-            Exception, expected_message="Error while fetching block from chain."
-        ):
+        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(Exception, "break"):
             self.substrate_service.listen()
 
         self.si.get_block.assert_has_calls(
@@ -836,7 +850,7 @@ class SubstrateServiceTest(IntegrationTestCase):
                 call(block_hash=None, block_number=None),
             ]
         )
-        logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
+        logger_mock.exception.assert_called_once_with(self.retry_msg)
         logger_mock.info.assert_has_calls(
             [
                 call("Catching up | number: 1"),
@@ -854,24 +868,24 @@ class SubstrateServiceTest(IntegrationTestCase):
         ]
         self.assertModelsEqual(models.Block.objects.all(), expected_blocks)
 
+    @patch("core.substrate.time.sleep")
     @patch("core.substrate.logger")
-    def test_listen_fetching_same_block_twice(self, logger_mock):
+    def test_listen_fetching_same_block_twice(self, logger_mock, sleep_mock):
+        sleep_mock.side_effect = Exception("break retry")
         models.Block.objects.create(number=0, hash="hash 0", parent_hash=None, executed=True)
         self.si.get_block.side_effect = (
             {"header": {"number": 1, "hash": "hash 1", "parentHash": "hash 0"}, "extrinsics": []},
             {"header": {"number": 1, "hash": "hash 1", "parentHash": "hash 0"}, "extrinsics": []},
             {"header": {"number": 2, "hash": "hash 2", "parentHash": "hash 1"}, "extrinsics": []},
-            Exception("stop loop"),
+            Exception("break"),
         )
         self.si.get_events.return_value = []
 
-        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(
-            Exception, expected_message="Error while fetching block from chain."
-        ):
+        with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(Exception, "break retry"):
             self.substrate_service.listen()
 
         self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 4)
-        logger_mock.exception.assert_called_once_with("Error while fetching block from chain.")
+        logger_mock.exception.assert_called_once_with(self.retry_msg)
         logger_mock.info.assert_has_calls(
             [
                 call("Processing latest block | number: 1 | hash: hash 1"),
@@ -889,14 +903,15 @@ class SubstrateServiceTest(IntegrationTestCase):
     @patch("core.substrate.logger")
     @patch("core.substrate.time.sleep")
     def test_listen_sleep(self, sleep_mock, logger_mock):
+        sleep_mock.side_effect = None, Exception("break retry")
         models.Block.objects.create(number=0, hash="hash 0", parent_hash=None, executed=True)
         self.si.get_block.side_effect = (
             {"header": {"number": 0, "hash": "hash 0", "parentHash": None}, "extrinsics": []},
-            Exception("stop loop"),
+            Exception("break"),
         )
         self.si.get_events.return_value = []
 
-        with self.assertRaisesMessage(Exception, expected_message="Error while fetching block from chain."):
+        with self.assertRaisesMessage(Exception, "break retry"):
             self.substrate_service.listen()
 
         sleep_time = sleep_mock.call_args_list[0][0][0]
@@ -905,6 +920,6 @@ class SubstrateServiceTest(IntegrationTestCase):
         logger_mock.assert_has_calls(
             [
                 call.info("Waiting for new block | number 0 | hash: hash 0"),
-                call.exception("Error while fetching block from chain."),
+                call.exception(self.retry_msg),
             ]
         )

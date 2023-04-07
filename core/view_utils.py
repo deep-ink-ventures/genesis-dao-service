@@ -11,8 +11,6 @@ from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import BasePermission
 from rest_framework.viewsets import GenericViewSet
 
-from core.substrate import substrate_service
-
 
 class IsDAOOwner(BasePermission):
     message = {
@@ -23,6 +21,8 @@ class IsDAOOwner(BasePermission):
         return True
 
     def has_object_permission(self, request, view, obj):
+        from core.substrate import substrate_service
+
         return substrate_service.verify(address=obj.owner_id, signature=request.headers.get("Signature"))
 
 

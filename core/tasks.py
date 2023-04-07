@@ -34,7 +34,7 @@ def update_dao_metadata(dao_metadata: dict):
             dao.metadata = file_handler.download_metadata(url=metadata_url, metadata_hash=metadata_hash)
         except HashMismatchException:
             logger.error("Hash mismatch while fetching DAO metadata from provided url.")
-        except Exception:  # noqa
+        except Exception:  # noqa E722
             logger.exception("Unexpected error while fetching DAO metadata from provided url.")
 
     if daos_to_update:
@@ -63,7 +63,7 @@ def update_proposal_metadata(proposal_ids: list):
             )
         except HashMismatchException:
             logger.error("Hash mismatch while fetching Proposal metadata from provided url.")
-        except Exception:  # noqa
+        except Exception:  # noqa E722
             logger.exception("Unexpected error while fetching Proposal metadata from provided url.")
         else:
             proposal_to_update.append(proposal)

@@ -35,7 +35,7 @@ class ChoiceEnum(Enum):
             return name
         try:
             return getattr(cls, name)
-        except Exception:  # noqa
+        except Exception:  # noqa E722
             return None
 
     def __str__(self):

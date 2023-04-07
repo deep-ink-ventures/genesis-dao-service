@@ -319,7 +319,7 @@ class SubstrateEventHandler:
                 msg = f"Database error while parsing Block #{block.number}."
                 logger.exception(msg)
                 raise ParseBlockException(msg)
-            except Exception:  # noqa
+            except Exception:  # noqa E722
                 msg = f"Unexpected error while parsing Block #{block.number}."
                 logger.exception(msg)
                 raise ParseBlockException(msg)

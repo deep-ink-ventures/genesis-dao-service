@@ -1,7 +1,7 @@
 import base64
 import secrets
 from collections.abc import Collection
-from unittest.mock import PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 from ddt import data, ddt
 from django.conf import settings
@@ -84,10 +84,14 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertDictEqual(res.data, expected_res)
 
-    @patch("core.views.substrate_service.retrieve_account_balance")
-    def test_account_get(self, retrieve_account_balance_mock):
+    def test_account_get(self):
         expected_balance = {"free": 1, "reserved": 2, "misc_frozen": 3, "fee_frozen": 4}
-        retrieve_account_balance_mock.return_value = expected_balance
+
+        with patch("substrateinterface.SubstrateInterface"):
+            from core.substrate import substrate_service
+
+            substrate_service.retrieve_account_balance = Mock(return_value=expected_balance)
+
         expected_res = {"address": "acc1", "balance": expected_balance}
 
         with self.assertNumQueries(1):

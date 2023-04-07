@@ -132,6 +132,12 @@ API documentation: `/redoc/`
   - type: int
   - default: `6` seconds
   - minimum time the event listener waits before trying to fetch the newest block from the chain
+- RETRY_DELAYS
+  - type: str
+  - default `5,10,30,60,120` seconds
+  - comma separated list
+  - increasing retry delays for blockchain actions  
+  - the last value will be used for all further retries
 ### Storage
 - FILE_UPLOAD_CLASS:
   - type: str

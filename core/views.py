@@ -14,7 +14,6 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from core import models, serializers
 from core.file_handling.file_handler import file_handler
-from core.substrate import substrate_service
 from core.view_utils import (
     IsDAOOwner,
     MultiQsLimitOffsetPagination,
@@ -101,6 +100,8 @@ class AccountViewSet(ReadOnlyModelViewSet, SearchableMixin):
         }.get(self.action)
 
     def retrieve(self, request, *args, **kwargs):
+        from core.substrate import substrate_service
+
         account = self.get_object()
         account.balance = substrate_service.retrieve_account_balance(account_address=account.address)
         return Response(self.get_serializer(account).data)

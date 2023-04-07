@@ -2,19 +2,64 @@ import base64
 import logging
 import time
 from collections import defaultdict
-from functools import partial
+from functools import partial, wraps
 from typing import Optional
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, connection
 from scalecodec import GenericExtrinsic
-from substrateinterface import Keypair, SubstrateInterface
+from substrateinterface import Keypair
+from websocket import WebSocketConnectionClosedException
 
 from core import models
 from core.event_handler import substrate_event_handler
 
 logger = logging.getLogger("alerts")
+
+
+def retry(description: str):
+    """
+    Args:
+        description: short description of wrapped action, used for logging
+
+    Returns:
+        wrapped function
+
+    wraps function in retry functionality
+    """
+
+    def wrap(f):
+        @wraps(f)
+        def action(*args, **kwargs):
+            retry_delays = settings.RETRY_DELAYS
+            max_delay = retry_delays[-1]
+            retry_delays = iter(retry_delays)
+
+            def log_and_sleep(err_msg: str, log_exception=False):
+                retry_delay = next(retry_delays, max_delay)
+                err_msg = f"{err_msg} while {description}. Retrying in {retry_delay}s ..."
+                if log_exception:
+                    logger.exception(err_msg)
+                else:
+                    logger.error(err_msg)
+                time.sleep(retry_delay)
+
+            while True:
+                try:
+                    return f(*args, **kwargs)
+                except WebSocketConnectionClosedException:
+                    log_and_sleep("WebSocketConnectionClosedException")
+                except ConnectionRefusedError:
+                    log_and_sleep("ConnectionRefusedError")
+                except BrokenPipeError:
+                    log_and_sleep("BrokenPipeError")
+                except Exception:  # noqa E722
+                    log_and_sleep("Unexpected error", log_exception=True)
+
+        return action
+
+    return wrap
 
 
 class SubstrateException(Exception):
@@ -32,8 +77,9 @@ class OutOfSyncException(SubstrateException):
 class SubstrateService(object):
     substrate_interface = None
 
+    @retry("initializing blockchain connection")
     def __init__(self):
-        self.substrate_interface = SubstrateInterface(
+        self.substrate_interface = settings.SUBSTRATE_INTERFACE(
             url=settings.BLOCKCHAIN_URL,
             type_registry_preset=settings.TYPE_REGISTRY_PRESET,
         )
@@ -405,7 +451,7 @@ class SubstrateService(object):
             return False
         try:
             return Keypair(address).verify(challenge_token, base64.b64decode(signature.encode()))
-        except Exception:  # noqa
+        except Exception:  # noqa E722
             return False
 
     def fetch_and_parse_block(
@@ -444,16 +490,15 @@ class SubstrateService(object):
                     qs.delete()
                 else:
                     return qs.get()
+
+        # substrate_interface requires block_hash xor block_number
+        if block_hash and block_number is not None:
+            block_number = None
+
         # fetch the latest block
-        try:
-            # substrate_interface requires block_hash xor block_number
-            if block_hash and block_number is not None:
-                block_number = None
-            block_data = self.substrate_interface.get_block(block_hash=block_hash, block_number=block_number)
-        except Exception as exc:  # noqa E722
-            err_msg = "Error while fetching block from chain."
-            logger.exception(err_msg)
-            raise SubstrateException(err_msg)
+        block_data = retry("fetching block from chain")(self.substrate_interface.get_block)(
+            block_hash=block_hash, block_number=block_number
+        )
 
         if not block_data:
             raise SubstrateException("SubstrateInterface.get_block returned no data.")
@@ -467,7 +512,9 @@ class SubstrateService(object):
             )
         # create nested dict structure of events
         event_data = defaultdict(partial(defaultdict, list))
-        events = self.substrate_interface.get_events(block_hash=block_data["header"]["hash"])
+        events = retry("fetching events from chain")(self.substrate_interface.get_events)(
+            block_hash=block_data["header"]["hash"]
+        )
         for event in events:
             event_data[event.value["module_id"]][event.value["event_id"]].append(event.value["attributes"])
 
@@ -501,7 +548,16 @@ class SubstrateService(object):
         if elapsed_time < settings.BLOCK_CREATION_INTERVAL:
             time.sleep(settings.BLOCK_CREATION_INTERVAL - elapsed_time)
 
-    def clear_db(self):
+    def clear_db(self, start_time: float = None) -> models.Block:
+        """
+        Args:
+            start_time: time since last block was fetched from chain
+
+        Returns:
+            empty db start Block
+
+        empties db, fetches seed accounts, sleeps if start_time was given, returns start Block
+        """
         logger.info("DB and chain are out of sync! Recreating DB...")
         with connection.cursor() as cursor:
             cursor.execute(
@@ -511,6 +567,9 @@ class SubstrateService(object):
                 """
             )
         self.sync_initial_accs()
+        if start_time:
+            self.sleep(start_time=start_time)
+        return models.Block(number=-1)
 
     def listen(self):
         """
@@ -523,9 +582,14 @@ class SubstrateService(object):
         last_block = models.Block.objects.order_by("-number").first()
         # we can't sync with the chain if we have unprocessed blocks in the db
         if last_block and not last_block.executed:
-            msg = f"Last Block was not executed! number: {last_block.number} | hash: {last_block.hash}"
-            logger.error(msg)
-            raise SubstrateException(msg)
+            logger.error(
+                f"Last Block was not executed. Retrying... number: {last_block.number} | hash: {last_block.hash}"
+            )
+            try:
+                substrate_event_handler.execute_actions(last_block)
+            except Exception:  # noqa E722
+                logger.exception(f"Block not executable. number: {last_block.number} | hash: {last_block.hash}")
+                last_block = self.clear_db()
         # set start value for empty db
         if not last_block:
             last_block = models.Block(number=-1)
@@ -534,18 +598,14 @@ class SubstrateService(object):
             try:
                 current_block = self.fetch_and_parse_block()
             except OutOfSyncException:
-                self.clear_db()
-                self.sleep(start_time=start_time)
-                last_block = models.Block(number=-1)
+                last_block = self.clear_db(start_time=start_time)
                 continue
 
             # shouldn't currently happen since fetch_and_parse_block would raise before this.
             # might happen in the future if we decide to only keep the last x blocks.
             # this happens if the chain restarts, we have to recreate the entire DB
             if last_block.number > current_block.number:
-                self.clear_db()
-                self.sleep(start_time=start_time)
-                last_block = models.Block(number=-1)
+                last_block = self.clear_db(start_time=start_time)
                 continue
             # we already processed this block
             # shouldn't normally happen due BLOCK_CREATION_INTERVAL sleep time
