@@ -7,9 +7,15 @@ from django.core.cache import cache
 from django.db import connection
 from django.test import override_settings
 from substrateinterface import Keypair
+from websocket import WebSocketConnectionClosedException
 
 from core import models
-from core.substrate import OutOfSyncException, SubstrateException, substrate_service
+from core.substrate import (
+    OutOfSyncException,
+    SubstrateException,
+    retry,
+    substrate_service,
+)
 from core.tests.testcases import IntegrationTestCase
 
 
@@ -24,16 +30,44 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
         self.retry_msg = "Unexpected error while fetching block from chain. Retrying in 0s ..."
 
-    def test___exit__(self):
-        self.substrate_service.__exit__(None, None, None)
-
-        self.si.close.assert_called_once_with()
-
     def assert_signed_extrinsic_submitted(self, keypair: object):
         self.si.create_signed_extrinsic.assert_called_once_with(call=self.si.compose_call(), keypair=keypair)
         self.si.submit_extrinsic.assert_called_once_with(
             extrinsic=self.si.create_signed_extrinsic(),
             wait_for_inclusion=False,
+        )
+
+    def test___exit__(self):
+        self.substrate_service.__exit__(None, None, None)
+
+        self.si.close.assert_called_once_with()
+
+    @data(
+        # exception type
+        WebSocketConnectionClosedException,
+        ConnectionRefusedError,
+        BrokenPipeError,
+        Exception,
+    )
+    @patch("core.substrate.logger")
+    @patch("core.substrate.time.sleep")
+    def test_retry(self, exception_type, sleep_mock, logger_mock):
+        sleep_mock.side_effect = None, None, Exception("break retry")
+
+        def _test():
+            raise exception_type("roar")
+
+        with override_settings(RETRY_DELAYS=(1, 2, 3)), self.assertRaisesMessage(Exception, "break retry"):
+            retry("some description")(_test)()
+
+        logger_mock = logger_mock.exception if exception_type == Exception else logger_mock.error
+        error_description = "Unexpected error" if exception_type == Exception else exception_type.__name__
+        logger_mock.assert_has_calls(
+            [
+                call(f"{error_description} while some description. Retrying in 1s ..."),
+                call(f"{error_description} while some description. Retrying in 2s ..."),
+                call(f"{error_description} while some description. Retrying in 3s ..."),
+            ]
         )
 
     @patch("core.substrate.logger")
@@ -641,9 +675,44 @@ class SubstrateServiceTest(IntegrationTestCase):
 
         self.assertListEqual(list(models.Block.objects.all()), [])
 
+    @patch("core.substrate.SubstrateService.sleep")
     @patch("core.substrate.SubstrateService.sync_initial_accs")
     @patch("core.substrate.logger")
-    def test_clear_db(self, logger_mock, sync_initial_accs_mock):
+    def test_clear_db(self, logger_mock, sync_initial_accs_mock, sleep_mock):
+        models.Account.objects.create(address="acc1")
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
+        models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
+        models.Proposal.objects.create(
+            id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash="hash1", metadata={"a": 1}
+        )
+        models.Governance.objects.create(
+            dao_id="dao1",
+            proposal_duration=1,
+            proposal_token_deposit=2,
+            minimum_majority=3,
+            type=models.GovernanceType.MAJORITY_VOTE,
+        )
+        with connection.cursor() as cursor:
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE;")
+
+        with self.assertNumQueries(1):
+            self.substrate_service.clear_db(start_time=1)
+
+        sync_initial_accs_mock.assert_called_once_with()
+        sleep_mock.assert_called_once_with(start_time=1)
+        logger_mock.info.assert_called_once_with("DB and chain are out of sync! Recreating DB...")
+        self.assertListEqual(list(models.Account.objects.all()), [])
+        self.assertListEqual(list(models.Dao.objects.all()), [])
+        self.assertListEqual(list(models.Asset.objects.all()), [])
+        self.assertListEqual(list(models.AssetHolding.objects.all()), [])
+        self.assertListEqual(list(models.Proposal.objects.all()), [])
+        self.assertListEqual(list(models.Governance.objects.all()), [])
+
+    @patch("core.substrate.SubstrateService.sleep")
+    @patch("core.substrate.SubstrateService.sync_initial_accs")
+    @patch("core.substrate.logger")
+    def test_clear_db_no_start_time(self, logger_mock, sync_initial_accs_mock, sleep_mock):
         models.Account.objects.create(address="acc1")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
@@ -665,6 +734,7 @@ class SubstrateServiceTest(IntegrationTestCase):
             self.substrate_service.clear_db()
 
         sync_initial_accs_mock.assert_called_once_with()
+        sleep_mock.assert_not_called()
         logger_mock.info.assert_called_once_with("DB and chain are out of sync! Recreating DB...")
         self.assertListEqual(list(models.Account.objects.all()), [])
         self.assertListEqual(list(models.Dao.objects.all()), [])
