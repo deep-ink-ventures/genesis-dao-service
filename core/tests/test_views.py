@@ -8,7 +8,11 @@ from django.conf import settings
 from django.core.cache import cache
 from django.urls import reverse
 from rest_framework.exceptions import ErrorDetail
-from rest_framework.status import HTTP_201_CREATED, HTTP_403_FORBIDDEN
+from rest_framework.status import (
+    HTTP_201_CREATED,
+    HTTP_400_BAD_REQUEST,
+    HTTP_403_FORBIDDEN,
+)
 from substrateinterface import Keypair
 
 from core import models
@@ -342,6 +346,64 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(res.status_code, HTTP_201_CREATED)
         self.assertDictEqual(res.data, expected_res)
+
+    def test_dao_add_metadata_invalid_image_file(self):
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        acc = models.Account.objects.create(address=keypair.ss58_address)
+        models.Dao.objects.create(id="DAO1", name="dao1 name", owner=acc)
+
+        post_data = {
+            "email": "some@email.com",
+            "description_short": "short description",
+            "description_long": "long description",
+            "logo": base64.b64encode(b"not an image").decode(),
+        }
+        res = self.client.post(
+            reverse("core-dao-add-metadata", kwargs={"pk": "DAO1"}),
+            post_data,
+            content_type="application/json",
+            HTTP_SIGNATURE=signature,
+        )
+
+        self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
+        self.assertDictEqual(
+            res.data,
+            {
+                "logo": [
+                    ErrorDetail(
+                        string="Invalid image file. Allowed image types are: jpeg, jpg, png, gif.", code="invalid"
+                    )
+                ]
+            },
+        )
+
+    def test_dao_add_metadata_logo_too_big(self):
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        acc = models.Account.objects.create(address=keypair.ss58_address)
+        models.Dao.objects.create(id="DAO1", name="dao1 name", owner=acc)
+
+        with open("core/tests/test_file_5mb.jpeg", "rb") as f:
+            post_data = {
+                "email": "some@email.com",
+                "description_short": "short description",
+                "description_long": "long description",
+                "logo": base64.b64encode(f.read()).decode(),
+            }
+        res = self.client.post(
+            reverse("core-dao-add-metadata", kwargs={"pk": "DAO1"}),
+            post_data,
+            content_type="application/json",
+            HTTP_SIGNATURE=signature,
+        )
+
+        self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
+        self.assertDictEqual(
+            res.data, {"logo": [ErrorDetail(string="The uploaded file is too big. Max size: 2.0 mb.", code="invalid")]}
+        )
 
     def test_dao_add_metadata_403(self):
         with open("core/tests/test_file.jpeg", "rb") as f:

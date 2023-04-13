@@ -1,9 +1,9 @@
 from django.conf import settings
-from drf_extra_fields.fields import Base64ImageField
 from rest_framework.fields import CharField, EmailField, IntegerField, URLField
-from rest_framework.serializers import ModelSerializer, Serializer
+from rest_framework.serializers import ModelSerializer, Serializer, ValidationError
 
 from core import models
+from core.utils import B64ImageField
 
 
 class StatsSerializer(Serializer):  # noqa
@@ -55,9 +55,15 @@ class MetadataSerializer(Serializer):  # noqa
     description_short = CharField(required=False)
     description_long = CharField(required=False)
     email = EmailField(required=False)
-    logo = Base64ImageField(
-        help_text=f"B64 encoded image string.\nAllowed image types are: {', '.join(Base64ImageField.ALLOWED_TYPES)}"
+    logo = B64ImageField(
+        help_text=f"B64 encoded image string.\nAllowed image types are: {', '.join(B64ImageField.ALLOWED_TYPES)}."
     )
+
+    @staticmethod
+    def validate_logo(logo):
+        if logo.size > settings.MAX_LOGO_SIZE:
+            raise ValidationError(f"The uploaded file is too big. Max size: {settings.MAX_LOGO_SIZE / 1_000_000} mb.")
+        return logo
 
 
 class MetadataResponseSerializer(Serializer):  # noqa

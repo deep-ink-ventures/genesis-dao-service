@@ -177,6 +177,7 @@ FILE_UPLOAD_CLASS = os.environ.get("FILE_UPLOAD_CLASS", "core.file_handling.aws.
 ENCRYPTION_ALGORITHM = os.environ.get("ENCRYPTION_ALGORITHM", "sha3_256")
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+MAX_LOGO_SIZE = int(os.environ.get("MAX_LOGO_SIZE", 2_000_000))  # 2mb
 LOGO_SIZES = {
     "small": (88, 88),
     "medium": (104, 104),

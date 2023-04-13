@@ -1,6 +1,8 @@
 from enum import Enum
 from typing import Optional, Union
 
+from drf_extra_fields.fields import Base64ImageField
+
 
 class ChoiceEnum(Enum):
     @classmethod
@@ -49,3 +51,7 @@ class ChoiceEnum(Enum):
 
     def __hash__(self):
         return hash(self.name)
+
+
+class B64ImageField(Base64ImageField):
+    INVALID_FILE_MESSAGE = f"Invalid image file. Allowed image types are: {', '.join(Base64ImageField.ALLOWED_TYPES)}."

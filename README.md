@@ -158,15 +158,15 @@ API documentation: `/redoc/`
   - type: str
   - default: "sha3_256"
   - Hashlib encryption algorithm used to hash the uploaded metadata. Uses `hexdigest()`.
-- LOGO_SIZES:
-  - type: dict
-  - default: `{"small": (88, 88), "medium": (104, 104), "large": (124, 124)}`
-  - Sizes of Dao logo files (metadata)
+- MAX_LOGO_SIZE:
+  - type: int
+  - default: `2_000_000` 2 mb
+  - maximum allowed logo size
 - these are only required when using the default `FILE_UPLOAD_CLASS`:
   - AWS_STORAGE_BUCKET_NAME
     - type: str
     - Name of the AWS bucket to store metadata in.
-  - AWS_S3_REGION_NAME
+  - AWS_REGION
     - type: str
     - AWS region of said bucket.
   - AWS_S3_ACCESS_KEY_ID
