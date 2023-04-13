@@ -109,8 +109,8 @@ class AccountViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
 class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
     queryset = models.Dao.objects.all()
-    allowed_filter_fields = ("id", "name", "owner_id")
-    allowed_order_fields = ("id", "name", "owner_id")
+    allowed_filter_fields = ("id", "name", "creator_id", "owner_id")
+    allowed_order_fields = ("id", "name", "creator_id", "owner_id")
     pagination_class = MultiQsLimitOffsetPagination
 
     def get_queryset(self):

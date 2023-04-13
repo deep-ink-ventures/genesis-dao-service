@@ -48,7 +48,17 @@ class DaoSerializer(ModelSerializer):
 
     class Meta:
         model = models.Dao
-        fields = ("id", "name", "owner_id", "asset_id", "metadata_url", "metadata_hash")
+        fields = (
+            "id",
+            "name",
+            "creator_id",
+            "owner_id",
+            "asset_id",
+            "setup_complete",
+            "metadata",
+            "metadata_url",
+            "metadata_hash",
+        )
 
 
 class MetadataSerializer(Serializer):  # noqa

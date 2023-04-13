@@ -2,6 +2,7 @@ import collections
 import logging
 from functools import reduce
 
+from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
@@ -68,6 +69,7 @@ class SubstrateEventHandler:
                         models.Dao(
                             id=dao_extrinsic["dao_id"],
                             name=dao_extrinsic["dao_name"],
+                            creator_id=dao_event["owner"],
                             owner_id=dao_event["owner"],
                         )
                     )
@@ -93,6 +95,7 @@ class SubstrateEventHandler:
 
         for dao in (daos := list(models.Dao.objects.filter(id__in=dao_id_to_new_owner_id.keys()))):
             dao.owner_id = dao_id_to_new_owner_id[dao.id]
+            dao.setup_complete = True
 
         if daos:
             # try creating Accounts, needed for multi signature wallets
@@ -100,7 +103,7 @@ class SubstrateEventHandler:
                 [models.Account(address=address) for address in dao_id_to_new_owner_id.values()],
                 ignore_conflicts=True,
             )
-            models.Dao.objects.bulk_update(daos, ["owner_id"])
+            models.Dao.objects.bulk_update(daos, ["owner_id", "setup_complete"])
 
     @staticmethod
     def _delete_daos(block: models.Block):
@@ -326,6 +329,7 @@ class SubstrateEventHandler:
 
         block.executed = True
         block.save(update_fields=["executed"])
+        cache.set(key="current_block", value=(block.number, block.hash))
 
 
 substrate_event_handler = SubstrateEventHandler()

@@ -54,4 +54,5 @@ class ChoiceEnum(Enum):
 
 
 class B64ImageField(Base64ImageField):
+    ALLOWED_TYPES = Base64ImageField.ALLOWED_TYPES
     INVALID_FILE_MESSAGE = f"Invalid image file. Allowed image types are: {', '.join(Base64ImageField.ALLOWED_TYPES)}."

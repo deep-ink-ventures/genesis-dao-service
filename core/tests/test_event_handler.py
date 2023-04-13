@@ -3,6 +3,7 @@ import random
 from io import BytesIO
 from unittest.mock import call, patch
 
+from django.core.cache import cache
 from django.db import IntegrityError
 
 from core import models
@@ -69,8 +70,8 @@ class EventHandlerTest(IntegrationTestCase):
             },
         )
         expected_daos = [
-            models.Dao(id="dao1", name="dao1 name", owner_id="acc1"),
-            models.Dao(id="dao2", name="dao2 name", owner_id="acc2"),
+            models.Dao(id="dao1", name="dao1 name", owner_id="acc1", creator_id="acc1"),
+            models.Dao(id="dao2", name="dao2 name", owner_id="acc2", creator_id="acc2"),
         ]
 
         with self.assertNumQueries(1):
@@ -79,9 +80,11 @@ class EventHandlerTest(IntegrationTestCase):
         self.assertModelsEqual(models.Dao.objects.order_by("id"), expected_daos)
 
     def test__transfer_dao_ownerships(self):
-        models.Dao.objects.create(id="dao1", name="dao1 name", owner=models.Account.objects.create(address="acc1"))
-        models.Dao.objects.create(id="dao2", name="dao2 name", owner=models.Account.objects.create(address="acc2"))
-        models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc2")
+        models.Account.objects.create(address="acc1")
+        models.Account.objects.create(address="acc2")
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1", creator_id="acc1")
+        models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2", creator_id="acc2")
+        models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc2", creator_id="acc2")
         models.Account.objects.create(address="acc3")
         block = models.Block.objects.create(
             hash="hash 0",
@@ -101,9 +104,9 @@ class EventHandlerTest(IntegrationTestCase):
             },
         )
         expected_daos = [
-            models.Dao(id="dao1", name="dao1 name", owner_id="acc3"),
-            models.Dao(id="dao2", name="dao2 name", owner_id="acc1"),
-            models.Dao(id="dao3", name="dao3 name", owner_id="acc4"),
+            models.Dao(id="dao1", name="dao1 name", owner_id="acc3", creator_id="acc1", setup_complete=True),
+            models.Dao(id="dao2", name="dao2 name", owner_id="acc1", creator_id="acc2", setup_complete=True),
+            models.Dao(id="dao3", name="dao3 name", owner_id="acc4", creator_id="acc2", setup_complete=True),
         ]
         expected_accounts = [
             models.Account(address="acc1"),
@@ -909,6 +912,10 @@ class EventHandlerTest(IntegrationTestCase):
         self.assertTrue(block.executed)
         for mock in mocks:
             mock.assert_called_once_with(block=block)
+
+        block_number, block_hash = cache.get("current_block")
+        self.assertEqual(block_number, 0)
+        self.assertEqual(block_hash, "hash 0")
 
     @patch("core.event_handler.logger")
     @patch("core.event_handler.SubstrateEventHandler._transfer_assets")

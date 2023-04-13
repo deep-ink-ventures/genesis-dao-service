@@ -26,16 +26,22 @@ def wrap_in_pagination_res(results: Collection) -> dict:
 expected_dao1_res = {
     "id": "dao1",
     "name": "dao1 name",
+    "creator_id": "acc1",
     "owner_id": "acc1",
     "asset_id": 1,
+    "setup_complete": False,
+    "metadata": {"some": "data"},
     "metadata_url": None,
     "metadata_hash": None,
 }
 expected_dao2_res = {
     "id": "dao2",
     "name": "dao2 name",
+    "creator_id": "acc2",
     "owner_id": "acc2",
     "asset_id": 2,
+    "setup_complete": False,
+    "metadata": None,
     "metadata_url": None,
     "metadata_hash": None,
 }
@@ -48,8 +54,10 @@ class CoreViewSetTest(IntegrationTestCase):
         cache.set(key="acc1", value=self.challenge_key, timeout=60)
         models.Account.objects.create(address="acc1")
         models.Account.objects.create(address="acc2")
-        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
-        models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
+        models.Dao.objects.create(
+            id="dao1", name="dao1 name", creator_id="acc1", owner_id="acc1", metadata={"some": "data"}
+        )
+        models.Dao.objects.create(id="dao2", name="dao2 name", creator_id="acc2", owner_id="acc2")
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
         models.Asset.objects.create(id=2, owner_id="acc2", dao_id="dao2", total_supply=200)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
@@ -67,6 +75,15 @@ class CoreViewSetTest(IntegrationTestCase):
             res = self.client.get(reverse("core-welcome"))
 
         self.assertDictEqual(res.data, expected_res)
+
+    def test_block_metadata_header(self):
+        cache.set(key="current_block", value=(1, "some hash"))
+
+        with self.assertNumQueries(0):
+            res = self.client.get(reverse("core-welcome"))
+
+        self.assertEqual(res.headers["Block-Number"], "1")
+        self.assertEqual(res.headers["Block-Hash"], "some hash")
 
     def test_stats(self):
         expected_res = {"account_count": 2, "dao_count": 2}
@@ -149,8 +166,11 @@ class CoreViewSetTest(IntegrationTestCase):
                 {
                     "id": "dao3",
                     "name": "3",
+                    "creator_id": "acc1",
                     "owner_id": "acc2",
                     "asset_id": None,
+                    "setup_complete": True,
+                    "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
@@ -162,8 +182,11 @@ class CoreViewSetTest(IntegrationTestCase):
                 {
                     "id": "dao3",
                     "name": "3",
+                    "creator_id": "acc1",
                     "owner_id": "acc2",
                     "asset_id": None,
+                    "setup_complete": True,
+                    "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
@@ -179,8 +202,11 @@ class CoreViewSetTest(IntegrationTestCase):
                 {
                     "id": "dao3",
                     "name": "3",
+                    "creator_id": "acc1",
                     "owner_id": "acc2",
                     "asset_id": None,
+                    "setup_complete": True,
+                    "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
@@ -189,7 +215,7 @@ class CoreViewSetTest(IntegrationTestCase):
     )
     def test_dao_list_order_by(self, case):
         query_params, expected_res = case
-        models.Dao.objects.create(id="dao3", name="3", owner_id="acc2")
+        models.Dao.objects.create(id="dao3", name="3", creator_id="acc1", owner_id="acc2", setup_complete=True)
 
         expected_res = wrap_in_pagination_res(expected_res)
 
@@ -206,8 +232,11 @@ class CoreViewSetTest(IntegrationTestCase):
                 {
                     "id": "dao4",
                     "name": "dao4 name",
+                    "creator_id": "acc2",
                     "owner_id": "acc2",
                     "asset_id": 4,
+                    "setup_complete": False,
+                    "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
@@ -215,8 +244,11 @@ class CoreViewSetTest(IntegrationTestCase):
                 {
                     "id": "dao3",
                     "name": "dao3 name",
+                    "creator_id": "acc1",
                     "owner_id": "acc1",
                     "asset_id": 3,
+                    "setup_complete": False,
+                    "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
@@ -230,16 +262,22 @@ class CoreViewSetTest(IntegrationTestCase):
                 {
                     "id": "dao4",
                     "name": "dao4 name",
+                    "creator_id": "acc2",
                     "owner_id": "acc2",
                     "asset_id": 4,
+                    "setup_complete": False,
+                    "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
                 {
                     "id": "dao3",
                     "name": "dao3 name",
+                    "creator_id": "acc1",
                     "owner_id": "acc1",
                     "asset_id": 3,
+                    "setup_complete": False,
+                    "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
@@ -255,16 +293,22 @@ class CoreViewSetTest(IntegrationTestCase):
                 {
                     "id": "dao4",
                     "name": "dao4 name",
+                    "creator_id": "acc2",
                     "owner_id": "acc2",
                     "asset_id": 4,
+                    "setup_complete": False,
+                    "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
                 {
                     "id": "dao3",
                     "name": "dao3 name",
+                    "creator_id": "acc1",
                     "owner_id": "acc1",
                     "asset_id": 3,
+                    "setup_complete": False,
+                    "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
@@ -276,8 +320,8 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_dao_list_prioritised(self, case):
         query_params, expected_res, expected_query_count = case
         models.Account.objects.create(address="acc3")
-        models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc1")
-        models.Dao.objects.create(id="dao4", name="dao4 name", owner_id="acc2")
+        models.Dao.objects.create(id="dao3", name="dao3 name", creator_id="acc1", owner_id="acc1")
+        models.Dao.objects.create(id="dao4", name="dao4 name", creator_id="acc2", owner_id="acc2")
         models.Asset.objects.create(id=3, owner_id="acc1", dao_id="dao3", total_supply=100)
         models.Asset.objects.create(id=4, owner_id="acc2", dao_id="dao4", total_supply=200)
         models.AssetHolding.objects.create(asset_id=3, owner_id="acc3", balance=100)
