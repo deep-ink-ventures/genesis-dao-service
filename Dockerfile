@@ -11,7 +11,7 @@ COPY . .
 RUN python manage.py collectstatic --noinput
 
 # Build a final image that only includes run-time dependencies
-FROM python:3.11.1
+FROM public.ecr.aws/docker/library/python:3.11 AS builder
 LABEL maintainer="rob@deep-ink.ventures"
 WORKDIR /usr/src/app
 RUN useradd app
