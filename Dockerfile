@@ -1,5 +1,5 @@
 # Build a virtual env and collect static files
-FROM python:3.11.1 AS builder
+FROM public.ecr.aws/docker/library/python:3.11 AS builder
 ARG REQUIREMENTS_FILE
 WORKDIR /app
 RUN python -m venv /venv
