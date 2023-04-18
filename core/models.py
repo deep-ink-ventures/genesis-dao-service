@@ -93,7 +93,7 @@ class Proposal(TimestampableMixin):
 class Vote(TimestampableMixin):
     proposal = models.ForeignKey(Proposal, related_name="votes", on_delete=models.CASCADE)
     voter = models.ForeignKey(Account, related_name="votes", on_delete=models.CASCADE)
-    in_favor = models.BooleanField(null=True)
+    in_favor = models.BooleanField(null=True, db_index=True)
     voting_power = utils.BiggerIntField()  # held tokens at proposal creation
 
 
