@@ -61,6 +61,8 @@ def stats(request, *args, **kwargs):
         data={
             "account_count": models.Account.objects.count(),
             "dao_count": models.Dao.objects.count(),
+            "proposal_count": models.Proposal.objects.count(),
+            "vote_count": models.Vote.objects.filter(in_favor__isnull=False).count(),
         }
     )
     serializer.is_valid(raise_exception=True)

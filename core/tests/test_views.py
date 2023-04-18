@@ -102,9 +102,9 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertEqual(res.headers["Block-Hash"], "some hash")
 
     def test_stats(self):
-        expected_res = {"account_count": 4, "dao_count": 2}
+        expected_res = {"account_count": 4, "dao_count": 2, "proposal_count": 2, "vote_count": 4}
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(4):
             res = self.client.get(reverse("core-stats"))
 
         self.assertDictEqual(res.data, expected_res)

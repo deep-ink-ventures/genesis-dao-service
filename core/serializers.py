@@ -9,6 +9,8 @@ from core.utils import B64ImageField
 class StatsSerializer(Serializer):  # noqa
     dao_count = IntegerField(min_value=0)
     account_count = IntegerField(min_value=0)
+    proposal_count = IntegerField(min_value=0)
+    vote_count = IntegerField(min_value=0)
 
 
 class ConfigSerializer(Serializer):  # noqa
