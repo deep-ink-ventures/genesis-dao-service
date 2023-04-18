@@ -51,26 +51,31 @@ make build
 ```
 
 ### Start databases
-
-The following starts the data stores used by this project: PostgreSQL.
-
 Make sure you have:
-
 1. Docker running
 2. and the [environment is loaded](#setup)
 
+The following starts the data stores used by this project: PostgreSQL.
 ```shell
 make start-postgres
+```
+The following starts the data stores used by this project: Redis.
+```shell
+make start-redis
+```
+Both together:
+```shell
+make start-databases
 ```
 
 To stop the data stores, use Docker Compose:
 
 ```shell
 docker-compose down postgres
+docker-compose down redis
 ```
 
 ### Start App
-
 ```shell
 make start-dev
 ```
