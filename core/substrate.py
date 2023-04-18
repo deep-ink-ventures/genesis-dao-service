@@ -434,6 +434,83 @@ class SubstrateService(object):
             wait_for_inclusion=wait_for_inclusion,
         )
 
+    def vote_on_proposal(self, proposal_id: str, in_favor: bool, keypair: Keypair, wait_for_inclusion=False):
+        """
+        Args:
+            proposal_id: Proposal id to vote on
+            in_favor: in favor
+            keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+        Returns:
+            None
+
+        submits singed extrinsic to vote on a given proposal
+        """
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Votes",
+                    call_function="vote",
+                    call_params={
+                        "proposal_id": proposal_id,
+                        "in_favor": in_favor,
+                    },
+                ),
+                keypair=keypair,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
+
+    def finalize_proposal(self, proposal_id: str, keypair: Keypair, wait_for_inclusion=False):
+        """
+        Args:
+             proposal_id: Proposal id to finalize
+             keypair: Keypair used to sign the extrinsic
+             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+         Returns:
+             None
+
+             submits singed extrinsic to finalize a given proposal
+        """
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Votes",
+                    call_function="finalize_proposal",
+                    call_params={"proposal_id": proposal_id},
+                ),
+                keypair=keypair,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
+
+    def fault_proposal(self, proposal_id: str, reason: str, keypair: Keypair, wait_for_inclusion=False):
+        """
+        Args:
+             proposal_id: Proposal id to fault
+             reason: reason Proposal was faulted
+             keypair: Keypair used to sign the extrinsic
+             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+         Returns:
+             None
+
+             submits singed extrinsic to fault a given proposal
+        """
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Votes",
+                    call_function="fault_proposal",
+                    call_params={"proposal_id": proposal_id, "reason": reason},
+                ),
+                keypair=keypair,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
+
     @staticmethod
     def verify(address: str, signature: str) -> bool:
         """

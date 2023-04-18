@@ -128,10 +128,32 @@ class AssetHoldingSerializer(ModelSerializer):
         fields = ("id", "asset_id", "owner_id", "balance")
 
 
+class VotesSerializer(Serializer):  # noqa
+    pro = IntegerField(min_value=0)
+    contra = IntegerField(min_value=0)
+    abstained = IntegerField(min_value=0)
+    total = IntegerField(min_value=0)
+
+    def to_representation(self, instance):
+        pro, contra, abstained, total = 0, 0, 0, 0
+        for vote in instance.instance.votes.all():
+            total += vote.voting_power
+            match vote.in_favor:
+                case True:
+                    pro += vote.voting_power
+                case False:
+                    contra += vote.voting_power
+                case _:
+                    abstained += vote.voting_power
+        return {"pro": pro, "contra": contra, "abstained": abstained, "total": total}
+
+
 class ProposalSerializer(ModelSerializer):
+    votes = VotesSerializer()
+
     class Meta:
         model = models.Proposal
-        fields = ("id", "dao_id", "metadata", "metadata_url", "metadata_hash")
+        fields = ("id", "dao_id", "status", "reason_for_fault", "votes", "metadata", "metadata_url", "metadata_hash")
 
 
 class ChallengeSerializer(Serializer):  # noqa

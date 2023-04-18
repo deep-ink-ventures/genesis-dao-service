@@ -307,6 +307,47 @@ class SubstrateServiceTest(IntegrationTestCase):
         )
         self.assert_signed_extrinsic_submitted(keypair=keypair)
 
+    def test_vote_on_proposal(self):
+        proposal_id = "prop1"
+        in_favor = True
+        keypair = object()
+
+        self.substrate_service.vote_on_proposal(proposal_id=proposal_id, in_favor=in_favor, keypair=keypair)
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Votes",
+            call_function="vote",
+            call_params={"proposal_id": proposal_id, "in_favor": in_favor},
+        )
+        self.assert_signed_extrinsic_submitted(keypair=keypair)
+
+    def test_finalize_proposal(self):
+        proposal_id = "prop1"
+        keypair = object()
+
+        self.substrate_service.finalize_proposal(proposal_id=proposal_id, keypair=keypair)
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Votes",
+            call_function="finalize_proposal",
+            call_params={"proposal_id": proposal_id},
+        )
+        self.assert_signed_extrinsic_submitted(keypair=keypair)
+
+    def test_fault_proposal(self):
+        proposal_id = "prop1"
+        reason = "some reason"
+        keypair = object()
+
+        self.substrate_service.fault_proposal(proposal_id=proposal_id, reason=reason, keypair=keypair)
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Votes",
+            call_function="fault_proposal",
+            call_params={"proposal_id": proposal_id, "reason": reason},
+        )
+        self.assert_signed_extrinsic_submitted(keypair=keypair)
+
     @data(
         # block_data, event_data expected_block
         # 0 extrinsics, 0 events

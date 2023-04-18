@@ -1,5 +1,6 @@
 from django.db import models
 
+from core import utils
 from core.utils import ChoiceEnum
 
 
@@ -42,13 +43,13 @@ class Governance(TimestampableMixin):
     dao = models.OneToOneField(Dao, related_name="governance", on_delete=models.CASCADE)
     type = models.CharField(choices=GovernanceType.as_choices(), max_length=128)
     proposal_duration = models.IntegerField()
-    proposal_token_deposit = models.IntegerField()
+    proposal_token_deposit = utils.BiggerIntField()
     minimum_majority = models.IntegerField()
 
 
 class Asset(TimestampableMixin):
     id = models.PositiveBigIntegerField(primary_key=True)
-    total_supply = models.PositiveBigIntegerField()
+    total_supply = utils.BiggerIntField()
     dao = models.OneToOneField(Dao, related_name="asset", on_delete=models.CASCADE)
     owner = models.ForeignKey(Account, related_name="assets", on_delete=models.CASCADE)
 
@@ -60,7 +61,7 @@ class Asset(TimestampableMixin):
 class AssetHolding(TimestampableMixin):
     asset = models.ForeignKey(Asset, related_name="holdings", on_delete=models.CASCADE)
     owner = models.ForeignKey(Account, related_name="holdings", on_delete=models.CASCADE)
-    balance = models.PositiveBigIntegerField()
+    balance = utils.BiggerIntField()
 
     class Meta:
         db_table = "core_asset_holding"
@@ -72,12 +73,28 @@ class AssetHolding(TimestampableMixin):
         return f"{self.asset_id} | {self.owner_id} | {self.balance}"
 
 
+class ProposalStatus(ChoiceEnum):
+    IN_PROGRESS = "in progress"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    FAULTED = "faulted"
+
+
 class Proposal(TimestampableMixin):
     id = models.CharField(max_length=128, primary_key=True)
     dao = models.ForeignKey(Dao, related_name="proposals", on_delete=models.CASCADE)
+    status = models.CharField(max_length=16, choices=ProposalStatus.as_choices(), default=ProposalStatus.IN_PROGRESS)
+    reason_for_fault = models.TextField(null=True)
     metadata = models.JSONField(null=True)
     metadata_url = models.CharField(max_length=256, null=True)
     metadata_hash = models.CharField(max_length=256, null=True)
+
+
+class Vote(TimestampableMixin):
+    proposal = models.ForeignKey(Proposal, related_name="votes", on_delete=models.CASCADE)
+    voter = models.ForeignKey(Account, related_name="votes", on_delete=models.CASCADE)
+    in_favor = models.BooleanField(null=True)
+    voting_power = utils.BiggerIntField()  # held tokens at proposal creation
 
 
 class Block(TimestampableMixin):

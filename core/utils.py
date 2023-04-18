@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Optional, Union
 
+from django.db.models import CharField
 from drf_extra_fields.fields import Base64ImageField
 
 
@@ -56,3 +57,21 @@ class ChoiceEnum(Enum):
 class B64ImageField(Base64ImageField):
     ALLOWED_TYPES = Base64ImageField.ALLOWED_TYPES
     INVALID_FILE_MESSAGE = f"Invalid image file. Allowed image types are: {', '.join(Base64ImageField.ALLOWED_TYPES)}."
+
+
+class BiggerIntField(CharField):
+    DEFAULT_MAX_LENGTH = 1024
+
+    def __init__(self, *args, db_collation=None, max_length=DEFAULT_MAX_LENGTH, **kwargs):
+        super().__init__(*args, db_collation=db_collation, max_length=max_length, **kwargs)
+
+    @staticmethod
+    def from_db_value(value, _expression, _connection):
+        if value is None:
+            return
+        return int(value)
+
+    def to_python(self, value):
+        if isinstance(value, int) or value is None:
+            return value
+        return int(value)

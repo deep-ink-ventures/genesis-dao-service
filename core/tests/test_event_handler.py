@@ -575,6 +575,19 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
+        models.Asset.objects.create(id=1, dao_id="dao1", owner_id="acc1", total_supply=100)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=50)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc2", balance=30)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc3", balance=20)
+        models.Asset.objects.create(id=2, dao_id="dao2", owner_id="acc2", total_supply=100)
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc3", balance=50)
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=30)
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc1", balance=20)
+        models.Asset.objects.create(id=3, dao_id="dao3", owner_id="acc3", total_supply=100)
+        models.AssetHolding.objects.create(asset_id=3, owner_id="acc2", balance=50)
+        models.AssetHolding.objects.create(asset_id=3, owner_id="acc3", balance=30)
+        models.AssetHolding.objects.create(asset_id=3, owner_id="acc1", balance=20)
+
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -635,12 +648,25 @@ class EventHandlerTest(IntegrationTestCase):
                 id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash=metadata_hash_2, metadata=metadata_2
             ),
         ]
+        expected_votes = [
+            models.Vote(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=None),
+            models.Vote(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=None),
+            models.Vote(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=None),
+            models.Vote(proposal_id="prop2", voter_id="acc3", voting_power=50, in_favor=None),
+            models.Vote(proposal_id="prop2", voter_id="acc2", voting_power=30, in_favor=None),
+            models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None),
+        ]
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(5):
             substrate_event_handler._create_proposals(block)
 
         urlopen_mock.assert_has_calls([call("url1"), call("url2")], any_order=True)
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
+        self.assertModelsEqual(
+            models.Vote.objects.order_by("proposal_id", "-voting_power"),
+            expected_votes,
+            ignore_fields=("created_at", "updated_at", "id"),
+        )
 
     @patch("core.tasks.logger")
     @patch("core.file_handling.file_handler.urlopen")
@@ -651,6 +677,10 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
+        models.Asset.objects.create(id=1, dao_id="dao1", owner_id="acc1", total_supply=100)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=50)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc2", balance=30)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc3", balance=20)
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_2 = {"a": 2}
@@ -708,14 +738,24 @@ class EventHandlerTest(IntegrationTestCase):
                 id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash=metadata_hash_2, metadata=metadata_2
             ),
         ]
+        expected_votes = [
+            models.Vote(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=None),
+            models.Vote(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=None),
+            models.Vote(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=None),
+        ]
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(5):
             substrate_event_handler._create_proposals(block)
 
         urlopen_mock.assert_has_calls([call("url1"), call("url2")], any_order=True)
         logger_mock.error.assert_called_once_with("Hash mismatch while fetching Proposal metadata from provided url.")
 
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
+        self.assertModelsEqual(
+            models.Vote.objects.order_by("proposal_id", "-voting_power"),
+            expected_votes,
+            ignore_fields=("created_at", "updated_at", "id"),
+        )
 
     @patch("core.tasks.logger")
     @patch("core.file_handling.file_handler.FileHandler.download_metadata")
@@ -726,6 +766,10 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
+        models.Asset.objects.create(id=2, dao_id="dao2", owner_id="acc2", total_supply=100)
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc3", balance=50)
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=30)
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc1", balance=20)
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -791,8 +835,13 @@ class EventHandlerTest(IntegrationTestCase):
                 id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash=metadata_hash_2, metadata=metadata_2
             ),
         ]
+        expected_votes = [
+            models.Vote(proposal_id="prop2", voter_id="acc3", voting_power=50, in_favor=None),
+            models.Vote(proposal_id="prop2", voter_id="acc2", voting_power=30, in_favor=None),
+            models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None),
+        ]
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(5):
             substrate_event_handler._create_proposals(block)
 
         download_metadata_mock.assert_has_calls(
@@ -806,6 +855,11 @@ class EventHandlerTest(IntegrationTestCase):
             "Unexpected error while fetching Proposal metadata from provided url."
         )
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
+        self.assertModelsEqual(
+            models.Vote.objects.order_by("proposal_id", "-voting_power"),
+            expected_votes,
+            ignore_fields=("created_at", "updated_at", "id"),
+        )
 
     @patch("core.tasks.logger")
     @patch("core.file_handling.file_handler.FileHandler.download_metadata")
@@ -877,7 +931,7 @@ class EventHandlerTest(IntegrationTestCase):
             ),
         ]
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             substrate_event_handler._create_proposals(block)
 
         download_metadata_mock.assert_has_calls(
@@ -892,6 +946,157 @@ class EventHandlerTest(IntegrationTestCase):
         )
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
 
+    def test__register_votes(self):
+        models.Account.objects.create(address="acc1")
+        models.Account.objects.create(address="acc2")
+        models.Account.objects.create(address="acc3")
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
+        models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
+        models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
+        models.Proposal.objects.create(id="prop1", dao_id="dao1")
+        models.Proposal.objects.create(id="prop2", dao_id="dao2")
+        models.Vote.objects.create(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=None)
+        models.Vote.objects.create(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=None)
+        models.Vote.objects.create(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=None)
+        models.Vote.objects.create(proposal_id="prop2", voter_id="acc3", voting_power=50, in_favor=None)
+        models.Vote.objects.create(proposal_id="prop2", voter_id="acc2", voting_power=30, in_favor=None)
+        models.Vote.objects.create(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None)
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            extrinsic_data={
+                "not": "interesting",
+            },
+            event_data={
+                "not": "interesting",
+                "Votes": {
+                    "not": "interesting",
+                    "VoteCast": [
+                        {"proposal_id": "prop1", "voter": "acc1", "in_favor": True, "not": "interesting"},
+                        {"proposal_id": "prop1", "voter": "acc2", "in_favor": False, "not": "interesting"},
+                        {"proposal_id": "prop1", "voter": "acc3", "in_favor": False, "not": "interesting"},
+                        {"proposal_id": "prop2", "voter": "acc1", "in_favor": True, "not": "interesting"},
+                        {"proposal_id": "prop2", "voter": "acc2", "in_favor": True, "not": "interesting"},
+                    ],
+                },
+            },
+        )
+        expected_votes = [
+            models.Vote(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=True),
+            models.Vote(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=False),
+            models.Vote(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=False),
+            models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=True),
+            models.Vote(proposal_id="prop2", voter_id="acc2", voting_power=30, in_favor=True),
+            models.Vote(proposal_id="prop2", voter_id="acc3", voting_power=50, in_favor=None),
+        ]
+
+        with self.assertNumQueries(2):
+            substrate_event_handler._register_votes(block)
+
+        self.assertModelsEqual(
+            models.Vote.objects.order_by("proposal_id", "voter_id"),
+            expected_votes,
+            ignore_fields=("created_at", "updated_at", "id"),
+        )
+
+    def test__finalize_proposals(self):
+        models.Account.objects.create(address="acc1")
+        models.Account.objects.create(address="acc2")
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
+        models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
+        models.Proposal.objects.create(id="prop1", dao_id="dao1")
+        models.Proposal.objects.create(id="prop2", dao_id="dao1")
+        models.Proposal.objects.create(id="prop3", dao_id="dao2")
+        models.Proposal.objects.create(id="prop4", dao_id="dao2")
+        models.Proposal.objects.create(id="prop5", dao_id="dao2")
+        # not changed
+        models.Proposal.objects.create(id="prop6", dao_id="dao1")
+        models.Proposal.objects.create(id="prop7", dao_id="dao2")
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            extrinsic_data={
+                "not": "interesting",
+            },
+            event_data={
+                "not": "interesting",
+                "Votes": {
+                    "not": "interesting",
+                    "ProposalAccepted": [
+                        {"proposal_id": "prop1", "not": "interesting"},
+                        {"proposal_id": "prop3", "not": "interesting"},
+                        {"proposal_id": "prop4", "not": "interesting"},
+                    ],
+                    "ProposalRejected": [
+                        {"proposal_id": "prop2", "not": "interesting"},
+                        {"proposal_id": "prop5", "not": "interesting"},
+                    ],
+                },
+            },
+        )
+        expected_proposals = [
+            models.Proposal(id="prop1", dao_id="dao1", status=models.ProposalStatus.ACCEPTED),
+            models.Proposal(id="prop2", dao_id="dao1", status=models.ProposalStatus.REJECTED),
+            models.Proposal(id="prop3", dao_id="dao2", status=models.ProposalStatus.ACCEPTED),
+            models.Proposal(id="prop4", dao_id="dao2", status=models.ProposalStatus.ACCEPTED),
+            models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.REJECTED),
+            models.Proposal(id="prop6", dao_id="dao1", status=models.ProposalStatus.IN_PROGRESS),
+            models.Proposal(id="prop7", dao_id="dao2", status=models.ProposalStatus.IN_PROGRESS),
+        ]
+
+        with self.assertNumQueries(2):
+            substrate_event_handler._finalize_proposals(block)
+
+        self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
+
+    def test__fault_proposals(self):
+        models.Account.objects.create(address="acc1")
+        models.Account.objects.create(address="acc2")
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
+        models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
+        models.Proposal.objects.create(id="prop1", dao_id="dao1")
+        models.Proposal.objects.create(id="prop2", dao_id="dao1")
+        models.Proposal.objects.create(id="prop3", dao_id="dao2")
+        # not changed
+        models.Proposal.objects.create(id="prop4", dao_id="dao1")
+        models.Proposal.objects.create(id="prop5", dao_id="dao2")
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            extrinsic_data={
+                "not": "interesting",
+            },
+            event_data={
+                "not": "interesting",
+                "Votes": {
+                    "not": "interesting",
+                    "ProposalFaulted": [
+                        {"proposal_id": "prop1", "reason": "reason 1", "not": "interesting"},
+                        {"proposal_id": "prop2", "reason": "reason 2", "not": "interesting"},
+                        {"proposal_id": "prop3", "reason": "reason 3", "not": "interesting"},
+                    ],
+                },
+            },
+        )
+        expected_proposals = [
+            models.Proposal(
+                id="prop1", dao_id="dao1", reason_for_fault="reason 1", status=models.ProposalStatus.FAULTED
+            ),
+            models.Proposal(
+                id="prop2", dao_id="dao1", reason_for_fault="reason 2", status=models.ProposalStatus.FAULTED
+            ),
+            models.Proposal(
+                id="prop3", dao_id="dao2", reason_for_fault="reason 3", status=models.ProposalStatus.FAULTED
+            ),
+            models.Proposal(id="prop4", dao_id="dao1", status=models.ProposalStatus.IN_PROGRESS),
+            models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.IN_PROGRESS),
+        ]
+
+        with self.assertNumQueries(2):
+            substrate_event_handler._fault_proposals(block)
+
+        self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
+
     @patch("core.event_handler.SubstrateEventHandler._create_accounts")
     @patch("core.event_handler.SubstrateEventHandler._create_daos")
     @patch("core.event_handler.SubstrateEventHandler._transfer_dao_ownerships")
@@ -901,6 +1106,9 @@ class EventHandlerTest(IntegrationTestCase):
     @patch("core.event_handler.SubstrateEventHandler._set_dao_metadata")
     @patch("core.event_handler.SubstrateEventHandler._dao_set_governances")
     @patch("core.event_handler.SubstrateEventHandler._create_proposals")
+    @patch("core.event_handler.SubstrateEventHandler._register_votes")
+    @patch("core.event_handler.SubstrateEventHandler._finalize_proposals")
+    @patch("core.event_handler.SubstrateEventHandler._fault_proposals")
     def test_execute_actions(self, *mocks):
         event_handler = SubstrateEventHandler()
         block = models.Block.objects.create(hash="hash 0", number=0)

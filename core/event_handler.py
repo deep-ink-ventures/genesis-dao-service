@@ -29,6 +29,9 @@ class SubstrateEventHandler:
             self._set_dao_metadata,
             self._dao_set_governances,
             self._create_proposals,
+            self._register_votes,
+            self._finalize_proposals,
+            self._fault_proposals,
         )
 
     @staticmethod
@@ -42,7 +45,6 @@ class SubstrateEventHandler:
 
         creates Accounts based on the Block's extrinsics and events
         """
-        # event: System.NewAccount
         if accs := [
             models.Account(address=dao_event["account"])
             for dao_event in block.event_data.get("System", {}).get("NewAccount", [])
@@ -60,7 +62,6 @@ class SubstrateEventHandler:
 
         creates Daos based on the Block's extrinsics and events
         """
-        # event: DaoCore.DaoCreated
         daos = []
         for dao_extrinsic in block.extrinsic_data.get("DaoCore", {}).get("create_dao", []):
             for dao_event in block.event_data.get("DaoCore", {}).get("DaoCreated", []):
@@ -88,7 +89,6 @@ class SubstrateEventHandler:
 
         transfers ownerships of a Daos to new Accounts based on the Block's events
         """
-        # DaoCore.DaoOwnershipChanged
         dao_id_to_new_owner_id = {}  # {dao_id: new_owner_id}
         for dao_event in block.event_data.get("DaoCore", {}).get("DaoOwnerChanged", []):
             dao_id_to_new_owner_id[dao_event["dao_id"]] = dao_event["new_owner"]
@@ -116,7 +116,6 @@ class SubstrateEventHandler:
 
         deletes Daos based on the Block's extrinsics and events
         """
-        # DaoCore.DaoDestroyed
         if dao_ids := [
             dao_event["dao_id"] for dao_event in block.event_data.get("DaoCore", {}).get("DaoDestroyed", [])
         ]:
@@ -134,7 +133,6 @@ class SubstrateEventHandler:
         creates Assets based on the Block's extrinsics and events
         """
 
-        # Assets.Issued
         # create Assets and assign to Daos
         assets = []
         asset_holdings = []
@@ -178,7 +176,6 @@ class SubstrateEventHandler:
         transfers Assets based on the Block's extrinsics and events
         rephrase: transfers ownership of an amount of tokens (models.AssetHolding) from one Account to another
         """
-        # Assets.Transferred
         asset_holding_data = []  # [(asset_id, amount, from_acc, to_acc), ...]
         asset_ids_to_owner_ids = collections.defaultdict(set)  # {1 (asset_id): {1, 2, 3} (owner_ids)...}
         for asset_issued_event in block.event_data.get("Assets", {}).get("Transferred", []):
@@ -238,7 +235,6 @@ class SubstrateEventHandler:
 
         updates Daos' metadata_url and metadata_hash based on the Block's extrinsics and events
         """
-        # DaoMetadataSet
         dao_metadata = {}  # {dao_id: {"metadata_url": metadata_url, "metadata_hash": metadata_hash}}
         for dao_event in block.event_data.get("DaoCore", {}).get("DaoMetadataSet", []):
             for dao_extrinsic in block.extrinsic_data.get("DaoCore", {}).get("set_metadata", []):
@@ -261,7 +257,6 @@ class SubstrateEventHandler:
 
         updates Daos' governance based on the Block's extrinsics and events
         """
-        # SetGovernanceMajorityVote
         governances = []
         dao_ids = set()
         for governance_event in block.event_data.get("Votes", {}).get("SetGovernanceMajorityVote", []):
@@ -291,13 +286,15 @@ class SubstrateEventHandler:
 
         create Proposal based on the Block's extrinsics and events
         """
-        # ProposalCreated
         proposals = []
         proposal_ids = set()
+        dao_ids = set()
+
         for proposal_created_extrinsic in block.extrinsic_data.get("Votes", {}).get("create_proposal", []):
             for proposal_created_event in block.event_data.get("Votes", {}).get("ProposalCreated", []):
                 if (proposal_id := proposal_created_extrinsic["proposal_id"]) == proposal_created_event["proposal_id"]:
                     proposal_ids.add(proposal_id)
+                    dao_ids.add(proposal_created_extrinsic["dao_id"])
                     proposals.append(
                         models.Proposal(
                             id=proposal_id,
@@ -308,12 +305,104 @@ class SubstrateEventHandler:
                     )
         if proposals:
             models.Proposal.objects.bulk_create(proposals)
+
+            dao_id_to_holding_data = collections.defaultdict(list)
+            for dao_id, owner_id, balance in models.AssetHolding.objects.filter(asset__dao__id__in=dao_ids).values_list(
+                "asset__dao_id", "owner_id", "balance"
+            ):
+                dao_id_to_holding_data[dao_id].append((owner_id, balance))
+            # for all proposals: create a Vote placeholder for each Account holding tokens (AssetHoldings) of the
+            # corresponding Dao to keep track of the Account's voting power at the time of Proposal creation.
+            models.Vote.objects.bulk_create(
+                [
+                    models.Vote(proposal_id=proposal.id, voter_id=voter_id, voting_power=balance)
+                    for proposal in proposals
+                    for voter_id, balance in dao_id_to_holding_data[proposal.dao_id]
+                ]
+            )
             tasks.update_proposal_metadata.delay(proposal_ids=list(proposal_ids))
+
+    @staticmethod
+    def _register_votes(block: models.Block):
+        """
+        Args:
+            block: Block to register votes from
+
+        Returns:
+            None
+
+        registers Votes based on the Block's events
+        """
+        proposal_ids_to_voting_data = collections.defaultdict(dict)  # {proposal_id: {voter_id: in_favor}}
+        for voting_event in block.event_data.get("Votes", {}).get("VoteCast", []):
+            proposal_ids_to_voting_data[voting_event["proposal_id"]][voting_event["voter"]] = voting_event["in_favor"]
+        if proposal_ids_to_voting_data:
+            for vote in (
+                votes_to_update := models.Vote.objects.filter(
+                    # WHERE (
+                    #     (vote.proposal_id = 1 AND vote.voter_id IN (1, 2))
+                    #     OR (vote.proposal_id = 2 AND vote.voter_id IN (3, 4))
+                    #     OR ...
+                    # )
+                    reduce(
+                        Q.__or__,
+                        [
+                            Q(proposal_id=proposal_id, voter_id__in=voting_data.keys())
+                            for proposal_id, voting_data in proposal_ids_to_voting_data.items()
+                        ],
+                    )
+                )
+            ):
+                vote.in_favor = proposal_ids_to_voting_data[vote.proposal_id][vote.voter_id]
+            models.Vote.objects.bulk_update(votes_to_update, ["in_favor"])
+
+    @staticmethod
+    def _finalize_proposals(block: models.Block):
+        """
+        Args:
+            block: Block to finalize proposals from
+
+        Returns:
+            None
+
+        finalizes Proposals based on the Block's events
+        """
+        votes_events = block.event_data.get("Votes", {})
+        if accepted_proposal_ids := set(prop["proposal_id"] for prop in votes_events.get("ProposalAccepted", [])):
+            models.Proposal.objects.filter(id__in=accepted_proposal_ids).update(status=models.ProposalStatus.ACCEPTED)
+        if rejected_proposal_ids := set(prop["proposal_id"] for prop in votes_events.get("ProposalRejected", [])):
+            models.Proposal.objects.filter(id__in=rejected_proposal_ids).update(status=models.ProposalStatus.REJECTED)
+
+    @staticmethod
+    def _fault_proposals(block: models.Block):
+        """
+        Args:
+            block: Block to fault proposals from
+
+        Returns:
+            None
+
+        faults Proposals based on the Block's events
+        """
+        if faulted_proposals := {
+            fault_event["proposal_id"]: fault_event["reason"]
+            for fault_event in block.event_data.get("Votes", {}).get("ProposalFaulted", [])
+        }:
+            for proposal in (proposals := models.Proposal.objects.filter(id__in=faulted_proposals.keys())):
+                proposal.reason_for_fault = faulted_proposals[proposal.id]
+                proposal.status = models.ProposalStatus.FAULTED
+            models.Proposal.objects.bulk_update(proposals, ("reason_for_fault", "status"))
 
     @transaction.atomic
     def execute_actions(self, block: models.Block):
         """
-        alters db's blockchain representation based on the Block's extrinsics and events
+        Args:
+             block: Block to execute
+
+         Returns:
+             None
+
+         alters db's blockchain representation based on the Block's extrinsics and events
         """
         for block_action in self.block_actions:
             try:

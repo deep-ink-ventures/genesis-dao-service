@@ -241,3 +241,6 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
     serializer_class = serializers.ProposalSerializer
     allowed_filter_fields = ("id", "dao_id")
     allowed_order_fields = ("id", "dao_id")
+
+    def get_queryset(self):
+        return self.queryset.prefetch_related("votes")

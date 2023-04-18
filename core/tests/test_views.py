@@ -54,20 +54,36 @@ class CoreViewSetTest(IntegrationTestCase):
         cache.set(key="acc1", value=self.challenge_key, timeout=60)
         models.Account.objects.create(address="acc1")
         models.Account.objects.create(address="acc2")
+        models.Account.objects.create(address="acc3")
+        models.Account.objects.create(address="acc4")
         models.Dao.objects.create(
             id="dao1", name="dao1 name", creator_id="acc1", owner_id="acc1", metadata={"some": "data"}
         )
         models.Dao.objects.create(id="dao2", name="dao2 name", creator_id="acc2", owner_id="acc2")
-        models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
+        models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=1000)
         models.Asset.objects.create(id=2, owner_id="acc2", dao_id="dao2", total_supply=200)
-        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=500)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc2", balance=300)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc3", balance=100)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc4", balance=100)
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=200)
         models.Proposal.objects.create(
             id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash="hash1", metadata={"a": 1}
         )
         models.Proposal.objects.create(
-            id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash="hash2", metadata={"a": 2}
+            id="prop2",
+            dao_id="dao2",
+            metadata_url="url2",
+            metadata_hash="hash2",
+            metadata={"a": 2},
+            reason_for_fault="some reason",
+            status=models.ProposalStatus.FAULTED,
         )
+        models.Vote.objects.create(proposal_id="prop1", voter_id="acc1", in_favor=True, voting_power=500)
+        models.Vote.objects.create(proposal_id="prop1", voter_id="acc2", in_favor=True, voting_power=300)
+        models.Vote.objects.create(proposal_id="prop1", voter_id="acc3", in_favor=False, voting_power=100)
+        models.Vote.objects.create(proposal_id="prop1", voter_id="acc4", voting_power=100)
+        models.Vote.objects.create(proposal_id="prop2", voter_id="acc2", in_favor=False, voting_power=200)
 
     def test_welcome(self):
         expected_res = {"success": True, "message": "Welcome traveler."}
@@ -86,7 +102,7 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertEqual(res.headers["Block-Hash"], "some hash")
 
     def test_stats(self):
-        expected_res = {"account_count": 2, "dao_count": 2}
+        expected_res = {"account_count": 4, "dao_count": 2}
 
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-stats"))
@@ -121,7 +137,9 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertDictEqual(res.data, expected_res)
 
     def test_account_get_list(self):
-        expected_res = wrap_in_pagination_res([{"address": "acc1"}, {"address": "acc2"}])
+        expected_res = wrap_in_pagination_res(
+            [{"address": "acc1"}, {"address": "acc2"}, {"address": "acc3"}, {"address": "acc4"}]
+        )
 
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-account-list"))
@@ -281,8 +299,8 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
-                expected_dao2_res,
                 expected_dao1_res,
+                expected_dao2_res,
             ],
             4,
         ),
@@ -301,6 +319,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
+                expected_dao1_res,
                 {
                     "id": "dao3",
                     "name": "dao3 name",
@@ -312,14 +331,12 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata_url": None,
                     "metadata_hash": None,
                 },
-                expected_dao1_res,
             ],
-            6,
+            5,
         ),
     )
     def test_dao_list_prioritised(self, case):
         query_params, expected_res, expected_query_count = case
-        models.Account.objects.create(address="acc3")
         models.Dao.objects.create(id="dao3", name="dao3 name", creator_id="acc1", owner_id="acc1")
         models.Dao.objects.create(id="dao4", name="dao4 name", creator_id="acc2", owner_id="acc2")
         models.Asset.objects.create(id=3, owner_id="acc1", dao_id="dao3", total_supply=100)
@@ -477,7 +494,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
     def test_asset_get(self):
-        expected_res = {"id": 1, "dao_id": "dao1", "owner_id": "acc1", "total_supply": 100}
+        expected_res = {"id": 1, "dao_id": "dao1", "owner_id": "acc1", "total_supply": 1000}
 
         with self.assertNumQueries(1):
             res = self.client.get(reverse("core-asset-detail", kwargs={"pk": 1}))
@@ -487,7 +504,7 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_asset_get_list(self):
         expected_res = wrap_in_pagination_res(
             [
-                {"id": 1, "dao_id": "dao1", "owner_id": "acc1", "total_supply": 100},
+                {"id": 1, "dao_id": "dao1", "owner_id": "acc1", "total_supply": 1000},
                 {"id": 2, "dao_id": "dao2", "owner_id": "acc2", "total_supply": 200},
             ]
         )
@@ -503,9 +520,12 @@ class CoreViewSetTest(IntegrationTestCase):
             "metadata": {"a": 1},
             "metadata_url": "url1",
             "metadata_hash": "hash1",
+            "reason_for_fault": None,
+            "status": models.ProposalStatus.IN_PROGRESS,
+            "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
         }
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             res = self.client.get(reverse("core-proposal-detail", kwargs={"pk": "prop1"}))
 
         self.assertDictEqual(res.data, expected_res)
@@ -519,6 +539,9 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": {"a": 1},
                     "metadata_url": "url1",
                     "metadata_hash": "hash1",
+                    "reason_for_fault": None,
+                    "status": models.ProposalStatus.IN_PROGRESS,
+                    "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
                 },
                 {
                     "id": "prop2",
@@ -526,11 +549,14 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": {"a": 2},
                     "metadata_url": "url2",
                     "metadata_hash": "hash2",
+                    "reason_for_fault": "some reason",
+                    "status": models.ProposalStatus.FAULTED,
+                    "votes": {"pro": 0, "contra": 200, "abstained": 0, "total": 200},
                 },
             ]
         )
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             res = self.client.get(reverse("core-proposal-list"))
 
         self.assertDictEqual(res.data, expected_res)
