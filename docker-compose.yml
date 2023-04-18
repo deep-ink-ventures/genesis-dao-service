@@ -16,6 +16,18 @@ services:
       - postgres
       - redis
 
+  listener:
+    build:
+      context: .
+    container_name: listener
+    image: listener:latest
+    command: [ "listener" ]
+    env_file:
+      - .env
+    volumes:
+      - .:/usr/src/app
+    depends_on: *deps
+
   worker:
     container_name: worker
     image: app:latest

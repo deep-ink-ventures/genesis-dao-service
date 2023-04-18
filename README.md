@@ -14,7 +14,7 @@
 cp .env.example .env
 ```
 
-Adjust the `.env` values according to your needs,_source_ it, so it is available in your current environment.
+Adjust the `.env` values according to your needs, _source_ it, so it is available in your current environment.
 
 ```shell
 source .env
@@ -27,6 +27,15 @@ before calling any `make` target:
 set -a; source .env; set +a
 ```
 
+## Quickstart using Docker
+
+```shell
+docker compose build
+docker compose up -d
+```
+
+
+## Development Setup
 ### Create and activate Python venv
 
 ```shell
