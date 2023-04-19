@@ -31,7 +31,7 @@ set -a; source .env; set +a
 
 ```shell
 docker compose build
-docker compose up -d
+docker compose up
 ```
 
 
