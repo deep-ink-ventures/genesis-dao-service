@@ -2,11 +2,10 @@
 set -e
 
 if [  "$1" = "web" ]; then
+  python manage.py save_migrate
   daphne -b 0.0.0.0 -p 8000 service.asgi:application
 
 elif [ "$1" = "worker" ]; then
-  python manage.py migrate
-  python manage.py collectstatic --noinput
   set -- celery \
           -A service worker \
           -l INFO \
