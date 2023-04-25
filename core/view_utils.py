@@ -26,6 +26,21 @@ class IsDAOOwner(BasePermission):
         return substrate_service.verify(address=obj.owner_id, signature=request.headers.get("Signature"))
 
 
+class IsProposalCreator(BasePermission):
+    message = {
+        "error": "Only the Proposal creator has access to this action. "
+        "Header needs to contain signature=*signed-challenge*."
+    }
+
+    def has_permission(self, request, view):
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        from core.substrate import substrate_service
+
+        return substrate_service.verify(address=obj.creator_id, signature=request.headers.get("Signature"))
+
+
 class FilterBackend:
     order_kw = "order_by"
     ignored_filter_fields = ("limit", "offset", order_kw)

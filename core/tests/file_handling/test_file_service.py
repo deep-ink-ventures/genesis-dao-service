@@ -58,7 +58,7 @@ class FileHandlerTest(UnitTestCase):
             "interesting": "data",
         }
 
-        res = file_handler.upload_metadata(metadata=metadata, storage_destination="store/here")
+        res = file_handler.upload_dao_metadata(metadata=metadata, storage_destination="store/here")
 
         file_handler.file_upload_class.upload_file.assert_has_calls(
             [

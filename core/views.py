@@ -16,6 +16,7 @@ from core import models, serializers
 from core.file_handling.file_handler import file_handler
 from core.view_utils import (
     IsDAOOwner,
+    IsProposalCreator,
     MultiQsLimitOffsetPagination,
     SearchableMixin,
     signature_in_header,
@@ -116,13 +117,13 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
     pagination_class = MultiQsLimitOffsetPagination
 
     def get_queryset(self):
-        return self.queryset.select_related("asset")
+        return self.queryset.select_related("asset", "governance")
 
     def get_serializer_class(self):
         return {
             "retrieve": serializers.DaoSerializer,
             "list": serializers.DaoSerializer,
-            "add_metadata": serializers.MetadataSerializer,
+            "add_metadata": serializers.AddDaoMetadataSerializer,
         }.get(self.action)
 
     @swagger_auto_schema(
@@ -184,7 +185,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         operation_description="Adds metadata to a DAO.",
         manual_parameters=[signature_in_header],
         security=[{"Signature": []}],
-        responses={201: openapi.Response("", serializers.MetadataResponseSerializer)},
+        responses={201: openapi.Response("", serializers.DaoMetadataResponseSerializer)},
     )
     @action(
         methods=["POST"],
@@ -197,7 +198,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         dao = self.get_object()
-        metadata = file_handler.upload_metadata(metadata=serializer.validated_data, storage_destination=dao.id)
+        metadata = file_handler.upload_dao_metadata(metadata=serializer.validated_data, storage_destination=dao.id)
         dao.metadata = metadata["metadata"]
         dao.metadata_url = metadata["metadata_url"]
         dao.metadata_hash = metadata["metadata_hash"]
@@ -246,3 +247,37 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
     def get_queryset(self):
         return self.queryset.prefetch_related("votes")
+
+    def get_serializer_class(self):
+        return {
+            "retrieve": serializers.ProposalSerializer,
+            "list": serializers.ProposalSerializer,
+            "add_metadata": serializers.AddProposalMetadataSerializer,
+        }.get(self.action)
+
+    @swagger_auto_schema(
+        operation_id="Add Proposal Metadata",
+        operation_description="Adds metadata to a Proposal.",
+        manual_parameters=[signature_in_header],
+        security=[{"Signature": []}],
+        responses={201: openapi.Response("", serializers.ProposalMetadataResponseSerialzier)},
+    )
+    @action(
+        methods=["POST"],
+        detail=True,
+        url_path="metadata",
+        permission_classes=[IsProposalCreator],
+        authentication_classes=[],
+    )
+    def add_metadata(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        proposal = self.get_object()
+        metadata = file_handler.upload_metadata(
+            metadata=serializer.validated_data, storage_destination=f"{proposal.dao_id}/proposals/{proposal.id}"
+        )
+        proposal.metadata = metadata["metadata"]
+        proposal.metadata_url = metadata["metadata_url"]
+        proposal.metadata_hash = metadata["metadata_hash"]
+        proposal.save(update_fields=["metadata", "metadata_url", "metadata_hash"])
+        return Response(metadata, status=HTTP_201_CREATED)

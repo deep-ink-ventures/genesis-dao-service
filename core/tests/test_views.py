@@ -7,6 +7,7 @@ from ddt import data, ddt
 from django.conf import settings
 from django.core.cache import cache
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.status import (
     HTTP_201_CREATED,
@@ -29,6 +30,7 @@ expected_dao1_res = {
     "creator_id": "acc1",
     "owner_id": "acc1",
     "asset_id": 1,
+    "proposal_duration": settings.BLOCK_CREATION_INTERVAL * 10,
     "setup_complete": False,
     "metadata": {"some": "data"},
     "metadata_url": None,
@@ -40,6 +42,7 @@ expected_dao2_res = {
     "creator_id": "acc2",
     "owner_id": "acc2",
     "asset_id": 2,
+    "proposal_duration": settings.BLOCK_CREATION_INTERVAL * 15,
     "setup_complete": False,
     "metadata": None,
     "metadata_url": None,
@@ -59,7 +62,13 @@ class CoreViewSetTest(IntegrationTestCase):
         models.Dao.objects.create(
             id="dao1", name="dao1 name", creator_id="acc1", owner_id="acc1", metadata={"some": "data"}
         )
+        models.Governance.objects.create(
+            dao_id="dao1", proposal_duration=10, proposal_token_deposit=10, minimum_majority=60
+        )
         models.Dao.objects.create(id="dao2", name="dao2 name", creator_id="acc2", owner_id="acc2")
+        models.Governance.objects.create(
+            dao_id="dao2", proposal_duration=15, proposal_token_deposit=10, minimum_majority=60
+        )
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=1000)
         models.Asset.objects.create(id=2, owner_id="acc2", dao_id="dao2", total_supply=200)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=500)
@@ -68,11 +77,20 @@ class CoreViewSetTest(IntegrationTestCase):
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc4", balance=100)
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=200)
         models.Proposal.objects.create(
-            id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash="hash1", metadata={"a": 1}
+            id="prop1",
+            dao_id="dao1",
+            creator_id="acc1",
+            metadata_url="url1",
+            metadata_hash="hash1",
+            metadata={"a": 1},
+            ends_at=timezone.datetime(
+                year=2023, month=12, day=31, minute=59, second=59, tzinfo=timezone.get_current_timezone()
+            ),
         )
         models.Proposal.objects.create(
             id="prop2",
             dao_id="dao2",
+            creator_id="acc2",
             metadata_url="url2",
             metadata_hash="hash2",
             metadata={"a": 2},
@@ -187,6 +205,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "creator_id": "acc1",
                     "owner_id": "acc2",
                     "asset_id": None,
+                    "proposal_duration": None,
                     "setup_complete": True,
                     "metadata": None,
                     "metadata_url": None,
@@ -203,6 +222,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "creator_id": "acc1",
                     "owner_id": "acc2",
                     "asset_id": None,
+                    "proposal_duration": None,
                     "setup_complete": True,
                     "metadata": None,
                     "metadata_url": None,
@@ -223,6 +243,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "creator_id": "acc1",
                     "owner_id": "acc2",
                     "asset_id": None,
+                    "proposal_duration": None,
                     "setup_complete": True,
                     "metadata": None,
                     "metadata_url": None,
@@ -253,6 +274,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "creator_id": "acc2",
                     "owner_id": "acc2",
                     "asset_id": 4,
+                    "proposal_duration": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -265,6 +287,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "creator_id": "acc1",
                     "owner_id": "acc1",
                     "asset_id": 3,
+                    "proposal_duration": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -283,6 +306,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "creator_id": "acc2",
                     "owner_id": "acc2",
                     "asset_id": 4,
+                    "proposal_duration": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -294,6 +318,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "creator_id": "acc1",
                     "owner_id": "acc1",
                     "asset_id": 3,
+                    "proposal_duration": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -314,6 +339,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "creator_id": "acc2",
                     "owner_id": "acc2",
                     "asset_id": 4,
+                    "proposal_duration": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -326,6 +352,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "creator_id": "acc1",
                     "owner_id": "acc1",
                     "asset_id": 3,
+                    "proposal_duration": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -517,12 +544,14 @@ class CoreViewSetTest(IntegrationTestCase):
         expected_res = {
             "id": "prop1",
             "dao_id": "dao1",
+            "creator_id": "acc1",
             "metadata": {"a": 1},
             "metadata_url": "url1",
             "metadata_hash": "hash1",
             "reason_for_fault": None,
-            "status": models.ProposalStatus.IN_PROGRESS,
+            "status": models.ProposalStatus.RUNNING,
             "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
+            "ends_at": "2023-12-31T00:59:59Z",
         }
 
         with self.assertNumQueries(2):
@@ -536,22 +565,26 @@ class CoreViewSetTest(IntegrationTestCase):
                 {
                     "id": "prop1",
                     "dao_id": "dao1",
+                    "creator_id": "acc1",
                     "metadata": {"a": 1},
                     "metadata_url": "url1",
                     "metadata_hash": "hash1",
                     "reason_for_fault": None,
-                    "status": models.ProposalStatus.IN_PROGRESS,
+                    "status": models.ProposalStatus.RUNNING,
                     "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
+                    "ends_at": "2023-12-31T00:59:59Z",
                 },
                 {
                     "id": "prop2",
                     "dao_id": "dao2",
+                    "creator_id": "acc2",
                     "metadata": {"a": 2},
                     "metadata_url": "url2",
                     "metadata_hash": "hash2",
                     "reason_for_fault": "some reason",
                     "status": models.ProposalStatus.FAULTED,
                     "votes": {"pro": 0, "contra": 200, "abstained": 0, "total": 200},
+                    "ends_at": None,
                 },
             ]
         )
@@ -560,3 +593,58 @@ class CoreViewSetTest(IntegrationTestCase):
             res = self.client.get(reverse("core-proposal-list"))
 
         self.assertDictEqual(res.data, expected_res)
+
+    def test_proposal_add_metadata(self):
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        acc = models.Account.objects.create(address=keypair.ss58_address)
+        models.Dao.objects.create(id="DAO1", name="dao1 name", owner=acc)
+        models.Proposal.objects.create(id="PROP1", dao_id="DAO1", creator=acc)
+
+        post_data = {
+            "title": "some title",
+            "description": "short description",
+            "url": "https://www.some-url.com/",
+        }
+        expected_res = {
+            "metadata": post_data,
+            "metadata_hash": "384f400447f439767311418582fb9f779ba44e18905d225598b48f32eb950ce1",
+            "metadata_url": "https://some_storage.some_region.com/DAO1/proposals/PROP1/metadata.json",
+        }
+
+        res = self.client.post(
+            reverse("core-proposal-add-metadata", kwargs={"pk": "PROP1"}),
+            post_data,
+            content_type="application/json",
+            HTTP_SIGNATURE=signature,
+        )
+
+        self.assertEqual(res.status_code, HTTP_201_CREATED, res.data)
+        self.assertDictEqual(res.data, expected_res)
+
+    def test_proposal_add_metadata_403(self):
+        post_data = {
+            "title": "some title",
+            "description": "short description",
+            "url": "https://www.some-url.com/",
+        }
+
+        res = self.client.post(
+            reverse("core-proposal-add-metadata", kwargs={"pk": "prop1"}),
+            post_data,
+            content_type="application/json",
+            HTTP_SIGNATURE="wrong signature",
+        )
+
+        self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            res.data,
+            {
+                "error": ErrorDetail(
+                    code="permission_denied",
+                    string="Only the Proposal creator has access to this action. "
+                    "Header needs to contain signature=*signed-challenge*.",
+                )
+            },
+        )

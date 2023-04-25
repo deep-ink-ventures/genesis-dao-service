@@ -5,6 +5,7 @@ from functools import reduce
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Q
+from django.utils import timezone
 
 from core import models, tasks
 
@@ -304,13 +305,26 @@ class SubstrateEventHandler:
                         )
                     )
         if proposals:
-            models.Proposal.objects.bulk_create(proposals)
-
             dao_id_to_holding_data = collections.defaultdict(list)
             for dao_id, owner_id, balance in models.AssetHolding.objects.filter(asset__dao__id__in=dao_ids).values_list(
                 "asset__dao_id", "owner_id", "balance"
             ):
                 dao_id_to_holding_data[dao_id].append((owner_id, balance))
+
+            dao_id_to_proposal_duration = {
+                dao_id: proposal_duration
+                for dao_id, proposal_duration in models.Governance.objects.filter(dao_id__in=dao_ids).values_list(
+                    "dao_id", "proposal_duration"
+                )
+            }
+            # set end dates for proposals
+            # current time + proposal duration in block * block creation interval (6s)
+            for proposal in proposals:
+                proposal.ends_at = timezone.now() + timezone.timedelta(
+                    seconds=dao_id_to_proposal_duration[proposal.dao_id] * 6
+                )
+
+            models.Proposal.objects.bulk_create(proposals)
             # for all proposals: create a Vote placeholder for each Account holding tokens (AssetHoldings) of the
             # corresponding Dao to keep track of the Account's voting power at the time of Proposal creation.
             models.Vote.objects.bulk_create(
@@ -369,7 +383,7 @@ class SubstrateEventHandler:
         """
         votes_events = block.event_data.get("Votes", {})
         if accepted_proposal_ids := set(prop["proposal_id"] for prop in votes_events.get("ProposalAccepted", [])):
-            models.Proposal.objects.filter(id__in=accepted_proposal_ids).update(status=models.ProposalStatus.ACCEPTED)
+            models.Proposal.objects.filter(id__in=accepted_proposal_ids).update(status=models.ProposalStatus.PENDING)
         if rejected_proposal_ids := set(prop["proposal_id"] for prop in votes_events.get("ProposalRejected", [])):
             models.Proposal.objects.filter(id__in=rejected_proposal_ids).update(status=models.ProposalStatus.REJECTED)
 

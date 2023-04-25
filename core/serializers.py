@@ -1,5 +1,14 @@
 from django.conf import settings
-from rest_framework.fields import CharField, EmailField, IntegerField, URLField
+from django.core.exceptions import ObjectDoesNotExist
+from drf_yasg.utils import swagger_serializer_method
+from rest_framework.fields import (
+    CharField,
+    DateTimeField,
+    EmailField,
+    IntegerField,
+    SerializerMethodField,
+    URLField,
+)
 from rest_framework.serializers import ModelSerializer, Serializer, ValidationError
 
 from core import models
@@ -47,6 +56,7 @@ class AccountSerializerList(ModelSerializer):
 class DaoSerializer(ModelSerializer):
     owner_id = CharField(required=True)
     asset_id = IntegerField(source="asset.id", required=False)
+    proposal_duration = SerializerMethodField(help_text="Proposal duration in seconds.")
 
     class Meta:
         model = models.Dao
@@ -56,14 +66,23 @@ class DaoSerializer(ModelSerializer):
             "creator_id",
             "owner_id",
             "asset_id",
+            "proposal_duration",
             "setup_complete",
             "metadata",
             "metadata_url",
             "metadata_hash",
         )
 
+    @staticmethod
+    @swagger_serializer_method(IntegerField)
+    def get_proposal_duration(dao: models.Dao):
+        try:
+            return dao.governance.proposal_duration * settings.BLOCK_CREATION_INTERVAL
+        except ObjectDoesNotExist:
+            return None
 
-class MetadataSerializer(Serializer):  # noqa
+
+class AddDaoMetadataSerializer(Serializer):  # noqa
     description_short = CharField(required=False)
     description_long = CharField(required=False)
     email = EmailField(required=False)
@@ -78,7 +97,7 @@ class MetadataSerializer(Serializer):  # noqa
         return logo
 
 
-class MetadataResponseSerializer(Serializer):  # noqa
+class DaoMetadataResponseSerializer(Serializer):  # noqa
     class MetadataSerializer(Serializer):  # noqa
         description_short = CharField(required=False)
         description_long = CharField(required=False)
@@ -152,10 +171,34 @@ class VotesSerializer(Serializer):  # noqa
 
 class ProposalSerializer(ModelSerializer):
     votes = VotesSerializer()
+    ends_at = DateTimeField(help_text="Time proposal ends at in UTC.")
 
     class Meta:
         model = models.Proposal
-        fields = ("id", "dao_id", "status", "reason_for_fault", "votes", "metadata", "metadata_url", "metadata_hash")
+        fields = (
+            "id",
+            "dao_id",
+            "creator_id",
+            "status",
+            "reason_for_fault",
+            "votes",
+            "metadata",
+            "metadata_url",
+            "metadata_hash",
+            "ends_at",
+        )
+
+
+class AddProposalMetadataSerializer(Serializer):  # noqa
+    title = CharField(max_length=64)
+    description = CharField(max_length=512)
+    url = URLField()
+
+
+class ProposalMetadataResponseSerialzier(Serializer):  # noqa
+    metadata = AddProposalMetadataSerializer()
+    metadata_hash = CharField()
+    metadata_url = URLField()
 
 
 class ChallengeSerializer(Serializer):  # noqa

@@ -74,17 +74,20 @@ class AssetHolding(TimestampableMixin):
 
 
 class ProposalStatus(ChoiceEnum):
-    IN_PROGRESS = "in progress"
-    ACCEPTED = "accepted"
+    RUNNING = "running"
+    PENDING = "pending"
     REJECTED = "rejected"
+    IMPLEMENTED = "implemented"
     FAULTED = "faulted"
 
 
 class Proposal(TimestampableMixin):
     id = models.CharField(max_length=128, primary_key=True)
     dao = models.ForeignKey(Dao, related_name="proposals", on_delete=models.CASCADE)
-    status = models.CharField(max_length=16, choices=ProposalStatus.as_choices(), default=ProposalStatus.IN_PROGRESS)
+    creator = models.ForeignKey(Account, related_name="proposals", on_delete=models.SET_NULL, null=True)
+    status = models.CharField(max_length=16, choices=ProposalStatus.as_choices(), default=ProposalStatus.RUNNING)
     reason_for_fault = models.TextField(null=True)
+    ends_at = models.DateTimeField(null=True)
     metadata = models.JSONField(null=True)
     metadata_url = models.CharField(max_length=256, null=True)
     metadata_hash = models.CharField(max_length=256, null=True)

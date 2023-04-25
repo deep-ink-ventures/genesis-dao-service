@@ -3,8 +3,11 @@ import random
 from io import BytesIO
 from unittest.mock import call, patch
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError
+from django.utils import timezone
+from freezegun import freeze_time
 
 from core import models
 from core.event_handler import (
@@ -575,6 +578,27 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
+        models.Governance.objects.create(
+            dao_id="dao1",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=10,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
+        models.Governance.objects.create(
+            dao_id="dao2",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=15,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
+        models.Governance.objects.create(
+            dao_id="dao3",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=20,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
         models.Asset.objects.create(id=1, dao_id="dao1", owner_id="acc1", total_supply=100)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=50)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc2", balance=30)
@@ -640,12 +664,23 @@ class EventHandlerTest(IntegrationTestCase):
                 },
             },
         )
+        time = timezone.now()
         expected_proposals = [
             models.Proposal(
-                id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash=metadata_hash_1, metadata=metadata_1
+                id="prop1",
+                dao_id="dao1",
+                metadata_url="url1",
+                metadata_hash=metadata_hash_1,
+                metadata=metadata_1,
+                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 10),
             ),
             models.Proposal(
-                id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash=metadata_hash_2, metadata=metadata_2
+                id="prop2",
+                dao_id="dao2",
+                metadata_url="url2",
+                metadata_hash=metadata_hash_2,
+                metadata=metadata_2,
+                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 15),
             ),
         ]
         expected_votes = [
@@ -657,7 +692,7 @@ class EventHandlerTest(IntegrationTestCase):
             models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None),
         ]
 
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6), freeze_time(time):
             substrate_event_handler._create_proposals(block)
 
         urlopen_mock.assert_has_calls([call("url1"), call("url2")], any_order=True)
@@ -677,6 +712,27 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
+        models.Governance.objects.create(
+            dao_id="dao1",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=10,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
+        models.Governance.objects.create(
+            dao_id="dao2",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=15,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
+        models.Governance.objects.create(
+            dao_id="dao3",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=20,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
         models.Asset.objects.create(id=1, dao_id="dao1", owner_id="acc1", total_supply=100)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=50)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc2", balance=30)
@@ -732,10 +788,23 @@ class EventHandlerTest(IntegrationTestCase):
                 },
             },
         )
+        time = timezone.now()
         expected_proposals = [
-            models.Proposal(id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash="wrong hash", metadata=None),
             models.Proposal(
-                id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash=metadata_hash_2, metadata=metadata_2
+                id="prop1",
+                dao_id="dao1",
+                metadata_url="url1",
+                metadata_hash="wrong hash",
+                metadata=None,
+                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 10),
+            ),
+            models.Proposal(
+                id="prop2",
+                dao_id="dao2",
+                metadata_url="url2",
+                metadata_hash=metadata_hash_2,
+                metadata=metadata_2,
+                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 15),
             ),
         ]
         expected_votes = [
@@ -744,7 +813,7 @@ class EventHandlerTest(IntegrationTestCase):
             models.Vote(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=None),
         ]
 
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6), freeze_time(time):
             substrate_event_handler._create_proposals(block)
 
         urlopen_mock.assert_has_calls([call("url1"), call("url2")], any_order=True)
@@ -766,6 +835,27 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
+        models.Governance.objects.create(
+            dao_id="dao1",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=10,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
+        models.Governance.objects.create(
+            dao_id="dao2",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=15,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
+        models.Governance.objects.create(
+            dao_id="dao3",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=20,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
         models.Asset.objects.create(id=2, dao_id="dao2", owner_id="acc2", total_supply=100)
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc3", balance=50)
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=30)
@@ -827,12 +917,23 @@ class EventHandlerTest(IntegrationTestCase):
                 },
             },
         )
+        time = timezone.now()
         expected_proposals = [
             models.Proposal(
-                id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash=metadata_hash_1, metadata=None
+                id="prop1",
+                dao_id="dao1",
+                metadata_url="url1",
+                metadata_hash=metadata_hash_1,
+                metadata=None,
+                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 10),
             ),
             models.Proposal(
-                id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash=metadata_hash_2, metadata=metadata_2
+                id="prop2",
+                dao_id="dao2",
+                metadata_url="url2",
+                metadata_hash=metadata_hash_2,
+                metadata=metadata_2,
+                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 15),
             ),
         ]
         expected_votes = [
@@ -841,7 +942,7 @@ class EventHandlerTest(IntegrationTestCase):
             models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None),
         ]
 
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6), freeze_time(time):
             substrate_event_handler._create_proposals(block)
 
         download_metadata_mock.assert_has_calls(
@@ -870,6 +971,27 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
+        models.Governance.objects.create(
+            dao_id="dao1",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=10,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
+        models.Governance.objects.create(
+            dao_id="dao2",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=15,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
+        models.Governance.objects.create(
+            dao_id="dao3",
+            type=models.GovernanceType.MAJORITY_VOTE,
+            proposal_duration=20,
+            proposal_token_deposit=10,
+            minimum_majority=10,
+        )
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -922,16 +1044,27 @@ class EventHandlerTest(IntegrationTestCase):
                 },
             },
         )
+        time = timezone.now()
         expected_proposals = [
             models.Proposal(
-                id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash=metadata_hash_1, metadata=None
+                id="prop1",
+                dao_id="dao1",
+                metadata_url="url1",
+                metadata_hash=metadata_hash_1,
+                metadata=None,
+                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 10),
             ),
             models.Proposal(
-                id="prop2", dao_id="dao2", metadata_url="url2", metadata_hash=metadata_hash_2, metadata=None
+                id="prop2",
+                dao_id="dao2",
+                metadata_url="url2",
+                metadata_hash=metadata_hash_2,
+                metadata=None,
+                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 15),
             ),
         ]
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4), freeze_time(time):
             substrate_event_handler._create_proposals(block)
 
         download_metadata_mock.assert_has_calls(
@@ -1035,13 +1168,13 @@ class EventHandlerTest(IntegrationTestCase):
             },
         )
         expected_proposals = [
-            models.Proposal(id="prop1", dao_id="dao1", status=models.ProposalStatus.ACCEPTED),
+            models.Proposal(id="prop1", dao_id="dao1", status=models.ProposalStatus.PENDING),
             models.Proposal(id="prop2", dao_id="dao1", status=models.ProposalStatus.REJECTED),
-            models.Proposal(id="prop3", dao_id="dao2", status=models.ProposalStatus.ACCEPTED),
-            models.Proposal(id="prop4", dao_id="dao2", status=models.ProposalStatus.ACCEPTED),
+            models.Proposal(id="prop3", dao_id="dao2", status=models.ProposalStatus.PENDING),
+            models.Proposal(id="prop4", dao_id="dao2", status=models.ProposalStatus.PENDING),
             models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.REJECTED),
-            models.Proposal(id="prop6", dao_id="dao1", status=models.ProposalStatus.IN_PROGRESS),
-            models.Proposal(id="prop7", dao_id="dao2", status=models.ProposalStatus.IN_PROGRESS),
+            models.Proposal(id="prop6", dao_id="dao1", status=models.ProposalStatus.RUNNING),
+            models.Proposal(id="prop7", dao_id="dao2", status=models.ProposalStatus.RUNNING),
         ]
 
         with self.assertNumQueries(2):
@@ -1088,8 +1221,8 @@ class EventHandlerTest(IntegrationTestCase):
             models.Proposal(
                 id="prop3", dao_id="dao2", reason_for_fault="reason 3", status=models.ProposalStatus.FAULTED
             ),
-            models.Proposal(id="prop4", dao_id="dao1", status=models.ProposalStatus.IN_PROGRESS),
-            models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.IN_PROGRESS),
+            models.Proposal(id="prop4", dao_id="dao1", status=models.ProposalStatus.RUNNING),
+            models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.RUNNING),
         ]
 
         with self.assertNumQueries(2):

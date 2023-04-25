@@ -30,6 +30,34 @@ class FileHandler:
     def upload_metadata(self, metadata: dict, storage_destination: str) -> dict:
         """
         Args:
+             metadata: metadata to upload, has to contain logo:InMemoryUploadedFile
+             storage_destination: pathstr / folder name. e.g.: "folder_1/folder_2/my_file.jpeg"
+
+        Returns:
+             metadata dict e.g.:
+             {
+                 "metadata": {"some": "data"},
+                 "metadata_hash": "ecda2de0cb7a7f293072a18ac088d5ce6595328e29d6174425e7949f7c2829da",
+                 "metadata_url": "https://some_bucket.s3.some_region.amazonaws.com/some_folder/metadata.json",
+             }
+
+        uploads the metadata using the file upload class' (provided via envvar FILE_UPLOAD_CLASS) upload_file
+        method to the given 'storage_destination', e.g. Dao.id.
+        """
+        encoded_metadata = json.dumps(metadata, indent=4).encode()
+        io = BytesIO(encoded_metadata)
+        io.seek(0)
+        return {
+            "metadata": metadata,
+            "metadata_hash": self._hash(encoded_metadata),
+            "metadata_url": self.file_upload_class.upload_file(
+                file=io, storage_destination=f"{storage_destination}/metadata.json"
+            ),
+        }
+
+    def upload_dao_metadata(self, metadata: dict, storage_destination: str) -> dict:
+        """
+        Args:
             metadata: metadata to upload, has to contain logo:InMemoryUploadedFile
             storage_destination: pathstr / folder name. e.g.: "folder_1/folder_2/my_file.jpeg"
 
@@ -54,9 +82,8 @@ class FileHandler:
                 "metadata_url": "https://some_bucket.s3.some_region.amazonaws.com/some_folder/metadata.json",
             }
 
-        creates 3 file_handling by resizing the logo to small, medium and large; size specified in envvar LOGO_SIZES.
-        uploads the resized file_handling using the file upload class' (provided via envvar FILE_UPLOAD_CLASS) upload_file
-        method to a 'storage_destination', e.g. Dao.id.
+        creates 3 files by resizing the logo to small, medium and large; size specified in envvar LOGO_SIZES.
+        uploads the resized files to a 'storage_destination', e.g. Dao.id.
         """  # noqa
         # derive format from file extension
         logo = metadata.pop("logo")
@@ -74,16 +101,7 @@ class FileHandler:
                 )
                 metadata["images"]["logo"][size_name] = {"url": url}
 
-        encoded_metadata = json.dumps(metadata, indent=4).encode()
-        io = BytesIO(encoded_metadata)
-        io.seek(0)
-        return {
-            "metadata": metadata,
-            "metadata_hash": self._hash(encoded_metadata),
-            "metadata_url": self.file_upload_class.upload_file(
-                file=io, storage_destination=f"{storage_destination}/metadata.json"
-            ),
-        }
+        return self.upload_metadata(metadata=metadata, storage_destination=storage_destination)
 
     def download_metadata(self, url: str, metadata_hash: str) -> dict:
         """
