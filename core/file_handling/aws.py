@@ -35,7 +35,7 @@ class S3Client:
         """
         Args:
             file: file to upload (file-like obj, readable)
-            storage_destination: e.g.: folder1/folder2/filename
+            storage_destination: e.g.: folder1/folder2/filename.jpeg
 
         Returns:
             url of uploaded file

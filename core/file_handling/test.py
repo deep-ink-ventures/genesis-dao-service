@@ -1,7 +1,7 @@
 from unittest.mock import Mock
 
 
-def upload_file(file=None, storage_destination=None):
+def upload_file(*_args, storage_destination=None, **_kwargs):
     return f"https://some_storage.some_region.com/{storage_destination}"
 
 

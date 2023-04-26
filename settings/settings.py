@@ -174,7 +174,7 @@ AWS_REGION = os.environ.get("AWS_REGION")
 CHALLENGE_LIFETIME = 60  # seconds
 
 # storage
-FILE_UPLOAD_CLASS = os.environ.get("FILE_UPLOAD_CLASS", "core.file_handling.aws.s3_client")
+FILE_UPLOAD_CLASS = os.environ.get("FILE_UPLOAD_CLASS", "core.file_handling.local.storage")
 ENCRYPTION_ALGORITHM = os.environ.get("ENCRYPTION_ALGORITHM", "sha3_256")
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
