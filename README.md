@@ -177,7 +177,7 @@ API documentation: `/redoc/`
   - type: int
   - default: `2_000_000` 2 mb
   - maximum allowed logo size
-- these are only required when using the default `FILE_UPLOAD_CLASS`:
+- these are only required when using the `FILE_UPLOAD_CLASS`: `core.file_handling.aws.s3_client`
   - AWS_STORAGE_BUCKET_NAME
     - type: str
     - Name of the AWS bucket to store metadata in.
