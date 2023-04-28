@@ -287,13 +287,25 @@ class SubstrateServiceTest(IntegrationTestCase):
 
     def test_create_proposal(self):
         dao_id = "abc"
+        keypair = object()
+
+        self.substrate_service.create_proposal(
+            dao_id=dao_id,
+            keypair=keypair,  # noqa
+        )
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Votes", call_function="create_proposal", call_params={"dao_id": dao_id}
+        )
+        self.assert_signed_extrinsic_submitted(keypair=keypair)
+
+    def test_proposal_set_metadata(self):
         proposal_id = "cba"
         metadata_url = "some_url"
         metadata_hash = "some_hash"
         keypair = object()
 
-        self.substrate_service.create_proposal(
-            dao_id=dao_id,
+        self.substrate_service.proposal_set_metadata(
             proposal_id=proposal_id,
             metadata_url=metadata_url,
             metadata_hash=metadata_hash,
@@ -302,8 +314,8 @@ class SubstrateServiceTest(IntegrationTestCase):
 
         self.si.compose_call.assert_called_once_with(
             call_module="Votes",
-            call_function="create_proposal",
-            call_params={"dao_id": dao_id, "proposal_id": proposal_id, "meta": metadata_url, "hash": metadata_hash},
+            call_function="set_metadata",
+            call_params={"proposal_id": proposal_id, "meta": metadata_url, "hash": metadata_hash},
         )
         self.assert_signed_extrinsic_submitted(keypair=keypair)
 

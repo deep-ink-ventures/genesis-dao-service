@@ -570,8 +570,7 @@ class EventHandlerTest(IntegrationTestCase):
         ]
         self.assertModelsEqual(models.Dao.objects.order_by("id"), expected_daos)
 
-    @patch("core.file_handling.file_handler.urlopen")
-    def test__create_proposals(self, urlopen_mock):
+    def test__create_proposals(self):
         models.Account.objects.create(address="acc1")
         models.Account.objects.create(address="acc2")
         models.Account.objects.create(address="acc3")
@@ -612,6 +611,81 @@ class EventHandlerTest(IntegrationTestCase):
         models.AssetHolding.objects.create(asset_id=3, owner_id="acc3", balance=30)
         models.AssetHolding.objects.create(asset_id=3, owner_id="acc1", balance=20)
 
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            extrinsic_data={
+                "not": "interesting",
+                "Votes": {
+                    "not": "interesting",
+                    "create_proposal": [
+                        {
+                            "dao_id": "dao1",
+                            "not": "interesting",
+                        },
+                        {
+                            "dao_id": "dao2",
+                            "not": "interesting",
+                        },
+                        # should not be updated cause of missing corresponding event
+                        {
+                            "dao_id": "dao3",
+                            "not": "interesting",
+                        },
+                    ],
+                },
+            },
+            event_data={
+                "not": "interesting",
+                "Votes": {
+                    "not": "interesting",
+                    "ProposalCreated": [
+                        {"proposal_id": "prop1", "dao_id": "dao1", "not": "interesting"},
+                        {"proposal_id": "prop2", "dao_id": "dao2", "not": "interesting"},
+                    ],
+                },
+            },
+        )
+        time = timezone.now()
+        expected_proposals = [
+            models.Proposal(
+                id="prop1",
+                dao_id="dao1",
+                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 10),
+            ),
+            models.Proposal(
+                id="prop2",
+                dao_id="dao2",
+                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 15),
+            ),
+        ]
+        expected_votes = [
+            models.Vote(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=None),
+            models.Vote(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=None),
+            models.Vote(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=None),
+            models.Vote(proposal_id="prop2", voter_id="acc3", voting_power=50, in_favor=None),
+            models.Vote(proposal_id="prop2", voter_id="acc2", voting_power=30, in_favor=None),
+            models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None),
+        ]
+
+        with self.assertNumQueries(4), freeze_time(time):
+            substrate_event_handler._create_proposals(block)
+
+        self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
+        self.assertModelsEqual(
+            models.Vote.objects.order_by("proposal_id", "-voting_power"),
+            expected_votes,
+            ignore_fields=("created_at", "updated_at", "id"),
+        )
+
+    @patch("core.file_handling.file_handler.urlopen")
+    def test__set_proposal_metadata(self, urlopen_mock):
+        models.Account.objects.create(address="acc1")
+        models.Account.objects.create(address="acc2")
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
+        models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
+        models.Proposal.objects.create(id="1", dao_id="dao1")
+        models.Proposal.objects.create(id="2", dao_id="dao2")
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -627,17 +701,16 @@ class EventHandlerTest(IntegrationTestCase):
                 "not": "interesting",
                 "Votes": {
                     "not": "interesting",
-                    "create_proposal": [
+                    "set_metadata": [
                         {
-                            "dao_id": "dao1",
-                            "proposal_id": "prop1",
+                            "proposal_id": 1,
                             "hash": metadata_hash_1,
                             "meta": "url1",
                             "not": "interesting",
                         },
                         {
                             "dao_id": "dao2",
-                            "proposal_id": "prop2",
+                            "proposal_id": 2,
                             "hash": metadata_hash_2,
                             "meta": "url2",
                             "not": "interesting",
@@ -645,7 +718,7 @@ class EventHandlerTest(IntegrationTestCase):
                         # should not be updated cause of missing corresponding event
                         {
                             "dao_id": "dao3",
-                            "proposal_id": "prop3",
+                            "proposal_id": 3,
                             "hash": metadata_hash_2,
                             "meta": "url2",
                             "not": "interesting",
@@ -657,86 +730,47 @@ class EventHandlerTest(IntegrationTestCase):
                 "not": "interesting",
                 "Votes": {
                     "not": "interesting",
-                    "ProposalCreated": [
-                        {"proposal_id": "prop1", "not": "interesting"},
-                        {"proposal_id": "prop2", "not": "interesting"},
+                    "ProposalMetadataSet": [
+                        {"proposal_id": 1, "not": "interesting"},
+                        {"proposal_id": 2, "not": "interesting"},
                     ],
                 },
             },
         )
-        time = timezone.now()
         expected_proposals = [
             models.Proposal(
-                id="prop1",
+                id="1",
                 dao_id="dao1",
                 metadata_url="url1",
                 metadata_hash=metadata_hash_1,
                 metadata=metadata_1,
-                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 10),
             ),
             models.Proposal(
-                id="prop2",
+                id="2",
                 dao_id="dao2",
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
                 metadata=metadata_2,
-                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 15),
             ),
         ]
-        expected_votes = [
-            models.Vote(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=None),
-            models.Vote(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=None),
-            models.Vote(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=None),
-            models.Vote(proposal_id="prop2", voter_id="acc3", voting_power=50, in_favor=None),
-            models.Vote(proposal_id="prop2", voter_id="acc2", voting_power=30, in_favor=None),
-            models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None),
-        ]
-
-        with self.assertNumQueries(6), freeze_time(time):
-            substrate_event_handler._create_proposals(block)
+        with self.assertNumQueries(4):
+            substrate_event_handler._set_proposal_metadata(block)
 
         urlopen_mock.assert_has_calls([call("url1"), call("url2")], any_order=True)
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
-        self.assertModelsEqual(
-            models.Vote.objects.order_by("proposal_id", "-voting_power"),
-            expected_votes,
-            ignore_fields=("created_at", "updated_at", "id"),
-        )
 
     @patch("core.tasks.logger")
     @patch("core.file_handling.file_handler.urlopen")
-    def test__create_proposals_hash_mismatch(self, urlopen_mock, logger_mock):
+    def test__proposal_set_metadata_hash_mismatch(self, urlopen_mock, logger_mock):
         models.Account.objects.create(address="acc1")
         models.Account.objects.create(address="acc2")
         models.Account.objects.create(address="acc3")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
-        models.Governance.objects.create(
-            dao_id="dao1",
-            type=models.GovernanceType.MAJORITY_VOTE,
-            proposal_duration=10,
-            proposal_token_deposit=10,
-            minimum_majority=10,
-        )
-        models.Governance.objects.create(
-            dao_id="dao2",
-            type=models.GovernanceType.MAJORITY_VOTE,
-            proposal_duration=15,
-            proposal_token_deposit=10,
-            minimum_majority=10,
-        )
-        models.Governance.objects.create(
-            dao_id="dao3",
-            type=models.GovernanceType.MAJORITY_VOTE,
-            proposal_duration=20,
-            proposal_token_deposit=10,
-            minimum_majority=10,
-        )
-        models.Asset.objects.create(id=1, dao_id="dao1", owner_id="acc1", total_supply=100)
-        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=50)
-        models.AssetHolding.objects.create(asset_id=1, owner_id="acc2", balance=30)
-        models.AssetHolding.objects.create(asset_id=1, owner_id="acc3", balance=20)
+        models.Proposal.objects.create(id="1", dao_id="dao1")
+        models.Proposal.objects.create(id="2", dao_id="dao2")
+        models.Proposal.objects.create(id="3", dao_id="dao3")
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_2 = {"a": 2}
@@ -751,25 +785,22 @@ class EventHandlerTest(IntegrationTestCase):
                 "not": "interesting",
                 "Votes": {
                     "not": "interesting",
-                    "create_proposal": [
+                    "set_metadata": [
                         {
-                            "dao_id": "dao1",
-                            "proposal_id": "prop1",
+                            "proposal_id": 1,
                             "hash": "wrong hash",
                             "meta": "url1",
                             "not": "interesting",
                         },
                         {
-                            "dao_id": "dao2",
-                            "proposal_id": "prop2",
+                            "proposal_id": 2,
                             "hash": metadata_hash_2,
                             "meta": "url2",
                             "not": "interesting",
                         },
                         # should not be updated cause of missing corresponding event
                         {
-                            "dao_id": "dao3",
-                            "proposal_id": "prop3",
+                            "proposal_id": 3,
                             "hash": metadata_hash_2,
                             "meta": "url2",
                             "not": "interesting",
@@ -781,85 +812,54 @@ class EventHandlerTest(IntegrationTestCase):
                 "not": "interesting",
                 "Votes": {
                     "not": "interesting",
-                    "ProposalCreated": [
-                        {"proposal_id": "prop1", "not": "interesting"},
-                        {"proposal_id": "prop2", "not": "interesting"},
+                    "ProposalMetadataSet": [
+                        {"proposal_id": 1, "not": "interesting"},
+                        {"proposal_id": 2, "not": "interesting"},
                     ],
                 },
             },
         )
-        time = timezone.now()
         expected_proposals = [
             models.Proposal(
-                id="prop1",
+                id="1",
                 dao_id="dao1",
                 metadata_url="url1",
                 metadata_hash="wrong hash",
                 metadata=None,
-                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 10),
             ),
             models.Proposal(
-                id="prop2",
+                id="2",
                 dao_id="dao2",
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
                 metadata=metadata_2,
-                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 15),
+            ),
+            models.Proposal(
+                id="3",
+                dao_id="dao3",
+                metadata_url=None,
+                metadata_hash=None,
+                metadata=None,
             ),
         ]
-        expected_votes = [
-            models.Vote(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=None),
-            models.Vote(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=None),
-            models.Vote(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=None),
-        ]
 
-        with self.assertNumQueries(6), freeze_time(time):
-            substrate_event_handler._create_proposals(block)
+        with self.assertNumQueries(4):
+            substrate_event_handler._set_proposal_metadata(block)
 
         urlopen_mock.assert_has_calls([call("url1"), call("url2")], any_order=True)
         logger_mock.error.assert_called_once_with("Hash mismatch while fetching Proposal metadata from provided url.")
 
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
-        self.assertModelsEqual(
-            models.Vote.objects.order_by("proposal_id", "-voting_power"),
-            expected_votes,
-            ignore_fields=("created_at", "updated_at", "id"),
-        )
 
     @patch("core.tasks.logger")
     @patch("core.file_handling.file_handler.FileHandler.download_metadata")
-    def test__create_proposals_exception(self, download_metadata_mock, logger_mock):
+    def test__proposals_set_metadata_exception(self, download_metadata_mock, logger_mock):
         models.Account.objects.create(address="acc1")
         models.Account.objects.create(address="acc2")
-        models.Account.objects.create(address="acc3")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
-        models.Governance.objects.create(
-            dao_id="dao1",
-            type=models.GovernanceType.MAJORITY_VOTE,
-            proposal_duration=10,
-            proposal_token_deposit=10,
-            minimum_majority=10,
-        )
-        models.Governance.objects.create(
-            dao_id="dao2",
-            type=models.GovernanceType.MAJORITY_VOTE,
-            proposal_duration=15,
-            proposal_token_deposit=10,
-            minimum_majority=10,
-        )
-        models.Governance.objects.create(
-            dao_id="dao3",
-            type=models.GovernanceType.MAJORITY_VOTE,
-            proposal_duration=20,
-            proposal_token_deposit=10,
-            minimum_majority=10,
-        )
-        models.Asset.objects.create(id=2, dao_id="dao2", owner_id="acc2", total_supply=100)
-        models.AssetHolding.objects.create(asset_id=2, owner_id="acc3", balance=50)
-        models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=30)
-        models.AssetHolding.objects.create(asset_id=2, owner_id="acc1", balance=20)
+        models.Proposal.objects.create(id="1", dao_id="dao1")
+        models.Proposal.objects.create(id="2", dao_id="dao2")
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -880,25 +880,17 @@ class EventHandlerTest(IntegrationTestCase):
                 "not": "interesting",
                 "Votes": {
                     "not": "interesting",
-                    "create_proposal": [
+                    "set_metadata": [
                         {
                             "dao_id": "dao1",
-                            "proposal_id": "prop1",
+                            "proposal_id": 1,
                             "hash": metadata_hash_1,
                             "meta": "url1",
                             "not": "interesting",
                         },
                         {
                             "dao_id": "dao2",
-                            "proposal_id": "prop2",
-                            "hash": metadata_hash_2,
-                            "meta": "url2",
-                            "not": "interesting",
-                        },
-                        # should not be updated cause of missing corresponding event
-                        {
-                            "dao_id": "dao3",
-                            "proposal_id": "prop3",
+                            "proposal_id": 2,
                             "hash": metadata_hash_2,
                             "meta": "url2",
                             "not": "interesting",
@@ -910,40 +902,32 @@ class EventHandlerTest(IntegrationTestCase):
                 "not": "interesting",
                 "Votes": {
                     "not": "interesting",
-                    "ProposalCreated": [
-                        {"proposal_id": "prop1", "not": "interesting"},
-                        {"proposal_id": "prop2", "not": "interesting"},
+                    "ProposalMetadataSet": [
+                        {"proposal_id": 1, "not": "interesting"},
+                        {"proposal_id": 2, "not": "interesting"},
                     ],
                 },
             },
         )
-        time = timezone.now()
         expected_proposals = [
             models.Proposal(
-                id="prop1",
+                id="1",
                 dao_id="dao1",
                 metadata_url="url1",
                 metadata_hash=metadata_hash_1,
                 metadata=None,
-                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 10),
             ),
             models.Proposal(
-                id="prop2",
+                id="2",
                 dao_id="dao2",
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
                 metadata=metadata_2,
-                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 15),
             ),
         ]
-        expected_votes = [
-            models.Vote(proposal_id="prop2", voter_id="acc3", voting_power=50, in_favor=None),
-            models.Vote(proposal_id="prop2", voter_id="acc2", voting_power=30, in_favor=None),
-            models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None),
-        ]
 
-        with self.assertNumQueries(6), freeze_time(time):
-            substrate_event_handler._create_proposals(block)
+        with self.assertNumQueries(4):
+            substrate_event_handler._set_proposal_metadata(block)
 
         download_metadata_mock.assert_has_calls(
             [
@@ -956,42 +940,16 @@ class EventHandlerTest(IntegrationTestCase):
             "Unexpected error while fetching Proposal metadata from provided url."
         )
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
-        self.assertModelsEqual(
-            models.Vote.objects.order_by("proposal_id", "-voting_power"),
-            expected_votes,
-            ignore_fields=("created_at", "updated_at", "id"),
-        )
 
     @patch("core.tasks.logger")
     @patch("core.file_handling.file_handler.FileHandler.download_metadata")
     def test__create_proposals_everything_failed(self, download_metadata_mock, logger_mock):
         models.Account.objects.create(address="acc1")
         models.Account.objects.create(address="acc2")
-        models.Account.objects.create(address="acc3")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
-        models.Governance.objects.create(
-            dao_id="dao1",
-            type=models.GovernanceType.MAJORITY_VOTE,
-            proposal_duration=10,
-            proposal_token_deposit=10,
-            minimum_majority=10,
-        )
-        models.Governance.objects.create(
-            dao_id="dao2",
-            type=models.GovernanceType.MAJORITY_VOTE,
-            proposal_duration=15,
-            proposal_token_deposit=10,
-            minimum_majority=10,
-        )
-        models.Governance.objects.create(
-            dao_id="dao3",
-            type=models.GovernanceType.MAJORITY_VOTE,
-            proposal_duration=20,
-            proposal_token_deposit=10,
-            minimum_majority=10,
-        )
+        models.Proposal.objects.create(id="1", dao_id="dao1")
+        models.Proposal.objects.create(id="2", dao_id="dao2")
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -1007,25 +965,17 @@ class EventHandlerTest(IntegrationTestCase):
                 "not": "interesting",
                 "Votes": {
                     "not": "interesting",
-                    "create_proposal": [
+                    "set_metadata": [
                         {
                             "dao_id": "dao1",
-                            "proposal_id": "prop1",
+                            "proposal_id": "1",
                             "hash": metadata_hash_1,
                             "meta": "url1",
                             "not": "interesting",
                         },
                         {
                             "dao_id": "dao2",
-                            "proposal_id": "prop2",
-                            "hash": metadata_hash_2,
-                            "meta": "url2",
-                            "not": "interesting",
-                        },
-                        # should not be updated cause of missing corresponding event
-                        {
-                            "dao_id": "dao3",
-                            "proposal_id": "prop3",
+                            "proposal_id": "2",
                             "hash": metadata_hash_2,
                             "meta": "url2",
                             "not": "interesting",
@@ -1037,35 +987,32 @@ class EventHandlerTest(IntegrationTestCase):
                 "not": "interesting",
                 "Votes": {
                     "not": "interesting",
-                    "ProposalCreated": [
-                        {"proposal_id": "prop1", "not": "interesting"},
-                        {"proposal_id": "prop2", "not": "interesting"},
+                    "ProposalMetadataSet": [
+                        {"proposal_id": "1", "not": "interesting"},
+                        {"proposal_id": "2", "not": "interesting"},
                     ],
                 },
             },
         )
-        time = timezone.now()
         expected_proposals = [
             models.Proposal(
-                id="prop1",
+                id="1",
                 dao_id="dao1",
                 metadata_url="url1",
                 metadata_hash=metadata_hash_1,
                 metadata=None,
-                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 10),
             ),
             models.Proposal(
-                id="prop2",
+                id="2",
                 dao_id="dao2",
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
                 metadata=None,
-                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 15),
             ),
         ]
 
-        with self.assertNumQueries(4), freeze_time(time):
-            substrate_event_handler._create_proposals(block)
+        with self.assertNumQueries(3):
+            substrate_event_handler._set_proposal_metadata(block)
 
         download_metadata_mock.assert_has_calls(
             [
@@ -1212,15 +1159,9 @@ class EventHandlerTest(IntegrationTestCase):
             },
         )
         expected_proposals = [
-            models.Proposal(
-                id="prop1", dao_id="dao1", reason_for_fault="reason 1", status=models.ProposalStatus.FAULTED
-            ),
-            models.Proposal(
-                id="prop2", dao_id="dao1", reason_for_fault="reason 2", status=models.ProposalStatus.FAULTED
-            ),
-            models.Proposal(
-                id="prop3", dao_id="dao2", reason_for_fault="reason 3", status=models.ProposalStatus.FAULTED
-            ),
+            models.Proposal(id="prop1", dao_id="dao1", fault="reason 1", status=models.ProposalStatus.FAULTED),
+            models.Proposal(id="prop2", dao_id="dao1", fault="reason 2", status=models.ProposalStatus.FAULTED),
+            models.Proposal(id="prop3", dao_id="dao2", fault="reason 3", status=models.ProposalStatus.FAULTED),
             models.Proposal(id="prop4", dao_id="dao1", status=models.ProposalStatus.RUNNING),
             models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.RUNNING),
         ]

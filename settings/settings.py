@@ -147,6 +147,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": ("rest_framework.parsers.JSONParser",),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.AllowAny",),
     "PAGE_SIZE": 10,
+    "DEFAULT_THROTTLE_RATES": {
+        "user": "5/hour",
+    },
 }
 
 # Internationalization

@@ -86,11 +86,16 @@ class Proposal(TimestampableMixin):
     dao = models.ForeignKey(Dao, related_name="proposals", on_delete=models.CASCADE)
     creator = models.ForeignKey(Account, related_name="proposals", on_delete=models.SET_NULL, null=True)
     status = models.CharField(max_length=16, choices=ProposalStatus.as_choices(), default=ProposalStatus.RUNNING)
-    reason_for_fault = models.TextField(null=True)
+    fault = models.TextField(null=True)
     ends_at = models.DateTimeField(null=True)
     metadata = models.JSONField(null=True)
     metadata_url = models.CharField(max_length=256, null=True)
     metadata_hash = models.CharField(max_length=256, null=True)
+
+
+class ProposalReport(TimestampableMixin):
+    reason = models.TextField()
+    proposal = models.ForeignKey(Proposal, on_delete=models.CASCADE)
 
 
 class Vote(TimestampableMixin):

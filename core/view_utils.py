@@ -41,6 +41,21 @@ class IsProposalCreator(BasePermission):
         return substrate_service.verify(address=obj.creator_id, signature=request.headers.get("Signature"))
 
 
+class IsTokenHolder(BasePermission):
+    message = {"error": "This request's header needs to contain signature=*signed-challenge*."}
+
+    def has_permission(self, request, view):
+        from core.models import AssetHolding
+        from core.substrate import substrate_service
+
+        return any(
+            substrate_service.verify(address=address, signature=request.headers.get("Signature"))
+            for address in AssetHolding.objects.filter(
+                asset__dao__proposals__id=request.data["proposal_id"]
+            ).values_list("owner_id", flat=True)
+        )
+
+
 class FilterBackend:
     order_kw = "order_by"
     ignored_filter_fields = ("limit", "offset", order_kw)

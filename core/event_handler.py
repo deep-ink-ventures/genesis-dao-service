@@ -2,6 +2,7 @@ import collections
 import logging
 from functools import reduce
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -30,6 +31,7 @@ class SubstrateEventHandler:
             self._set_dao_metadata,
             self._dao_set_governances,
             self._create_proposals,
+            self._set_proposal_metadata,
             self._register_votes,
             self._finalize_proposals,
             self._fault_proposals,
@@ -280,30 +282,21 @@ class SubstrateEventHandler:
     def _create_proposals(block: models.Block):
         """
         Args:
-            block: Block to set DAO's governance model from
+            block: Block to create Proposals from
 
         Returns:
             None
 
-        create Proposal based on the Block's extrinsics and events
+        create Proposals based on the Block's extrinsics and events
         """
         proposals = []
-        proposal_ids = set()
         dao_ids = set()
 
-        for proposal_created_extrinsic in block.extrinsic_data.get("Votes", {}).get("create_proposal", []):
-            for proposal_created_event in block.event_data.get("Votes", {}).get("ProposalCreated", []):
-                if (proposal_id := proposal_created_extrinsic["proposal_id"]) == proposal_created_event["proposal_id"]:
-                    proposal_ids.add(proposal_id)
-                    dao_ids.add(proposal_created_extrinsic["dao_id"])
-                    proposals.append(
-                        models.Proposal(
-                            id=proposal_id,
-                            dao_id=proposal_created_extrinsic["dao_id"],
-                            metadata_url=proposal_created_extrinsic["meta"],
-                            metadata_hash=proposal_created_extrinsic["hash"],
-                        )
-                    )
+        for proposal_created_event in block.event_data.get("Votes", {}).get("ProposalCreated", []):
+            # todo add creator_id
+            dao_id = proposal_created_event["dao_id"]
+            dao_ids.add(dao_id)
+            proposals.append(models.Proposal(id=proposal_created_event["proposal_id"], dao_id=dao_id))
         if proposals:
             dao_id_to_holding_data = collections.defaultdict(list)
             for dao_id, owner_id, balance in models.AssetHolding.objects.filter(asset__dao__id__in=dao_ids).values_list(
@@ -321,7 +314,7 @@ class SubstrateEventHandler:
             # current time + proposal duration in block * block creation interval (6s)
             for proposal in proposals:
                 proposal.ends_at = timezone.now() + timezone.timedelta(
-                    seconds=dao_id_to_proposal_duration[proposal.dao_id] * 6
+                    seconds=dao_id_to_proposal_duration[proposal.dao_id] * settings.BLOCK_CREATION_INTERVAL
                 )
 
             models.Proposal.objects.bulk_create(proposals)
@@ -334,7 +327,31 @@ class SubstrateEventHandler:
                     for voter_id, balance in dao_id_to_holding_data[proposal.dao_id]
                 ]
             )
-            tasks.update_proposal_metadata.delay(proposal_ids=list(proposal_ids))
+
+    @staticmethod
+    def _set_proposal_metadata(block: models.Block):
+        """
+        Args:
+            block: Block to set Proposal's metadata from
+
+        Returns:
+            None
+
+        set Proposals' metadata based on the Block's extrinsics and events
+        """
+        proposal_data = {}  # proposal_id: (metadata_hash, metadata_url)
+        for proposal_created_event in block.event_data.get("Votes", {}).get("ProposalMetadataSet", []):
+            for proposal_created_extrinsic in block.extrinsic_data.get("Votes", {}).get("set_metadata", []):
+                if (proposal_id := proposal_created_extrinsic["proposal_id"]) == proposal_created_event["proposal_id"]:
+                    proposal_data[str(proposal_id)] = (
+                        proposal_created_extrinsic["hash"],
+                        proposal_created_extrinsic["meta"],
+                    )
+        if proposal_data:
+            for proposal in (proposals := models.Proposal.objects.filter(id__in=proposal_data.keys())):
+                proposal.metadata_hash, proposal.metadata_url = proposal_data[proposal.id]
+            models.Proposal.objects.bulk_update(proposals, fields=["metadata_hash", "metadata_url"])
+            tasks.update_proposal_metadata.delay(proposal_ids=list(proposal_data.keys()))
 
     @staticmethod
     def _register_votes(block: models.Block):
@@ -403,9 +420,9 @@ class SubstrateEventHandler:
             for fault_event in block.event_data.get("Votes", {}).get("ProposalFaulted", [])
         }:
             for proposal in (proposals := models.Proposal.objects.filter(id__in=faulted_proposals.keys())):
-                proposal.reason_for_fault = faulted_proposals[proposal.id]
+                proposal.fault = faulted_proposals[proposal.id]
                 proposal.status = models.ProposalStatus.FAULTED
-            models.Proposal.objects.bulk_update(proposals, ("reason_for_fault", "status"))
+            models.Proposal.objects.bulk_update(proposals, ("fault", "status"))
 
     @transaction.atomic
     def execute_actions(self, block: models.Block):

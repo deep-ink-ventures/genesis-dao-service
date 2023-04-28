@@ -1,6 +1,7 @@
 import base64
 import secrets
 from collections.abc import Collection
+from functools import partial
 from unittest.mock import Mock, PropertyMock, patch
 
 from ddt import data, ddt
@@ -94,7 +95,7 @@ class CoreViewSetTest(IntegrationTestCase):
             metadata_url="url2",
             metadata_hash="hash2",
             metadata={"a": 2},
-            reason_for_fault="some reason",
+            fault="some reason",
             status=models.ProposalStatus.FAULTED,
         )
         models.Vote.objects.create(proposal_id="prop1", voter_id="acc1", in_favor=True, voting_power=500)
@@ -548,7 +549,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "metadata": {"a": 1},
             "metadata_url": "url1",
             "metadata_hash": "hash1",
-            "reason_for_fault": None,
+            "fault": None,
             "status": models.ProposalStatus.RUNNING,
             "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
             "ends_at": "2023-12-31T00:59:59Z",
@@ -569,7 +570,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": {"a": 1},
                     "metadata_url": "url1",
                     "metadata_hash": "hash1",
-                    "reason_for_fault": None,
+                    "fault": None,
                     "status": models.ProposalStatus.RUNNING,
                     "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
                     "ends_at": "2023-12-31T00:59:59Z",
@@ -581,7 +582,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": {"a": 2},
                     "metadata_url": "url2",
                     "metadata_hash": "hash2",
-                    "reason_for_fault": "some reason",
+                    "fault": "some reason",
                     "status": models.ProposalStatus.FAULTED,
                     "votes": {"pro": 0, "contra": 200, "abstained": 0, "total": 200},
                     "ends_at": None,
@@ -613,12 +614,13 @@ class CoreViewSetTest(IntegrationTestCase):
             "metadata_url": "https://some_storage.some_region.com/DAO1/proposals/PROP1/metadata.json",
         }
 
-        res = self.client.post(
-            reverse("core-proposal-add-metadata", kwargs={"pk": "PROP1"}),
-            post_data,
-            content_type="application/json",
-            HTTP_SIGNATURE=signature,
-        )
+        with self.assertNumQueries(3):
+            res = self.client.post(
+                reverse("core-proposal-add-metadata", kwargs={"pk": "PROP1"}),
+                post_data,
+                content_type="application/json",
+                HTTP_SIGNATURE=signature,
+            )
 
         self.assertEqual(res.status_code, HTTP_201_CREATED, res.data)
         self.assertDictEqual(res.data, expected_res)
@@ -630,12 +632,13 @@ class CoreViewSetTest(IntegrationTestCase):
             "url": "https://www.some-url.com/",
         }
 
-        res = self.client.post(
-            reverse("core-proposal-add-metadata", kwargs={"pk": "prop1"}),
-            post_data,
-            content_type="application/json",
-            HTTP_SIGNATURE="wrong signature",
-        )
+        with self.assertNumQueries(2):
+            res = self.client.post(
+                reverse("core-proposal-add-metadata", kwargs={"pk": "prop1"}),
+                post_data,
+                content_type="application/json",
+                HTTP_SIGNATURE="wrong signature",
+            )
 
         self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
         self.assertEqual(
@@ -648,3 +651,101 @@ class CoreViewSetTest(IntegrationTestCase):
                 )
             },
         )
+
+    def test_proposal_report_faulted(self):
+        cache.clear()
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        acc = models.Account.objects.create(address=keypair.ss58_address)
+        models.AssetHolding.objects.create(owner=acc, asset_id=1, balance=10)
+        proposal_id = "prop1"
+        post_data = {"reason": "very good reason", "proposal_id": proposal_id}
+
+        with self.assertNumQueries(3):
+            res = self.client.post(
+                reverse("core-proposal-report-faulted", kwargs={"pk": proposal_id}),
+                post_data,
+                content_type="application/json",
+                HTTP_SIGNATURE=signature,
+            )
+
+        self.assertEqual(res.data, post_data)
+
+    def test_proposal_report_faulted_no_holdings(self):
+        cache.clear()
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        models.Account.objects.create(address=keypair.ss58_address)
+        proposal_id = "prop1"
+        post_data = {"reason": "very good reason", "proposal_id": proposal_id}
+
+        with self.assertNumQueries(1):
+            res = self.client.post(
+                reverse("core-proposal-report-faulted", kwargs={"pk": proposal_id}),
+                post_data,
+                content_type="application/json",
+                HTTP_SIGNATURE=signature,
+            )
+
+        self.assertEqual(
+            res.data,
+            {
+                "error": ErrorDetail(
+                    string="This request's header needs to contain signature=*signed-challenge*.",
+                    code="permission_denied",
+                )
+            },
+        )
+
+    def test_proposal_report_faulted_throttle(self):
+        cache.clear()
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        acc = models.Account.objects.create(address=keypair.ss58_address)
+        models.AssetHolding.objects.create(owner=acc, asset_id=1, balance=10)
+        proposal_id = "prop1"
+        post_data = {"reason": "very good reason", "proposal_id": proposal_id}
+
+        call = partial(
+            self.client.post,
+            reverse("core-proposal-report-faulted", kwargs={"pk": proposal_id}),
+            post_data,
+            content_type="application/json",
+            HTTP_SIGNATURE=signature,
+        )
+        for count in range(7):
+            if count < 3:
+                with self.assertNumQueries(3):
+                    res = call()
+                self.assertEqual(res.data, post_data)
+            elif count < 5:
+                with self.assertNumQueries(2):
+                    res = call()
+                self.assertEqual(res.data, {"detail": "The proposal report maximum has already been reached."})
+            else:
+                with self.assertNumQueries(1):
+                    res = call()
+                self.assertEqual(
+                    res.data,
+                    {
+                        "detail": ErrorDetail(
+                            "Request was throttled. Expected available in 3600 seconds.", code="throttled"
+                        )
+                    },
+                )
+
+    def test_reports(self):
+        models.ProposalReport.objects.create(proposal_id="prop1", reason="reason 1")
+        models.ProposalReport.objects.create(proposal_id="prop1", reason="reason 2")
+        models.ProposalReport.objects.create(proposal_id="prop2", reason="reason 3")  # should not appear
+        expected_res = [
+            {"proposal_id": "prop1", "reason": "reason 1"},
+            {"proposal_id": "prop1", "reason": "reason 2"},
+        ]
+        with self.assertNumQueries(1):
+            res = self.client.get(reverse("core-proposal-reports", kwargs={"pk": "prop1"}))
+
+        self.assertCountEqual(res.data, expected_res)

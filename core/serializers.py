@@ -180,7 +180,7 @@ class ProposalSerializer(ModelSerializer):
             "dao_id",
             "creator_id",
             "status",
-            "reason_for_fault",
+            "fault",
             "votes",
             "metadata",
             "metadata_url",
@@ -199,6 +199,18 @@ class ProposalMetadataResponseSerialzier(Serializer):  # noqa
     metadata = AddProposalMetadataSerializer()
     metadata_hash = CharField()
     metadata_url = URLField()
+
+
+class ReportFaultedSerializer(ModelSerializer):
+    proposal_id = CharField()
+    reason = CharField(max_length=1024)
+
+    class Meta:
+        model = models.ProposalReport
+        fields = ("proposal_id", "reason")
+
+    def create(self, validated_data):
+        return models.ProposalReport.objects.create(**validated_data)
 
 
 class ChallengeSerializer(Serializer):  # noqa

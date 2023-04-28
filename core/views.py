@@ -9,7 +9,8 @@ from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED
+from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_400_BAD_REQUEST
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from core import models, serializers
@@ -17,6 +18,7 @@ from core.file_handling.file_handler import file_handler
 from core.view_utils import (
     IsDAOOwner,
     IsProposalCreator,
+    IsTokenHolder,
     MultiQsLimitOffsetPagination,
     SearchableMixin,
     signature_in_header,
@@ -253,6 +255,8 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
             "retrieve": serializers.ProposalSerializer,
             "list": serializers.ProposalSerializer,
             "add_metadata": serializers.AddProposalMetadataSerializer,
+            "report_faulted": serializers.ReportFaultedSerializer,
+            "reports": serializers.ReportFaultedSerializer,
         }.get(self.action)
 
     @swagger_auto_schema(
@@ -281,3 +285,46 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
         proposal.metadata_hash = metadata["metadata_hash"]
         proposal.save(update_fields=["metadata", "metadata_url", "metadata_hash"])
         return Response(metadata, status=HTTP_201_CREATED)
+
+    @swagger_auto_schema(
+        operation_id="Report faulted",
+        operation_description="Report a Proposal as faulted.",
+        manual_parameters=[signature_in_header],
+        security=[{"Signature": []}],
+        responses={201: openapi.Response("", serializers.ReportFaultedSerializer)},
+    )
+    @action(
+        methods=["POST"],
+        detail=True,
+        url_path="report-faulted",
+        permission_classes=[IsTokenHolder],
+        authentication_classes=[],
+        throttle_classes=[UserRateThrottle],
+    )
+    def report_faulted(self, request, *args, **kwargs):
+        proposal_id = kwargs["pk"]
+        if models.ProposalReport.objects.filter(proposal_id=proposal_id).count() >= 3:
+            return Response(
+                {"detail": "The proposal report maximum has already been reached."}, status=HTTP_400_BAD_REQUEST
+            )
+        request.data["proposal_id"] = proposal_id
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=HTTP_201_CREATED)
+
+    @swagger_auto_schema(
+        operation_id="List Reports",
+        operation_description="List all proposal reports.",
+        responses={201: openapi.Response("", serializers.ReportFaultedSerializer(many=True))},
+    )
+    @action(
+        methods=["GET"],
+        detail=True,
+        url_path="reports",
+    )
+    def reports(self, request, *args, **kwargs):
+        return Response(
+            self.get_serializer(models.ProposalReport.objects.filter(proposal_id=kwargs["pk"]), many=True).data,
+            status=HTTP_200_OK,
+        )

@@ -402,18 +402,12 @@ class SubstrateService(object):
     def create_proposal(
         self,
         dao_id: str,
-        proposal_id: str,
-        metadata_url: str,
-        metadata_hash: str,
         keypair: Keypair,
         wait_for_inclusion=False,
     ):
         """
         Args:
             dao_id: dao to create proposal for
-            proposal_id: id of the proposal
-            metadata_url: url of the metadata
-            metadata_hash: hash of the metadata
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
@@ -427,8 +421,40 @@ class SubstrateService(object):
                 call=self.substrate_interface.compose_call(
                     call_module="Votes",
                     call_function="create_proposal",
+                    call_params={"dao_id": dao_id},
+                ),
+                keypair=keypair,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
+
+    def proposal_set_metadata(
+        self,
+        proposal_id: str,
+        metadata_url: str,
+        metadata_hash: str,
+        keypair: Keypair,
+        wait_for_inclusion=False,
+    ):
+        """
+        Args:
+            proposal_id: id of the proposal
+            metadata_url: url of the metadata
+            metadata_hash: hash of the metadata
+            keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+        Returns:
+            None
+
+        submits a singed extrinsic to set metadata for a given proposal
+        """
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Votes",
+                    call_function="set_metadata",
                     call_params={
-                        "dao_id": dao_id,
                         "proposal_id": proposal_id,
                         "meta": metadata_url,
                         "hash": metadata_hash,
@@ -661,7 +687,7 @@ class SubstrateService(object):
             SubstrateException
         """
 
-        last_block = models.Block.objects.filter(executed=False).order_by("-number").first()
+        last_block = models.Block.objects.filter(executed=False).order_by("number").first()
         if not last_block:
             last_block = models.Block.objects.order_by("-number").first()
         # we can't sync with the chain if we have unprocessed blocks in the db
