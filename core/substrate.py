@@ -38,7 +38,12 @@ def retry(description: str):
 
             def log_and_sleep(err_msg: str, log_exception=False):
                 retry_delay = next(retry_delays, max_delay)
-                err_msg = f"{err_msg} while {description}. Retrying in {retry_delay}s ..."
+                err_msg = f"{err_msg} while {description}. "
+                if block_number := kwargs.get("block_number"):
+                    err_msg += f"Block number: {block_number}. "
+                if block_hash := kwargs.get("block_hash"):
+                    err_msg += f"Block hash: {block_hash}. "
+                err_msg += f"Retrying in {retry_delay}s ..."
                 if log_exception:
                     logger.exception(err_msg)
                 else:
