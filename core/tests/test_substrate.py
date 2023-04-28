@@ -54,19 +54,19 @@ class SubstrateServiceTest(IntegrationTestCase):
     def test_retry(self, exception_type, sleep_mock, logger_mock):
         sleep_mock.side_effect = None, None, Exception("break retry")
 
-        def _test():
+        def _test(**_kwargs):
             raise exception_type("roar")
 
         with override_settings(RETRY_DELAYS=(1, 2, 3)), self.assertRaisesMessage(Exception, "break retry"):
-            retry("some description")(_test)()
+            retry("some description")(_test)(block_number=1, block_hash="a")
 
         logger_mock = logger_mock.exception if exception_type == Exception else logger_mock.error
         error_description = "Unexpected error" if exception_type == Exception else exception_type.__name__
         logger_mock.assert_has_calls(
             [
-                call(f"{error_description} while some description. Retrying in 1s ..."),
-                call(f"{error_description} while some description. Retrying in 2s ..."),
-                call(f"{error_description} while some description. Retrying in 3s ..."),
+                call(f"{error_description} while some description. Block number: 1. Block hash: a. Retrying in 1s ..."),
+                call(f"{error_description} while some description. Block number: 1. Block hash: a. Retrying in 2s ..."),
+                call(f"{error_description} while some description. Block number: 1. Block hash: a. Retrying in 3s ..."),
             ]
         )
 
