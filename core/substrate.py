@@ -661,7 +661,9 @@ class SubstrateService(object):
             SubstrateException
         """
 
-        last_block = models.Block.objects.order_by("-number").first()
+        last_block = models.Block.objects.filter(executed=False).order_by("-number").first()
+        if not last_block:
+            last_block = models.Block.objects.order_by("-number").first()
         # we can't sync with the chain if we have unprocessed blocks in the db
         if last_block and not last_block.executed:
             logger.error(
