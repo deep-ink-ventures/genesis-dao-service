@@ -1,13 +1,5 @@
 # Genesis Dao Service
 
-## Prerequisites
-
-- [Install Python 3.11 or greater](https://www.python.org/downloads/)
-- [Install pip](https://pip.pypa.io/en/stable/installation/) 
-- [Install virtualenv](https://virtualenv.pypa.io/en/latest/installation.html)
-- [Install sqlite-devel / libsqlite3-dev](https://www.w3resource.com/sqlite/sqlite-download-installation-getting-started.php)
-- [Docker daemon must be available for development](https://docs.docker.com/engine/install/)
-
 ## Installation
 ### Setup
 
@@ -37,6 +29,15 @@ docker compose up
 
 
 ## Development Setup
+
+### Prerequisites
+
+- [Install Python 3.11 or greater](https://www.python.org/downloads/)
+- [Install pip](https://pip.pypa.io/en/stable/installation/) 
+- [Install virtualenv](https://virtualenv.pypa.io/en/latest/installation.html)
+- [Install sqlite-devel / libsqlite3-dev](https://www.w3resource.com/sqlite/sqlite-download-installation-getting-started.php)
+- [Docker daemon must be available for development](https://docs.docker.com/engine/install/)
+
 ### Create and activate Python venv
 
 ```shell
