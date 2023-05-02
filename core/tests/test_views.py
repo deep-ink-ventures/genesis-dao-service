@@ -8,7 +8,6 @@ from ddt import data, ddt
 from django.conf import settings
 from django.core.cache import cache
 from django.urls import reverse
-from django.utils import timezone
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.status import (
     HTTP_201_CREATED,
@@ -31,7 +30,7 @@ expected_dao1_res = {
     "creator_id": "acc1",
     "owner_id": "acc1",
     "asset_id": 1,
-    "proposal_duration": settings.BLOCK_CREATION_INTERVAL * 10,
+    "proposal_duration": 10,
     "setup_complete": False,
     "metadata": {"some": "data"},
     "metadata_url": None,
@@ -43,7 +42,7 @@ expected_dao2_res = {
     "creator_id": "acc2",
     "owner_id": "acc2",
     "asset_id": 2,
-    "proposal_duration": settings.BLOCK_CREATION_INTERVAL * 15,
+    "proposal_duration": 15,
     "setup_complete": False,
     "metadata": None,
     "metadata_url": None,
@@ -84,9 +83,7 @@ class CoreViewSetTest(IntegrationTestCase):
             metadata_url="url1",
             metadata_hash="hash1",
             metadata={"a": 1},
-            ends_at=timezone.datetime(
-                year=2023, month=12, day=31, minute=59, second=59, tzinfo=timezone.get_current_timezone()
-            ),
+            birth_block_number=10,
         )
         models.Proposal.objects.create(
             id="prop2",
@@ -97,6 +94,7 @@ class CoreViewSetTest(IntegrationTestCase):
             metadata={"a": 2},
             fault="some reason",
             status=models.ProposalStatus.FAULTED,
+            birth_block_number=15,
         )
         models.Vote.objects.create(proposal_id="prop1", voter_id="acc1", in_favor=True, voting_power=500)
         models.Vote.objects.create(proposal_id="prop1", voter_id="acc2", in_favor=True, voting_power=300)
@@ -552,7 +550,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "fault": None,
             "status": models.ProposalStatus.RUNNING,
             "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
-            "ends_at": "2023-12-31T00:59:59Z",
+            "birth_block_number": 10,
         }
 
         with self.assertNumQueries(2):
@@ -573,7 +571,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "fault": None,
                     "status": models.ProposalStatus.RUNNING,
                     "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
-                    "ends_at": "2023-12-31T00:59:59Z",
+                    "birth_block_number": 10,
                 },
                 {
                     "id": "prop2",
@@ -585,7 +583,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "fault": "some reason",
                     "status": models.ProposalStatus.FAULTED,
                     "votes": {"pro": 0, "contra": 200, "abstained": 0, "total": 200},
-                    "ends_at": None,
+                    "birth_block_number": 15,
                 },
             ]
         )
@@ -601,7 +599,7 @@ class CoreViewSetTest(IntegrationTestCase):
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
         acc = models.Account.objects.create(address=keypair.ss58_address)
         models.Dao.objects.create(id="DAO1", name="dao1 name", owner=acc)
-        models.Proposal.objects.create(id="PROP1", dao_id="DAO1", creator=acc)
+        models.Proposal.objects.create(id="PROP1", dao_id="DAO1", creator=acc, birth_block_number=10)
 
         post_data = {
             "title": "some title",

@@ -293,10 +293,16 @@ class SubstrateEventHandler:
         dao_ids = set()
 
         for proposal_created_event in block.event_data.get("Votes", {}).get("ProposalCreated", []):
-            # todo add creator_id
             dao_id = proposal_created_event["dao_id"]
             dao_ids.add(dao_id)
-            proposals.append(models.Proposal(id=proposal_created_event["proposal_id"], dao_id=dao_id))
+            proposals.append(
+                models.Proposal(
+                    id=proposal_created_event["proposal_id"],
+                    dao_id=dao_id,
+                    creator_id=proposal_created_event["creator"],
+                    birth_block_number=block.number,
+                )
+            )
         if proposals:
             dao_id_to_holding_data = collections.defaultdict(list)
             for dao_id, owner_id, balance in models.AssetHolding.objects.filter(asset__dao__id__in=dao_ids).values_list(

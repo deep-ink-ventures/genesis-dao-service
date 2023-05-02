@@ -87,7 +87,7 @@ class Proposal(TimestampableMixin):
     creator = models.ForeignKey(Account, related_name="proposals", on_delete=models.SET_NULL, null=True)
     status = models.CharField(max_length=16, choices=ProposalStatus.as_choices(), default=ProposalStatus.RUNNING)
     fault = models.TextField(null=True)
-    ends_at = models.DateTimeField(null=True)
+    birth_block_number = models.PositiveBigIntegerField()
     metadata = models.JSONField(null=True)
     metadata_url = models.CharField(max_length=256, null=True)
     metadata_hash = models.CharField(max_length=256, null=True)

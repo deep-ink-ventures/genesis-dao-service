@@ -1,14 +1,5 @@
 from django.conf import settings
-from django.core.exceptions import ObjectDoesNotExist
-from drf_yasg.utils import swagger_serializer_method
-from rest_framework.fields import (
-    CharField,
-    DateTimeField,
-    EmailField,
-    IntegerField,
-    SerializerMethodField,
-    URLField,
-)
+from rest_framework.fields import CharField, EmailField, IntegerField, URLField
 from rest_framework.serializers import ModelSerializer, Serializer, ValidationError
 
 from core import models
@@ -56,7 +47,7 @@ class AccountSerializerList(ModelSerializer):
 class DaoSerializer(ModelSerializer):
     owner_id = CharField(required=True)
     asset_id = IntegerField(source="asset.id", required=False)
-    proposal_duration = SerializerMethodField(help_text="Proposal duration in seconds.")
+    proposal_duration = IntegerField(source="governance.proposal_duration", help_text="Proposal duration in blocks.")
 
     class Meta:
         model = models.Dao
@@ -72,14 +63,6 @@ class DaoSerializer(ModelSerializer):
             "metadata_url",
             "metadata_hash",
         )
-
-    @staticmethod
-    @swagger_serializer_method(IntegerField)
-    def get_proposal_duration(dao: models.Dao):
-        try:
-            return dao.governance.proposal_duration * settings.BLOCK_CREATION_INTERVAL
-        except ObjectDoesNotExist:
-            return None
 
 
 class AddDaoMetadataSerializer(Serializer):  # noqa
@@ -171,7 +154,6 @@ class VotesSerializer(Serializer):  # noqa
 
 class ProposalSerializer(ModelSerializer):
     votes = VotesSerializer()
-    ends_at = DateTimeField(help_text="Time proposal ends at in UTC.")
 
     class Meta:
         model = models.Proposal
@@ -185,7 +167,7 @@ class ProposalSerializer(ModelSerializer):
             "metadata",
             "metadata_url",
             "metadata_hash",
-            "ends_at",
+            "birth_block_number",
         )
 
 

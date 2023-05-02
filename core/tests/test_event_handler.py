@@ -3,7 +3,6 @@ import random
 from io import BytesIO
 from unittest.mock import call, patch
 
-from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError
 from django.utils import timezone
@@ -613,25 +612,16 @@ class EventHandlerTest(IntegrationTestCase):
 
         block = models.Block.objects.create(
             hash="hash 0",
-            number=0,
+            number=123,
             extrinsic_data={
                 "not": "interesting",
                 "Votes": {
                     "not": "interesting",
                     "create_proposal": [
-                        {
-                            "dao_id": "dao1",
-                            "not": "interesting",
-                        },
-                        {
-                            "dao_id": "dao2",
-                            "not": "interesting",
-                        },
+                        {"dao_id": "dao1", "not": "interesting"},
+                        {"dao_id": "dao2", "not": "interesting"},
                         # should not be updated cause of missing corresponding event
-                        {
-                            "dao_id": "dao3",
-                            "not": "interesting",
-                        },
+                        {"dao_id": "dao3", "not": "interesting"},
                     ],
                 },
             },
@@ -640,24 +630,16 @@ class EventHandlerTest(IntegrationTestCase):
                 "Votes": {
                     "not": "interesting",
                     "ProposalCreated": [
-                        {"proposal_id": "prop1", "dao_id": "dao1", "not": "interesting"},
-                        {"proposal_id": "prop2", "dao_id": "dao2", "not": "interesting"},
+                        {"proposal_id": "prop1", "dao_id": "dao1", "creator": "acc1", "not": "interesting"},
+                        {"proposal_id": "prop2", "dao_id": "dao2", "creator": "acc2", "not": "interesting"},
                     ],
                 },
             },
         )
         time = timezone.now()
         expected_proposals = [
-            models.Proposal(
-                id="prop1",
-                dao_id="dao1",
-                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 10),
-            ),
-            models.Proposal(
-                id="prop2",
-                dao_id="dao2",
-                ends_at=time + timezone.timedelta(seconds=settings.BLOCK_CREATION_INTERVAL * 15),
-            ),
+            models.Proposal(id="prop1", dao_id="dao1", creator_id="acc1", birth_block_number=123),
+            models.Proposal(id="prop2", dao_id="dao2", creator_id="acc2", birth_block_number=123),
         ]
         expected_votes = [
             models.Vote(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=None),
@@ -684,8 +666,8 @@ class EventHandlerTest(IntegrationTestCase):
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Proposal.objects.create(id="1", dao_id="dao1")
-        models.Proposal.objects.create(id="2", dao_id="dao2")
+        models.Proposal.objects.create(id="1", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="2", dao_id="dao2", birth_block_number=10)
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -744,6 +726,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_url="url1",
                 metadata_hash=metadata_hash_1,
                 metadata=metadata_1,
+                birth_block_number=10,
             ),
             models.Proposal(
                 id="2",
@@ -751,6 +734,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
                 metadata=metadata_2,
+                birth_block_number=10,
             ),
         ]
         with self.assertNumQueries(4):
@@ -768,9 +752,9 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
-        models.Proposal.objects.create(id="1", dao_id="dao1")
-        models.Proposal.objects.create(id="2", dao_id="dao2")
-        models.Proposal.objects.create(id="3", dao_id="dao3")
+        models.Proposal.objects.create(id="1", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="2", dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id="3", dao_id="dao3", birth_block_number=10)
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_2 = {"a": 2}
@@ -826,6 +810,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_url="url1",
                 metadata_hash="wrong hash",
                 metadata=None,
+                birth_block_number=10,
             ),
             models.Proposal(
                 id="2",
@@ -833,6 +818,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
                 metadata=metadata_2,
+                birth_block_number=10,
             ),
             models.Proposal(
                 id="3",
@@ -840,6 +826,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_url=None,
                 metadata_hash=None,
                 metadata=None,
+                birth_block_number=10,
             ),
         ]
 
@@ -858,8 +845,8 @@ class EventHandlerTest(IntegrationTestCase):
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Proposal.objects.create(id="1", dao_id="dao1")
-        models.Proposal.objects.create(id="2", dao_id="dao2")
+        models.Proposal.objects.create(id="1", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="2", dao_id="dao2", birth_block_number=10)
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -916,6 +903,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_url="url1",
                 metadata_hash=metadata_hash_1,
                 metadata=None,
+                birth_block_number=10,
             ),
             models.Proposal(
                 id="2",
@@ -923,6 +911,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
                 metadata=metadata_2,
+                birth_block_number=10,
             ),
         ]
 
@@ -948,8 +937,8 @@ class EventHandlerTest(IntegrationTestCase):
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Proposal.objects.create(id="1", dao_id="dao1")
-        models.Proposal.objects.create(id="2", dao_id="dao2")
+        models.Proposal.objects.create(id="1", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="2", dao_id="dao2", birth_block_number=10)
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -1001,6 +990,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_url="url1",
                 metadata_hash=metadata_hash_1,
                 metadata=None,
+                birth_block_number=10,
             ),
             models.Proposal(
                 id="2",
@@ -1008,6 +998,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
                 metadata=None,
+                birth_block_number=10,
             ),
         ]
 
@@ -1033,8 +1024,8 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
-        models.Proposal.objects.create(id="prop1", dao_id="dao1")
-        models.Proposal.objects.create(id="prop2", dao_id="dao2")
+        models.Proposal.objects.create(id="prop1", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="prop2", dao_id="dao2", birth_block_number=10)
         models.Vote.objects.create(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=None)
         models.Vote.objects.create(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=None)
         models.Vote.objects.create(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=None)
@@ -1084,14 +1075,14 @@ class EventHandlerTest(IntegrationTestCase):
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Proposal.objects.create(id="prop1", dao_id="dao1")
-        models.Proposal.objects.create(id="prop2", dao_id="dao1")
-        models.Proposal.objects.create(id="prop3", dao_id="dao2")
-        models.Proposal.objects.create(id="prop4", dao_id="dao2")
-        models.Proposal.objects.create(id="prop5", dao_id="dao2")
+        models.Proposal.objects.create(id="prop1", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="prop2", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="prop3", dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id="prop4", dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id="prop5", dao_id="dao2", birth_block_number=10)
         # not changed
-        models.Proposal.objects.create(id="prop6", dao_id="dao1")
-        models.Proposal.objects.create(id="prop7", dao_id="dao2")
+        models.Proposal.objects.create(id="prop6", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="prop7", dao_id="dao2", birth_block_number=10)
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -1115,13 +1106,13 @@ class EventHandlerTest(IntegrationTestCase):
             },
         )
         expected_proposals = [
-            models.Proposal(id="prop1", dao_id="dao1", status=models.ProposalStatus.PENDING),
-            models.Proposal(id="prop2", dao_id="dao1", status=models.ProposalStatus.REJECTED),
-            models.Proposal(id="prop3", dao_id="dao2", status=models.ProposalStatus.PENDING),
-            models.Proposal(id="prop4", dao_id="dao2", status=models.ProposalStatus.PENDING),
-            models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.REJECTED),
-            models.Proposal(id="prop6", dao_id="dao1", status=models.ProposalStatus.RUNNING),
-            models.Proposal(id="prop7", dao_id="dao2", status=models.ProposalStatus.RUNNING),
+            models.Proposal(id="prop1", dao_id="dao1", status=models.ProposalStatus.PENDING, birth_block_number=10),
+            models.Proposal(id="prop2", dao_id="dao1", status=models.ProposalStatus.REJECTED, birth_block_number=10),
+            models.Proposal(id="prop3", dao_id="dao2", status=models.ProposalStatus.PENDING, birth_block_number=10),
+            models.Proposal(id="prop4", dao_id="dao2", status=models.ProposalStatus.PENDING, birth_block_number=10),
+            models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.REJECTED, birth_block_number=10),
+            models.Proposal(id="prop6", dao_id="dao1", status=models.ProposalStatus.RUNNING, birth_block_number=10),
+            models.Proposal(id="prop7", dao_id="dao2", status=models.ProposalStatus.RUNNING, birth_block_number=10),
         ]
 
         with self.assertNumQueries(2):
@@ -1134,12 +1125,12 @@ class EventHandlerTest(IntegrationTestCase):
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Proposal.objects.create(id="prop1", dao_id="dao1")
-        models.Proposal.objects.create(id="prop2", dao_id="dao1")
-        models.Proposal.objects.create(id="prop3", dao_id="dao2")
+        models.Proposal.objects.create(id="prop1", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="prop2", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="prop3", dao_id="dao2", birth_block_number=10)
         # not changed
-        models.Proposal.objects.create(id="prop4", dao_id="dao1")
-        models.Proposal.objects.create(id="prop5", dao_id="dao2")
+        models.Proposal.objects.create(id="prop4", dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id="prop5", dao_id="dao2", birth_block_number=10)
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -1159,11 +1150,17 @@ class EventHandlerTest(IntegrationTestCase):
             },
         )
         expected_proposals = [
-            models.Proposal(id="prop1", dao_id="dao1", fault="reason 1", status=models.ProposalStatus.FAULTED),
-            models.Proposal(id="prop2", dao_id="dao1", fault="reason 2", status=models.ProposalStatus.FAULTED),
-            models.Proposal(id="prop3", dao_id="dao2", fault="reason 3", status=models.ProposalStatus.FAULTED),
-            models.Proposal(id="prop4", dao_id="dao1", status=models.ProposalStatus.RUNNING),
-            models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.RUNNING),
+            models.Proposal(
+                id="prop1", dao_id="dao1", fault="reason 1", status=models.ProposalStatus.FAULTED, birth_block_number=10
+            ),
+            models.Proposal(
+                id="prop2", dao_id="dao1", fault="reason 2", status=models.ProposalStatus.FAULTED, birth_block_number=10
+            ),
+            models.Proposal(
+                id="prop3", dao_id="dao2", fault="reason 3", status=models.ProposalStatus.FAULTED, birth_block_number=10
+            ),
+            models.Proposal(id="prop4", dao_id="dao1", status=models.ProposalStatus.RUNNING, birth_block_number=10),
+            models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.RUNNING, birth_block_number=10),
         ]
 
         with self.assertNumQueries(2):

@@ -737,7 +737,12 @@ class SubstrateServiceTest(IntegrationTestCase):
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
         models.Proposal.objects.create(
-            id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash="hash1", metadata={"a": 1}
+            id="prop1",
+            dao_id="dao1",
+            metadata_url="url1",
+            metadata_hash="hash1",
+            metadata={"a": 1},
+            birth_block_number=10,
         )
         models.Governance.objects.create(
             dao_id="dao1",
@@ -771,7 +776,12 @@ class SubstrateServiceTest(IntegrationTestCase):
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
         models.Proposal.objects.create(
-            id="prop1", dao_id="dao1", metadata_url="url1", metadata_hash="hash1", metadata={"a": 1}
+            id="prop1",
+            dao_id="dao1",
+            metadata_url="url1",
+            metadata_hash="hash1",
+            metadata={"a": 1},
+            birth_block_number=10,
         )
         models.Governance.objects.create(
             dao_id="dao1",
