@@ -372,7 +372,9 @@ class SubstrateEventHandler:
         """
         proposal_ids_to_voting_data = collections.defaultdict(dict)  # {proposal_id: {voter_id: in_favor}}
         for voting_event in block.event_data.get("Votes", {}).get("VoteCast", []):
-            proposal_ids_to_voting_data[voting_event["proposal_id"]][voting_event["voter"]] = voting_event["in_favor"]
+            proposal_ids_to_voting_data[str(voting_event["proposal_id"])][voting_event["voter"]] = voting_event[
+                "in_favor"
+            ]
         if proposal_ids_to_voting_data:
             for vote in (
                 votes_to_update := models.Vote.objects.filter(
