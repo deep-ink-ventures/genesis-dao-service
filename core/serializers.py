@@ -184,7 +184,7 @@ class ProposalMetadataResponseSerialzier(Serializer):  # noqa
 
 
 class ReportFaultedSerializer(ModelSerializer):
-    proposal_id = CharField()
+    proposal_id = CharField(max_length=128)
     reason = CharField(max_length=1024)
 
     class Meta:

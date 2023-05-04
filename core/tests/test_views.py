@@ -658,7 +658,7 @@ class CoreViewSetTest(IntegrationTestCase):
         acc = models.Account.objects.create(address=keypair.ss58_address)
         models.AssetHolding.objects.create(owner=acc, asset_id=1, balance=10)
         proposal_id = "prop1"
-        post_data = {"reason": "very good reason", "proposal_id": proposal_id}
+        post_data = {"reason": "very good reason"}
 
         with self.assertNumQueries(3):
             res = self.client.post(
@@ -668,7 +668,7 @@ class CoreViewSetTest(IntegrationTestCase):
                 HTTP_SIGNATURE=signature,
             )
 
-        self.assertEqual(res.data, post_data)
+        self.assertEqual(res.data, {**post_data, "proposal_id": proposal_id})
 
     def test_proposal_report_faulted_no_holdings(self):
         cache.clear()
@@ -677,7 +677,7 @@ class CoreViewSetTest(IntegrationTestCase):
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
         models.Account.objects.create(address=keypair.ss58_address)
         proposal_id = "prop1"
-        post_data = {"reason": "very good reason", "proposal_id": proposal_id}
+        post_data = {"reason": "very good reason"}
 
         with self.assertNumQueries(1):
             res = self.client.post(

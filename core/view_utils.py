@@ -51,7 +51,7 @@ class IsTokenHolder(BasePermission):
         return any(
             substrate_service.verify(address=address, signature=request.headers.get("Signature"))
             for address in AssetHolding.objects.filter(
-                asset__dao__proposals__id=request.data["proposal_id"]
+                asset__dao__proposals__id=request.parser_context["kwargs"]["pk"]
             ).values_list("owner_id", flat=True)
         )
 
@@ -152,10 +152,26 @@ def swagger_query_param(**kwargs):
     return openapi.Parameter(**{"in_": openapi.IN_QUERY, **kwargs})
 
 
-signature_in_header = openapi.Parameter(
+signed_by_dao_owner = openapi.Parameter(
     name="Signature",
     in_=openapi.IN_HEADER,
-    description="Current /challenge signed with corresponding DAO's Account's private key, B64 encoded.",
+    description="Current /challenge signed with the corresponding DAO's Account's private key, B64 encoded.",
+    required=True,
+    type=openapi.TYPE_STRING,
+    format=openapi.FORMAT_BASE64,
+)
+signed_by_proposal_creator = openapi.Parameter(
+    name="Signature",
+    in_=openapi.IN_HEADER,
+    description="Current /challenge signed with the Proposal creator's Account's private key, B64 encoded.",
+    required=True,
+    type=openapi.TYPE_STRING,
+    format=openapi.FORMAT_BASE64,
+)
+signed_by_token_holder = openapi.Parameter(
+    name="Signature",
+    in_=openapi.IN_HEADER,
+    description="Current /challenge signed with a corresponding DAO token holding Account's private key, B64 encoded.",
     required=True,
     type=openapi.TYPE_STRING,
     format=openapi.FORMAT_BASE64,

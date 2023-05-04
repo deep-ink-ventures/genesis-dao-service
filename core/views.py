@@ -21,7 +21,9 @@ from core.view_utils import (
     IsTokenHolder,
     MultiQsLimitOffsetPagination,
     SearchableMixin,
-    signature_in_header,
+    signed_by_dao_owner,
+    signed_by_proposal_creator,
+    signed_by_token_holder,
     swagger_query_param,
 )
 
@@ -185,7 +187,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
     @swagger_auto_schema(
         operation_id="Add DAO Metadata",
         operation_description="Adds metadata to a DAO.",
-        manual_parameters=[signature_in_header],
+        manual_parameters=[signed_by_dao_owner],
         security=[{"Signature": []}],
         responses={201: openapi.Response("", serializers.DaoMetadataResponseSerializer)},
     )
@@ -262,7 +264,7 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
     @swagger_auto_schema(
         operation_id="Add Proposal Metadata",
         operation_description="Adds metadata to a Proposal.",
-        manual_parameters=[signature_in_header],
+        manual_parameters=[signed_by_proposal_creator],
         security=[{"Signature": []}],
         responses={201: openapi.Response("", serializers.ProposalMetadataResponseSerialzier)},
     )
@@ -289,7 +291,7 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
     @swagger_auto_schema(
         operation_id="Report faulted",
         operation_description="Report a Proposal as faulted.",
-        manual_parameters=[signature_in_header],
+        manual_parameters=[signed_by_token_holder],
         security=[{"Signature": []}],
         responses={201: openapi.Response("", serializers.ReportFaultedSerializer)},
     )
