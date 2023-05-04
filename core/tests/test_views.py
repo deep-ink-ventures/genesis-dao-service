@@ -31,6 +31,8 @@ expected_dao1_res = {
     "owner_id": "acc1",
     "asset_id": 1,
     "proposal_duration": 10,
+    "proposal_token_deposit": 123,
+    "minimum_majority_per_1024": 50,
     "setup_complete": False,
     "metadata": {"some": "data"},
     "metadata_url": None,
@@ -43,6 +45,8 @@ expected_dao2_res = {
     "owner_id": "acc2",
     "asset_id": 2,
     "proposal_duration": 15,
+    "proposal_token_deposit": 234,
+    "minimum_majority_per_1024": 45,
     "setup_complete": False,
     "metadata": None,
     "metadata_url": None,
@@ -63,11 +67,11 @@ class CoreViewSetTest(IntegrationTestCase):
             id="dao1", name="dao1 name", creator_id="acc1", owner_id="acc1", metadata={"some": "data"}
         )
         models.Governance.objects.create(
-            dao_id="dao1", proposal_duration=10, proposal_token_deposit=10, minimum_majority=60
+            dao_id="dao1", proposal_duration=10, proposal_token_deposit=123, minimum_majority=50
         )
         models.Dao.objects.create(id="dao2", name="dao2 name", creator_id="acc2", owner_id="acc2")
         models.Governance.objects.create(
-            dao_id="dao2", proposal_duration=15, proposal_token_deposit=10, minimum_majority=60
+            dao_id="dao2", proposal_duration=15, proposal_token_deposit=234, minimum_majority=45
         )
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=1000)
         models.Asset.objects.create(id=2, owner_id="acc2", dao_id="dao2", total_supply=200)
@@ -205,6 +209,8 @@ class CoreViewSetTest(IntegrationTestCase):
                     "owner_id": "acc2",
                     "asset_id": None,
                     "proposal_duration": None,
+                    "proposal_token_deposit": None,
+                    "minimum_majority_per_1024": None,
                     "setup_complete": True,
                     "metadata": None,
                     "metadata_url": None,
@@ -222,6 +228,8 @@ class CoreViewSetTest(IntegrationTestCase):
                     "owner_id": "acc2",
                     "asset_id": None,
                     "proposal_duration": None,
+                    "proposal_token_deposit": None,
+                    "minimum_majority_per_1024": None,
                     "setup_complete": True,
                     "metadata": None,
                     "metadata_url": None,
@@ -243,6 +251,8 @@ class CoreViewSetTest(IntegrationTestCase):
                     "owner_id": "acc2",
                     "asset_id": None,
                     "proposal_duration": None,
+                    "proposal_token_deposit": None,
+                    "minimum_majority_per_1024": None,
                     "setup_complete": True,
                     "metadata": None,
                     "metadata_url": None,
@@ -274,6 +284,8 @@ class CoreViewSetTest(IntegrationTestCase):
                     "owner_id": "acc2",
                     "asset_id": 4,
                     "proposal_duration": None,
+                    "proposal_token_deposit": None,
+                    "minimum_majority_per_1024": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -287,6 +299,8 @@ class CoreViewSetTest(IntegrationTestCase):
                     "owner_id": "acc1",
                     "asset_id": 3,
                     "proposal_duration": None,
+                    "proposal_token_deposit": None,
+                    "minimum_majority_per_1024": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -306,6 +320,8 @@ class CoreViewSetTest(IntegrationTestCase):
                     "owner_id": "acc2",
                     "asset_id": 4,
                     "proposal_duration": None,
+                    "proposal_token_deposit": None,
+                    "minimum_majority_per_1024": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -318,6 +334,8 @@ class CoreViewSetTest(IntegrationTestCase):
                     "owner_id": "acc1",
                     "asset_id": 3,
                     "proposal_duration": None,
+                    "proposal_token_deposit": None,
+                    "minimum_majority_per_1024": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -339,6 +357,8 @@ class CoreViewSetTest(IntegrationTestCase):
                     "owner_id": "acc2",
                     "asset_id": 4,
                     "proposal_duration": None,
+                    "proposal_token_deposit": None,
+                    "minimum_majority_per_1024": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,
@@ -352,6 +372,8 @@ class CoreViewSetTest(IntegrationTestCase):
                     "owner_id": "acc1",
                     "asset_id": 3,
                     "proposal_duration": None,
+                    "proposal_token_deposit": None,
+                    "minimum_majority_per_1024": None,
                     "setup_complete": False,
                     "metadata": None,
                     "metadata_url": None,

@@ -1,3 +1,4 @@
+import bleach
 from django.conf import settings
 from rest_framework.fields import CharField, EmailField, IntegerField, URLField
 from rest_framework.serializers import ModelSerializer, Serializer, ValidationError
@@ -48,6 +49,12 @@ class DaoSerializer(ModelSerializer):
     owner_id = CharField(required=True)
     asset_id = IntegerField(source="asset.id", required=False)
     proposal_duration = IntegerField(source="governance.proposal_duration", help_text="Proposal duration in blocks.")
+    proposal_token_deposit = IntegerField(
+        source="governance.proposal_token_deposit", help_text="Token deposit required to create a Poposal"
+    )
+    minimum_majority_per_1024 = IntegerField(
+        source="governance.minimum_majority", help_text="ayes >= nays + token_supply / 1024 * minimum_majority_per_1024"
+    )
 
     class Meta:
         model = models.Dao
@@ -58,6 +65,8 @@ class DaoSerializer(ModelSerializer):
             "owner_id",
             "asset_id",
             "proposal_duration",
+            "proposal_token_deposit",
+            "minimum_majority_per_1024",
             "setup_complete",
             "metadata",
             "metadata_url",
@@ -172,9 +181,13 @@ class ProposalSerializer(ModelSerializer):
 
 
 class AddProposalMetadataSerializer(Serializer):  # noqa
-    title = CharField(max_length=64)
-    description = CharField(max_length=512)
+    title = CharField(max_length=128)
+    description = CharField(max_length=10000)
     url = URLField()
+
+    def validate(self, attrs: dict):
+        attrs["description"] = bleach.clean(attrs["description"])
+        return attrs
 
 
 class ProposalMetadataResponseSerialzier(Serializer):  # noqa
