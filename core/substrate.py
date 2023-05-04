@@ -543,10 +543,11 @@ class SubstrateService(object):
         )
 
     @staticmethod
-    def verify(address: str, signature: str) -> bool:
+    def verify(address: str, challenge_address: str, signature: str) -> bool:
         """
         Args:
-            address: Account.address / public key
+            address: Account.address / public key to verify signature for
+            challenge_address: Account.address / public key the challenge has been created for
             signature: b64 encoded, signed challenge key
 
         Returns:
@@ -555,7 +556,7 @@ class SubstrateService(object):
         verifies whether the given signature matches challenge key signed by address
         """
 
-        if not (challenge_token := cache.get(address)):
+        if not (challenge_token := cache.get(challenge_address)):
             return False
         try:
             return Keypair(address).verify(challenge_token, base64.b64decode(signature.encode()))

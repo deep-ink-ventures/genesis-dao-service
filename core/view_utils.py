@@ -23,7 +23,9 @@ class IsDAOOwner(BasePermission):
     def has_object_permission(self, request, view, obj):
         from core.substrate import substrate_service
 
-        return substrate_service.verify(address=obj.owner_id, signature=request.headers.get("Signature"))
+        return substrate_service.verify(
+            address=obj.owner_id, challenge_address=obj.owner_id, signature=request.headers.get("Signature")
+        )
 
 
 class IsProposalCreator(BasePermission):
@@ -38,21 +40,27 @@ class IsProposalCreator(BasePermission):
     def has_object_permission(self, request, view, obj):
         from core.substrate import substrate_service
 
-        return substrate_service.verify(address=obj.creator_id, signature=request.headers.get("Signature"))
+        return substrate_service.verify(
+            address=obj.creator_id, challenge_address=obj.dao.owner_id, signature=request.headers.get("Signature")
+        )
 
 
 class IsTokenHolder(BasePermission):
     message = {"error": "This request's header needs to contain signature=*signed-challenge*."}
 
     def has_permission(self, request, view):
-        from core.models import AssetHolding
+        from core.models import AssetHolding, Dao
         from core.substrate import substrate_service
 
+        proposal_id = request.parser_context["kwargs"]["pk"]
+        challenge_address = Dao.objects.values_list("owner_id", flat=True).get(proposals__id=proposal_id)
         return any(
-            substrate_service.verify(address=address, signature=request.headers.get("Signature"))
-            for address in AssetHolding.objects.filter(
-                asset__dao__proposals__id=request.parser_context["kwargs"]["pk"]
-            ).values_list("owner_id", flat=True)
+            substrate_service.verify(
+                address=address, challenge_address=challenge_address, signature=request.headers.get("Signature")
+            )
+            for address in AssetHolding.objects.filter(asset__dao__proposals__id=proposal_id).values_list(
+                "owner_id", flat=True
+            )
         )
 
 

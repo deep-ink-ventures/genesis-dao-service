@@ -595,11 +595,10 @@ class CoreViewSetTest(IntegrationTestCase):
 
     def test_proposal_add_metadata(self):
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
         acc = models.Account.objects.create(address=keypair.ss58_address)
-        models.Dao.objects.create(id="DAO1", name="dao1 name", owner=acc)
-        models.Proposal.objects.create(id="PROP1", dao_id="DAO1", creator=acc, birth_block_number=10)
+        models.Proposal.objects.create(id="PROP1", dao_id="dao1", creator=acc, birth_block_number=10)
+        cache.set(key="acc1", value=self.challenge_key, timeout=5)
 
         post_data = {
             "title": "some title",
@@ -609,10 +608,10 @@ class CoreViewSetTest(IntegrationTestCase):
         expected_res = {
             "metadata": post_data,
             "metadata_hash": "384f400447f439767311418582fb9f779ba44e18905d225598b48f32eb950ce1",
-            "metadata_url": "https://some_storage.some_region.com/DAO1/proposals/PROP1/metadata.json",
+            "metadata_url": "https://some_storage.some_region.com/dao1/proposals/PROP1/metadata.json",
         }
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             res = self.client.post(
                 reverse("core-proposal-add-metadata", kwargs={"pk": "PROP1"}),
                 post_data,
@@ -630,7 +629,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "url": "https://www.some-url.com/",
         }
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             res = self.client.post(
                 reverse("core-proposal-add-metadata", kwargs={"pk": "prop1"}),
                 post_data,
@@ -653,14 +652,14 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_proposal_report_faulted(self):
         cache.clear()
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        cache.set(key="acc1", value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
         acc = models.Account.objects.create(address=keypair.ss58_address)
         models.AssetHolding.objects.create(owner=acc, asset_id=1, balance=10)
         proposal_id = "prop1"
         post_data = {"reason": "very good reason"}
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             res = self.client.post(
                 reverse("core-proposal-report-faulted", kwargs={"pk": proposal_id}),
                 post_data,
@@ -673,13 +672,13 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_proposal_report_faulted_no_holdings(self):
         cache.clear()
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        cache.set(key="acc1", value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
         models.Account.objects.create(address=keypair.ss58_address)
         proposal_id = "prop1"
         post_data = {"reason": "very good reason"}
 
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(2):
             res = self.client.post(
                 reverse("core-proposal-report-faulted", kwargs={"pk": proposal_id}),
                 post_data,
@@ -700,7 +699,7 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_proposal_report_faulted_throttle(self):
         cache.clear()
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        cache.set(key="acc1", value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
         acc = models.Account.objects.create(address=keypair.ss58_address)
         models.AssetHolding.objects.create(owner=acc, asset_id=1, balance=10)
@@ -716,15 +715,15 @@ class CoreViewSetTest(IntegrationTestCase):
         )
         for count in range(7):
             if count < 3:
-                with self.assertNumQueries(3):
+                with self.assertNumQueries(4):
                     res = call()
                 self.assertEqual(res.data, post_data)
             elif count < 5:
-                with self.assertNumQueries(2):
+                with self.assertNumQueries(3):
                     res = call()
                 self.assertEqual(res.data, {"detail": "The proposal report maximum has already been reached."})
             else:
-                with self.assertNumQueries(1):
+                with self.assertNumQueries(2):
                     res = call()
                 self.assertEqual(
                     res.data,

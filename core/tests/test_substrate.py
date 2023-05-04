@@ -268,7 +268,24 @@ class SubstrateServiceTest(IntegrationTestCase):
         cache.set(key=keypair.ss58_address, value=challenge_token, timeout=1)
         signature = base64.b64encode(keypair.sign(data=challenge_token)).decode()
 
-        self.assertTrue(self.substrate_service.verify(address=keypair.ss58_address, signature=signature))
+        self.assertTrue(
+            self.substrate_service.verify(
+                address=keypair.ss58_address, challenge_address=keypair.ss58_address, signature=signature
+            )
+        )
+
+    def test_verify_differing_challenge_address(self):
+        challenge_token = "something_to_sign"
+        challenge_address = "some_addr"
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=challenge_address, value=challenge_token, timeout=1)
+        signature = base64.b64encode(keypair.sign(data=challenge_token)).decode()
+
+        self.assertTrue(
+            self.substrate_service.verify(
+                address=keypair.ss58_address, challenge_address=challenge_address, signature=signature
+            )
+        )
 
     def test_verify_fail(self):
         challenge_token = "something_to_sign"
@@ -276,14 +293,22 @@ class SubstrateServiceTest(IntegrationTestCase):
         cache.set(key=keypair.ss58_address, value=challenge_token, timeout=1)
         signature = "wrong"
 
-        self.assertFalse(self.substrate_service.verify(address=keypair.ss58_address, signature=signature))
+        self.assertFalse(
+            self.substrate_service.verify(
+                address=keypair.ss58_address, challenge_address=keypair.ss58_address, signature=signature
+            )
+        )
 
     def test_verify_no_key(self):
         challenge_token = "something_to_sign"
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
         signature = base64.b64encode(keypair.sign(data=challenge_token)).decode()
 
-        self.assertFalse(self.substrate_service.verify(address=keypair.ss58_address, signature=signature))
+        self.assertFalse(
+            self.substrate_service.verify(
+                address=keypair.ss58_address, challenge_address=keypair.ss58_address, signature=signature
+            )
+        )
 
     def test_create_proposal(self):
         dao_id = "abc"
