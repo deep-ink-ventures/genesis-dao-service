@@ -621,15 +621,15 @@ class CoreViewSetTest(IntegrationTestCase):
         acc = models.Account.objects.create(address=keypair.ss58_address)
         models.Proposal.objects.create(id="PROP1", dao_id="dao1", creator=acc, birth_block_number=10)
         cache.set(key="acc1", value=self.challenge_key, timeout=5)
-
         post_data = {
             "title": "some title",
-            "description": "short description",
+            "description": '<p>asd\t<a href="https://google.com" '
+            'rel="noopener noreferrer" target="_blank">werwerwerwerwer</a></p>',
             "url": "https://www.some-url.com/",
         }
         expected_res = {
             "metadata": post_data,
-            "metadata_hash": "384f400447f439767311418582fb9f779ba44e18905d225598b48f32eb950ce1",
+            "metadata_hash": "397be193b7792400b22f85d2c35fc58adb43a40824a9acb6a44f4fbe3ea66e92",
             "metadata_url": "https://some_storage.some_region.com/dao1/proposals/PROP1/metadata.json",
         }
 
