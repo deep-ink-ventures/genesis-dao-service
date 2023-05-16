@@ -186,7 +186,7 @@ class AddProposalMetadataSerializer(Serializer):  # noqa
     url = URLField()
 
     def validate(self, attrs: dict):
-        allowed_tags = {*bleach.ALLOWED_TAGS, "p", "br"}
+        allowed_tags = {*bleach.ALLOWED_TAGS, "p", "br", "u"}
         allowed_attrs = bleach.ALLOWED_ATTRIBUTES
         allowed_attrs["a"] += ["target", "rel"]
         attrs["description"] = bleach.clean(attrs["description"], tags=allowed_tags, attributes=allowed_attrs)

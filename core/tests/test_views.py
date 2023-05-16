@@ -623,13 +623,13 @@ class CoreViewSetTest(IntegrationTestCase):
         cache.set(key="acc1", value=self.challenge_key, timeout=5)
         post_data = {
             "title": "some title",
-            "description": '<p>asd\t<a href="https://google.com" '
-            'rel="noopener noreferrer" target="_blank">werwerwerwerwer</a></p>',
+            "description": '<p><u>asd\t<a href="https://google.com" '
+            'rel="noopener noreferrer" target="_blank">werwerwerwerwer</a></u></p>',
             "url": "https://www.some-url.com/",
         }
         expected_res = {
             "metadata": post_data,
-            "metadata_hash": "397be193b7792400b22f85d2c35fc58adb43a40824a9acb6a44f4fbe3ea66e92",
+            "metadata_hash": "d22aaac3a17b4510ef9bd8ed67188bb6fbb29a75347aed1d23b6dcf3cf6e6c7b",
             "metadata_url": "https://some_storage.some_region.com/dao1/proposals/PROP1/metadata.json",
         }
 
