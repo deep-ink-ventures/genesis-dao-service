@@ -428,7 +428,7 @@ class SubstrateEventHandler:
             for fault_event in block.event_data.get("Votes", {}).get("ProposalFaulted", [])
         }:
             for proposal in (proposals := models.Proposal.objects.filter(id__in=faulted_proposals.keys())):
-                proposal.fault = faulted_proposals[proposal.id]
+                proposal.fault = faulted_proposals[int(proposal.id)]
                 proposal.status = models.ProposalStatus.FAULTED
             models.Proposal.objects.bulk_update(proposals, ("fault", "status"))
 
