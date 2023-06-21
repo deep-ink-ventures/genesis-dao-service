@@ -8,7 +8,6 @@ COPY requirements ./requirements
 RUN pip install -U pip && \
   pip install --no-cache-dir -r ${REQUIREMENTS_FILE:-requirements/dev.txt}
 COPY . .
-RUN python manage.py collectstatic --noinput
 
 # Build a final image that only includes run-time dependencies
 FROM public.ecr.aws/docker/library/python:3.11 AS builder-runtime
