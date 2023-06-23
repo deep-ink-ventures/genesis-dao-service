@@ -1,5 +1,6 @@
 from typing import Optional
 
+from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 
 
@@ -27,7 +28,7 @@ class LocalStorage:
 
         uploads file to s3
         """
-        return self.storage.base_url + self.storage.save(storage_destination, file)
+        return settings.BASE_URL + self.storage.base_url + self.storage.save(storage_destination, file)
 
 
 storage = LocalStorage()

@@ -1,5 +1,6 @@
 import filecmp
 
+from django.conf import settings
 from django.core.files.uploadedfile import InMemoryUploadedFile
 
 from core.file_handling.local import storage
@@ -25,4 +26,4 @@ class LocalStorageTest(UnitTestCase):
 
         file_name = storage.upload_file(file=file, storage_destination=storage_destination)
 
-        self.assertTrue(filecmp.cmp(file_name.lstrip("/"), file_path))
+        self.assertTrue(filecmp.cmp(file_name.split(f"{settings.BASE_URL}/")[1], file_path))
