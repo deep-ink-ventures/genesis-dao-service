@@ -194,6 +194,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # substrate
 SUBSTRATE_INTERFACE = SubstrateInterface
 BLOCKCHAIN_URL = os.environ.get("BLOCKCHAIN_URL")
+SS58_FORMAT = 42
 BLOCK_CREATION_INTERVAL = int(os.environ.get("BLOCK_CREATION_INTERVAL", 6))  # seconds
 RETRY_DELAYS = [int(_) for _ in os.environ.get("RETRY_DELAYS", "5,10,30,60,120").split(",")]
 DEPOSIT_TO_CREATE_DAO = 10_000_000_000_000

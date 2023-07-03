@@ -3,7 +3,7 @@ import logging
 import time
 from collections import defaultdict
 from functools import partial, wraps
-from typing import Optional
+from typing import List, Optional
 
 from django.conf import settings
 from django.core.cache import cache
@@ -738,6 +738,22 @@ class SubstrateService(object):
                     time.sleep(0.25)  # todo implement non shitty solution
 
             self.sleep(start_time=start_time)
+
+    def create_multisig_account(self, signatories: List[str] = None, threshold: int = None):
+        """
+
+        Args:
+            signatories: List of signatures signature.
+            threshold: number of signatures needed to execute the translation.
+
+        Returns:
+                MultiSignature key, a unique identifier that is  shared and used to verify signatures signature.
+        """
+        multisig_account = self.substrate_interface.generate_multisig_account(
+            signatories=signatories, threshold=threshold
+        ).ss58_address
+
+        return multisig_account
 
 
 substrate_service = SubstrateService()

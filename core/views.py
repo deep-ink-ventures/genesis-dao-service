@@ -11,7 +11,7 @@ from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_400_BAD_REQUEST
 from rest_framework.throttling import UserRateThrottle
-from rest_framework.viewsets import ReadOnlyModelViewSet
+from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 
 from core import models, serializers
 from core.file_handling.file_handler import file_handler
@@ -329,4 +329,60 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
         return Response(
             self.get_serializer(models.ProposalReport.objects.filter(proposal_id=kwargs["pk"]), many=True).data,
             status=HTTP_200_OK,
+        )
+
+
+class MultiSignatureView(ModelViewSet):
+    queryset = models.MultiSignature.objects.all()
+    pagination_class = MultiQsLimitOffsetPagination
+    serializer_class = serializers.MultiSignatureSerializer
+    permission_classes = [IsDAOOwner]
+    http_method_names = ["get", "post"]
+    lookup_field = "dao"
+
+    @swagger_auto_schema(
+        operation_id="Create MultiSig Wallet",
+        operation_description="Creating a MultiSig Wallet",
+        responses={201: openapi.Response("", serializers.MultiSignatureSerializer(many=False))},
+    )
+    def create(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        dao = models.Dao.objects.filter(id__iexact=request.data["dao"])
+        if dao.exists():
+            serializer.save(dao=dao.get())
+            return Response(serializer.data, HTTP_201_CREATED)
+
+        return Response({"message": f"Requested Dao {request.data['dao']}, not found"}, HTTP_400_BAD_REQUEST)
+
+    @swagger_auto_schema(
+        operation_id="Multisig wallets",
+        operation_description="List all multisig wallets",
+        responses={200: openapi.Response("", serializers.MultiSignatureSerializer(many=True))},
+    )
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @swagger_auto_schema(
+        operation_id="Get Multisig wallet",
+        operation_description="Retrieving a multisig wallet with respect to dao.",
+        responses={200: openapi.Response("", serializers.MultiSignatureSerializer(many=False))},
+    )
+    def retrieve(self, request, *args, **kwargs):
+        dao = models.Dao.objects.filter(id__iexact=(kwargs.get("dao")))
+        if dao.exists():
+            multi_signature = models.MultiSignature.objects.get(dao=dao.get())
+            serializer = self.serializer_class(multi_signature)
+            return Response(serializer.data, HTTP_200_OK)
+
+        return Response(
+            {"message": f"Requested Multsig with Dao Id {kwargs.get('dao')}, not found"}, HTTP_400_BAD_REQUEST
         )

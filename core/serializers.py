@@ -1,6 +1,12 @@
 import bleach
 from django.conf import settings
-from rest_framework.fields import CharField, EmailField, IntegerField, URLField
+from rest_framework.fields import (
+    CharField,
+    EmailField,
+    IntegerField,
+    ListField,
+    URLField,
+)
 from rest_framework.serializers import ModelSerializer, Serializer, ValidationError
 
 from core import models
@@ -213,3 +219,13 @@ class ReportFaultedSerializer(ModelSerializer):
 
 class ChallengeSerializer(Serializer):  # noqa
     challenge = CharField(required=True, help_text=f"Valid for {settings.CHALLENGE_LIFETIME}s.")
+
+
+class MultiSignatureSerializer(ModelSerializer):
+    dao = CharField(source="dao.id", required=True)
+    signatories = ListField(child=CharField(), required=True)
+    threshold = CharField(required=True)
+
+    class Meta:
+        model = models.MultiSignature
+        fields = ("dao", "signatories", "threshold")
