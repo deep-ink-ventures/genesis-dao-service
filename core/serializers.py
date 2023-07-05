@@ -222,10 +222,10 @@ class ChallengeSerializer(Serializer):  # noqa
 
 
 class MultiSignatureSerializer(ModelSerializer):
-    dao = CharField(source="dao.id", required=True)
+    address = CharField(required=True)
     signatories = ListField(child=CharField(), required=True)
     threshold = CharField(required=True)
 
     class Meta:
         model = models.MultiSignature
-        fields = ("dao", "signatories", "threshold")
+        fields = ("address", "signatories", "threshold")

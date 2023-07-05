@@ -3,6 +3,7 @@ from itertools import chain
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import IntegrityError
 from django.db.models import Q
 from django.utils.decorators import method_decorator
 from drf_yasg import openapi
@@ -332,13 +333,13 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
         )
 
 
+@method_decorator(swagger_auto_schema(operation_description="Retrieves A MultSigAccount."), "retrieve")
 class MultiSignatureView(ModelViewSet):
     queryset = models.MultiSignature.objects.all()
     pagination_class = MultiQsLimitOffsetPagination
     serializer_class = serializers.MultiSignatureSerializer
-    permission_classes = [IsDAOOwner]
     http_method_names = ["get", "post"]
-    lookup_field = "dao"
+    lookup_field = "address"
 
     @swagger_auto_schema(
         operation_id="Create MultiSig Wallet",
@@ -346,43 +347,24 @@ class MultiSignatureView(ModelViewSet):
         responses={201: openapi.Response("", serializers.MultiSignatureSerializer(many=False))},
     )
     def create(self, request, *args, **kwargs):
-        serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        dao = models.Dao.objects.filter(id__iexact=request.data["dao"])
-        if dao.exists():
-            serializer.save(dao=dao.get())
-            return Response(serializer.data, HTTP_201_CREATED)
+        from core.substrate import substrate_service
 
-        return Response({"message": f"Requested Dao {request.data['dao']}, not found"}, HTTP_400_BAD_REQUEST)
+        try:
+            if "signatories" in request.data and "threshold" in request.data:
+                signatories = request.data["signatories"]
+                threshold = request.data["threshold"]
 
-    @swagger_auto_schema(
-        operation_id="Multisig wallets",
-        operation_description="List all multisig wallets",
-        responses={200: openapi.Response("", serializers.MultiSignatureSerializer(many=True))},
-    )
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
+                multisig_account_address = substrate_service.create_multisig_account(
+                    signatories=signatories, threshold=threshold
+                )
 
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
+                multi_signature_account = models.MultiSignature.objects.create(
+                    address=multisig_account_address, signatories=signatories, threshold=threshold
+                )
 
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+                serializer = serializers.MultiSignatureSerializer(multi_signature_account)
+                return Response(serializer.data, HTTP_201_CREATED)
+        except IntegrityError:
+            return Response({"message": "Multsig account  already exists"}, HTTP_400_BAD_REQUEST)
 
-    @swagger_auto_schema(
-        operation_id="Get Multisig wallet",
-        operation_description="Retrieving a multisig wallet with respect to dao.",
-        responses={200: openapi.Response("", serializers.MultiSignatureSerializer(many=False))},
-    )
-    def retrieve(self, request, *args, **kwargs):
-        dao = models.Dao.objects.filter(id__iexact=(kwargs.get("dao")))
-        if dao.exists():
-            multi_signature = models.MultiSignature.objects.get(dao=dao.get())
-            serializer = self.serializer_class(multi_signature)
-            return Response(serializer.data, HTTP_200_OK)
-
-        return Response(
-            {"message": f"Requested Multsig with Dao Id {kwargs.get('dao')}, not found"}, HTTP_400_BAD_REQUEST
-        )
+        return Response({"message": "signatories or threshold is missing"}, HTTP_400_BAD_REQUEST)

@@ -122,10 +122,9 @@ class Block(TimestampableMixin):
         return f"{self.number}"
 
 
-class MultiSignature(TimestampableMixin):
-    dao = models.OneToOneField(Dao, on_delete=models.CASCADE, db_index=True)
-    signatories = ArrayField(models.CharField(max_length=250), blank=True)
-    threshold = models.IntegerField()
+class MultiSignature(Account):
+    signatories = ArrayField(models.CharField(max_length=250))
+    threshold = models.PositiveIntegerField()
 
     def __str__(self):
-        return f"${self.pk}"
+        return f"{self.pk}"

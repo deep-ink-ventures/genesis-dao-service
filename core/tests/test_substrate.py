@@ -1081,3 +1081,6 @@ class SubstrateServiceTest(IntegrationTestCase):
                 call.exception(self.retry_msg),
             ]
         )
+
+    def test_create_multisig_account(self):
+        self.substrate_service.create_multisig_account()

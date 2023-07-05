@@ -85,8 +85,7 @@ class SubstrateService(object):
     @retry("initializing blockchain connection")
     def __init__(self):
         self.substrate_interface = settings.SUBSTRATE_INTERFACE(
-            url=settings.BLOCKCHAIN_URL,
-            type_registry_preset=settings.TYPE_REGISTRY_PRESET,
+            url=settings.BLOCKCHAIN_URL, type_registry_preset=settings.TYPE_REGISTRY_PRESET, ss58_format=42
         )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -741,11 +740,9 @@ class SubstrateService(object):
 
     def create_multisig_account(self, signatories: List[str] = None, threshold: int = None):
         """
-
         Args:
             signatories: List of signatures signature.
             threshold: number of signatures needed to execute the translation.
-
         Returns:
                 MultiSignature key, a unique identifier that is  shared and used to verify signatures signature.
         """

@@ -144,7 +144,7 @@ class EventHandlerTest(IntegrationTestCase):
             models.Dao(id="dao2", name="dao2 name", owner_id="acc2"),
         ]
 
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(5):
             substrate_event_handler._delete_daos(block)
 
         self.assertModelsEqual(models.Dao.objects.all(), expected_daos)
