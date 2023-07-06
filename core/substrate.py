@@ -541,6 +541,18 @@ class SubstrateService(object):
             wait_for_inclusion=wait_for_inclusion,
         )
 
+    def create_multisig_account(self, signatories: List[str] = None, threshold: int = None) -> str:
+        """
+        Args:
+            signatories: List of signatures.
+            threshold: Number of signatures needed to execute the translation.
+        Returns:
+            MultiSignature key: A unique identifier that is shared and used to verify signatures.
+        """
+        return self.substrate_interface.generate_multisig_account(
+            signatories=signatories, threshold=threshold
+        ).ss58_address
+
     @staticmethod
     def verify(address: str, challenge_address: str, signature: str) -> bool:
         """
@@ -737,20 +749,6 @@ class SubstrateService(object):
                     time.sleep(0.25)  # todo implement non shitty solution
 
             self.sleep(start_time=start_time)
-
-    def create_multisig_account(self, signatories: List[str] = None, threshold: int = None):
-        """
-        Args:
-            signatories: List of signatures signature.
-            threshold: number of signatures needed to execute the translation.
-        Returns:
-                MultiSignature key, a unique identifier that is  shared and used to verify signatures signature.
-        """
-        multisig_account = self.substrate_interface.generate_multisig_account(
-            signatories=signatories, threshold=threshold
-        ).ss58_address
-
-        return multisig_account
 
 
 substrate_service = SubstrateService()

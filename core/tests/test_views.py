@@ -782,24 +782,6 @@ class CoreViewSetTest(IntegrationTestCase):
 
     # TODO: 1 MULTISIGNATURE VIEW POSITIVE TEST
 
-    def test_create_multisig_wallet(self):
-        from core.substrate import substrate_service
-
-        payload = {"signatories": self.get_signatories(), "threshold": 2}
-        expected_key = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
-        substrate_service.create_multisig_account = Mock(return_value=expected_key)
-        response = self.client.post(reverse("core-multi-signature-list"), payload, content_type="application/json")
-
-        self.assertEqual(response.status_code, HTTP_201_CREATED)
-
-    def test_get_list_multisig_wallets(self):
-        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
-        models.MultiSignature.objects.create(address=address, signatories=self.get_signatories(), threshold=2)
-        response = self.client.get(reverse("core-multi-signature-list"))
-
-        self.assertEqual(response.status_code, HTTP_200_OK)
-        self.assertIsNotNone(response)
-
     def test_get_multisig_wallet(self):
         address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
         models.MultiSignature.objects.create(address=address, signatories=self.get_signatories(), threshold=2)
@@ -817,6 +799,26 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertEqual(response.status_code, HTTP_200_OK)
         self.assertEqual(response.data, expected_response)
 
+    def test_get_list_multisig_wallets(self):
+        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        models.MultiSignature.objects.create(address=address, signatories=self.get_signatories(), threshold=2)
+        response = self.client.get(reverse("core-multi-signature-list"))
+
+        self.assertEqual(response.status_code, HTTP_200_OK)
+        self.assertIsNotNone(response)
+
+    def test_create_multisig_wallet(self):
+        from core.substrate import substrate_service
+
+        payload = {"signatories": self.get_signatories(), "threshold": 2}
+        expected_key = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        substrate_service.create_multisig_account = Mock(return_value=expected_key)
+        response = self.client.post(
+            reverse("core-multsig-create", kwargs={"id": "dao1"}), payload, content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, HTTP_201_CREATED)
+
     # TODO:2 MULTISIGNATURE VIEW NEGATIVE TEST
 
     def test_get_multisig_wallet_with_invalid_dao(self):
@@ -828,7 +830,9 @@ class CoreViewSetTest(IntegrationTestCase):
 
     def test_create_multisig_wallet_missing_field(self):
         payload = {"signers": self.get_signatories(), "threshold": 2}
-        response = self.client.post(reverse("core-multi-signature-list"), payload, content_type="application/json")
+        response = self.client.post(
+            reverse("core-multsig-create", kwargs={"id": "dao1"}), payload, content_type="application/json"
+        )
 
         self.assertEqual(response.data, {"message": "signatories or threshold is missing"})
         self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)
@@ -847,8 +851,10 @@ class CoreViewSetTest(IntegrationTestCase):
         response = []
 
         for payload in payloads:
-            res = self.client.post(reverse("core-multi-signature-list"), payload, content_type="application/json")
+            res = self.client.post(
+                reverse("core-multsig-create", kwargs={"id": "dao1"}), payload, content_type="application/json"
+            )
             response.append(res)
 
-        self.assertEqual(response[-1].data, {"message": "Multsig account  already exists"})
+        self.assertEqual(response[-1].data, {"message": "Multsig account already exists"})
         self.assertEqual(response[-1].status_code, HTTP_400_BAD_REQUEST)

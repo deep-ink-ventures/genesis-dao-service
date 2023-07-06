@@ -1083,4 +1083,10 @@ class SubstrateServiceTest(IntegrationTestCase):
         )
 
     def test_create_multisig_account(self):
-        self.substrate_service.create_multisig_account()
+        signatories = [
+            "5HpG9w8EBLe5XCrbczpwq5TSXvedjrBGCwqxK1iQ7qUsSWFc",
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+        ]
+        multisig_account_address = self.substrate_service.create_multisig_account(signatories, 2)
+
+        self.assertIsNotNone(multisig_account_address)

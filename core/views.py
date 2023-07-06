@@ -365,6 +365,6 @@ class MultiSignatureView(ModelViewSet):
                 serializer = serializers.MultiSignatureSerializer(multi_signature_account)
                 return Response(serializer.data, HTTP_201_CREATED)
         except IntegrityError:
-            return Response({"message": "Multsig account  already exists"}, HTTP_400_BAD_REQUEST)
+            return Response({"message": "Multsig account already exists"}, HTTP_400_BAD_REQUEST)
 
         return Response({"message": "signatories or threshold is missing"}, HTTP_400_BAD_REQUEST)
