@@ -771,7 +771,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertCountEqual(res.data, expected_res)
 
-    # TODO: 0 MULTISIGNATURE VIEW TEST testing positive case
+    # TODO:  MULTISIGNATURE VIEW TEST
 
     @staticmethod
     def get_signatories():
@@ -779,8 +779,6 @@ class CoreViewSetTest(IntegrationTestCase):
             "5HpG9w8EBLe5XCrbczpwq5TSXvedjrBGCwqxK1iQ7qUsSWFc",
             "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
         ]
-
-    # TODO: 1 MULTISIGNATURE VIEW POSITIVE TEST
 
     def test_get_multisig_wallet(self):
         address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
@@ -798,6 +796,13 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(response.status_code, HTTP_200_OK)
         self.assertEqual(response.data, expected_response)
+
+    def test_get_multisig_wallet_with_invalid_address(self):
+        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        models.MultiSignature.objects.create(address=address, signatories=self.get_signatories(), threshold=2)
+        response = self.client.get(reverse("core-multi-signature-detail", kwargs={"address": "pdakxnex"}))
+
+        self.assertEqual(response.status_code, HTTP_404_NOT_FOUND)
 
     def test_get_list_multisig_wallets(self):
         address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
@@ -818,15 +823,6 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(response.status_code, HTTP_201_CREATED)
-
-    # TODO:2 MULTISIGNATURE VIEW NEGATIVE TEST
-
-    def test_get_multisig_wallet_with_invalid_dao(self):
-        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
-        models.MultiSignature.objects.create(address=address, signatories=self.get_signatories(), threshold=2)
-        response = self.client.get(reverse("core-multi-signature-detail", kwargs={"address": "pdakxnex"}))
-
-        self.assertEqual(response.status_code, HTTP_404_NOT_FOUND)
 
     def test_create_multisig_wallet_missing_field(self):
         payload = {"signers": self.get_signatories(), "threshold": 2}
