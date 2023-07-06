@@ -12,7 +12,7 @@ from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_400_BAD_REQUEST
 from rest_framework.throttling import UserRateThrottle
-from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
+from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from core import models, serializers
 from core.file_handling.file_handler import file_handler
@@ -129,6 +129,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
             "retrieve": serializers.DaoSerializer,
             "list": serializers.DaoSerializer,
             "add_metadata": serializers.AddDaoMetadataSerializer,
+            "create_multsig": serializers.CreateMultiSignatureSerializer,
         }.get(self.action)
 
     @swagger_auto_schema(
@@ -226,6 +227,34 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         challenge_token = secrets.token_hex(64)
         cache.set(key=self.get_object().owner_id, value=challenge_token, timeout=settings.CHALLENGE_LIFETIME)
         return Response(status=HTTP_200_OK, data={"challenge": challenge_token})
+
+    @swagger_auto_schema(
+        operation_id="Create Multi Signature Wallet",
+        operation_description="Creating a Multi Signature Wallet",
+        responses={201: openapi.Response("", serializers.CreateMultiSignatureSerializer)},
+        security=[{"Basic": []}],
+    )
+    @action(
+        methods=["POST"], detail=True, url_path="multsig", permission_classes=[IsDAOOwner], authentication_classes=[]
+    )
+    def create_multsig(self, request, *args, **kwargs):
+        from core.substrate import substrate_service
+
+        if (signatories := request.data.get("signatories")) and (threshold := request.data.get("threshold")):
+            try:
+                multi_signature_account = models.MultiSignature.objects.create(
+                    address=substrate_service.create_multisig_account(signatories=signatories, threshold=threshold),
+                    signatories=signatories,
+                    threshold=threshold,
+                )
+
+            except IntegrityError:
+                return Response({"message": "Multi signature account already exists."}, HTTP_400_BAD_REQUEST)
+
+            serializer = serializers.RetrieveMultiSignatureSerializer(multi_signature_account)
+
+            return Response(data=serializer.data, status=HTTP_201_CREATED)
+        return Response({"message": "Signatories or threshold are missing."}, HTTP_400_BAD_REQUEST)
 
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Asset."), "retrieve")
@@ -333,38 +362,9 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
         )
 
 
-@method_decorator(swagger_auto_schema(operation_description="Retrieves A MultSigAccount."), "retrieve")
-class MultiSignatureView(ModelViewSet):
+@method_decorator(swagger_auto_schema(operation_description="Retrieves A Multi Signature Account."), "retrieve")
+class MultiSignatureViewSet(ReadOnlyModelViewSet):
     queryset = models.MultiSignature.objects.all()
     pagination_class = MultiQsLimitOffsetPagination
-    serializer_class = serializers.MultiSignatureSerializer
-    http_method_names = ["get", "post"]
+    serializer_class = serializers.RetrieveMultiSignatureSerializer
     lookup_field = "address"
-
-    @swagger_auto_schema(
-        operation_id="Create MultiSig Wallet",
-        operation_description="Creating a MultiSig Wallet",
-        responses={201: openapi.Response("", serializers.MultiSignatureSerializer(many=False))},
-    )
-    def create(self, request, *args, **kwargs):
-        from core.substrate import substrate_service
-
-        try:
-            if "signatories" in request.data and "threshold" in request.data:
-                signatories = request.data["signatories"]
-                threshold = request.data["threshold"]
-
-                multisig_account_address = substrate_service.create_multisig_account(
-                    signatories=signatories, threshold=threshold
-                )
-
-                multi_signature_account = models.MultiSignature.objects.create(
-                    address=multisig_account_address, signatories=signatories, threshold=threshold
-                )
-
-                serializer = serializers.MultiSignatureSerializer(multi_signature_account)
-                return Response(serializer.data, HTTP_201_CREATED)
-        except IntegrityError:
-            return Response({"message": "Multsig account already exists"}, HTTP_400_BAD_REQUEST)
-
-        return Response({"message": "signatories or threshold is missing"}, HTTP_400_BAD_REQUEST)

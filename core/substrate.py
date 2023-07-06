@@ -544,10 +544,10 @@ class SubstrateService(object):
     def create_multisig_account(self, signatories: List[str] = None, threshold: int = None) -> str:
         """
         Args:
-            signatories: List of signatures.
-            threshold: Number of signatures needed to execute the translation.
+            signatories: List of signatory addresses.
+            threshold: Number of signatories needed to execute the transaction.
         Returns:
-            MultiSignature key: A unique identifier that is shared and used to verify signatures.
+             MultiSignature ss58 address: A unique identifier that is shared and used to verify signatures.
         """
         return self.substrate_interface.generate_multisig_account(
             signatories=signatories, threshold=threshold

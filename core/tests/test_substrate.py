@@ -1087,6 +1087,11 @@ class SubstrateServiceTest(IntegrationTestCase):
             "5HpG9w8EBLe5XCrbczpwq5TSXvedjrBGCwqxK1iQ7qUsSWFc",
             "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
         ]
-        multisig_account_address = self.substrate_service.create_multisig_account(signatories, 2)
+        self.substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
+            ss58_address="some_address"
+        )
 
-        self.assertIsNotNone(multisig_account_address)
+        response = self.substrate_service.create_multisig_account(signatories, 2)
+
+        self.si.generate_multisig_account.assert_called_once_with(signatories=signatories, threshold=2)
+        self.assertEqual(response, "some_address")

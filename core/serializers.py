@@ -221,11 +221,20 @@ class ChallengeSerializer(Serializer):  # noqa
     challenge = CharField(required=True, help_text=f"Valid for {settings.CHALLENGE_LIFETIME}s.")
 
 
-class MultiSignatureSerializer(ModelSerializer):
-    address = CharField(required=True)
-    signatories = ListField(child=CharField(), required=True)
-    threshold = CharField(required=True)
+class RetrieveMultiSignatureSerializer(ModelSerializer):
+    address = CharField()
+    signatories = ListField(child=CharField())
+    threshold = IntegerField()
 
     class Meta:
         model = models.MultiSignature
         fields = ("address", "signatories", "threshold")
+
+
+class CreateMultiSignatureSerializer(ModelSerializer):
+    signatories = ListField(child=CharField(), required=True)
+    threshold = IntegerField(required=True)
+
+    class Meta:
+        model = models.MultiSignature
+        fields = ("signatories", "threshold")
