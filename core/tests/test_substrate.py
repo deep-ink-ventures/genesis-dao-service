@@ -195,21 +195,21 @@ class SubstrateServiceTest(IntegrationTestCase):
         )
         self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
-    def test_set_balance(self):
+    def test_set_balance_deprecated(self):
         target = "some acc addr"
         new_free = 123
-        new_reserved = 321
+        old_reserved = 321
 
-        self.substrate_service.set_balance(
-            target=target, new_free=new_free, new_reserved=new_reserved, keypair=self.keypair
+        self.substrate_service.set_balance_deprecated(
+            target=target, new_free=new_free, old_reserved=old_reserved, keypair=self.keypair
         )
 
         self.si.compose_call.assert_has_calls(
             [
                 call(
                     call_module="Balances",
-                    call_function="set_balance",
-                    call_params={"who": target, "new_free": new_free, "new_reserved": new_reserved},
+                    call_function="set_balance_deprecated",
+                    call_params={"who": target, "new_free": new_free, "old_reserved": old_reserved},
                 ),
                 call(
                     call_module="Sudo",

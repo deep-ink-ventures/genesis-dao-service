@@ -296,12 +296,14 @@ class SubstrateService(object):
             wait_for_inclusion=wait_for_inclusion,
         )
 
-    def set_balance(self, target: str, new_free: int, new_reserved: int, keypair: Keypair, wait_for_inclusion=False):
+    def set_balance_deprecated(
+        self, target: str, new_free: int, old_reserved: int, keypair: Keypair, wait_for_inclusion=False
+    ):
         """
         Args:
             target: address / account to set balance for
             new_free: new free balance
-            new_reserved: new reserve balance
+            old_reserved: old reserve balance
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
@@ -319,8 +321,8 @@ class SubstrateService(object):
                     call_params={
                         "call": self.substrate_interface.compose_call(
                             call_module="Balances",
-                            call_function="set_balance",
-                            call_params={"who": target, "new_free": new_free, "new_reserved": new_reserved},
+                            call_function="set_balance_deprecated",
+                            call_params={"who": target, "new_free": new_free, "old_reserved": old_reserved},
                         )
                     },
                 ),
