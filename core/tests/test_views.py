@@ -847,7 +847,7 @@ class CoreViewSetTest(IntegrationTestCase):
         }
 
         response = self.client.post(
-            reverse("core-dao-create-multsig", kwargs={"pk": "dao1"}), payload, content_type="application/json"
+            reverse("core-dao-create-multisig", kwargs={"pk": "dao1"}), payload, content_type="application/json"
         )
 
         self.assertEqual(response.status_code, HTTP_201_CREATED)
@@ -858,7 +858,7 @@ class CoreViewSetTest(IntegrationTestCase):
         expected_response = {"message": "Signatories or threshold are missing."}
 
         response = self.client.post(
-            reverse("core-dao-create-multsig", kwargs={"pk": "dao1"}), payload, content_type="application/json"
+            reverse("core-dao-create-multisig", kwargs={"pk": "dao1"}), payload, content_type="application/json"
         )
 
         self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)
@@ -878,7 +878,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         response = self.client.post(
-            reverse("core-dao-create-multsig", kwargs={"pk": "dao1"}), payload, content_type="application/json"
+            reverse("core-dao-create-multisig", kwargs={"pk": "dao1"}), payload, content_type="application/json"
         )
 
         self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)

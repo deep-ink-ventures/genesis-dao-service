@@ -129,7 +129,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
             "retrieve": serializers.DaoSerializer,
             "list": serializers.DaoSerializer,
             "add_metadata": serializers.AddDaoMetadataSerializer,
-            "create_multsig": serializers.CreateMultiSignatureSerializer,
+            "create_multisig": serializers.CreateMultiSignatureSerializer,
         }.get(self.action)
 
     @swagger_auto_schema(
@@ -232,12 +232,12 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         operation_id="Create Multi Signature Wallet",
         operation_description="Creating a Multi Signature Wallet",
         responses={201: openapi.Response("", serializers.CreateMultiSignatureSerializer)},
-        security=[{"Basic": []}],
+        security=[{"Signature": []}],
     )
     @action(
-        methods=["POST"], detail=True, url_path="multsig", permission_classes=[IsDAOOwner], authentication_classes=[]
+        methods=["POST"], detail=True, url_path="multisig", permission_classes=[IsDAOOwner], authentication_classes=[]
     )
-    def create_multsig(self, request, *args, **kwargs):
+    def create_multisig(self, request, *args, **kwargs):
         from core.substrate import substrate_service
 
         if (signatories := request.data.get("signatories")) and (threshold := request.data.get("threshold")):
@@ -247,7 +247,6 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
                     signatories=signatories,
                     threshold=threshold,
                 )
-
             except IntegrityError:
                 return Response({"message": "Multi signature account already exists."}, HTTP_400_BAD_REQUEST)
 
