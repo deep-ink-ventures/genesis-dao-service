@@ -128,3 +128,30 @@ class MultiSignature(Account):
 
     def __str__(self):
         return f"{self.pk}"
+
+
+class TransactionStatus(ChoiceEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    CANCELLED = "cancelled"
+    EXECUTED = "executed"
+
+
+class MultisigTransaction(TimestampableMixin):
+    multisig = models.ForeignKey(MultiSignature, related_name="transactions", on_delete=models.CASCADE)
+    status = models.CharField(max_length=16, choices=TransactionStatus.as_choices(), default=TransactionStatus.PENDING)
+    executed_at = models.DateTimeField(auto_now=True, editable=False)
+    approver = ArrayField(models.CharField(max_length=250))
+    last_approver = models.CharField(max_length=250)
+    cancelled_by = models.CharField(max_length=150, null=True)
+
+    def __str__(self):
+        return f"{self.status}"  # 1.PENDING
+
+
+class TransactionCallHash(TimestampableMixin):
+    multisig = models.ForeignKey(MultiSignature, related_name="hashes", on_delete=models.CASCADE)
+    call_hash = models.CharField(max_length=250)
+
+    def __str__(self):
+        return f"{self.call_hash}"

@@ -367,3 +367,10 @@ class MultiSignatureViewSet(ReadOnlyModelViewSet):
     pagination_class = MultiQsLimitOffsetPagination
     serializer_class = serializers.RetrieveMultiSignatureSerializer
     lookup_field = "address"
+
+
+@method_decorator(swagger_auto_schema(operation_description="Retrieves A Multi Signature Transaction."), "retrieve")
+class TransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
+    allowed_filter_fields = ("dao_id", "status")
+    queryset = models.MultisigTransaction.objects.all()
+    serializer_class = serializers.MultisigTransactionSerializer

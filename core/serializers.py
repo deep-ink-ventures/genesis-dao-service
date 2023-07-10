@@ -33,8 +33,8 @@ class ConfigSerializer(Serializer):  # noqa
 class BalanceSerializer(Serializer):  # noqa
     free = IntegerField(min_value=0)
     reserved = IntegerField(min_value=0)
-    misc_frozen = IntegerField(min_value=0)
-    fee_frozen = IntegerField(min_value=0)
+    frozen = IntegerField(min_value=0)
+    flags = IntegerField(min_value=0)
 
 
 class AccountSerializerDetail(ModelSerializer):
@@ -238,3 +238,20 @@ class CreateMultiSignatureSerializer(ModelSerializer):
     class Meta:
         model = models.MultiSignature
         fields = ("signatories", "threshold")
+
+
+class MultisigTransactionSerializer(ModelSerializer):
+    multisig = CharField(source="multisig.address", required=True)
+
+    class Meta:
+        model = models.MultisigTransaction
+        fields = (
+            "multisig",
+            "status",
+            "executed_at",
+            "approver",
+            "last_approver",
+            "cancelled_by",
+            "created_at",
+            "updated_at",
+        )

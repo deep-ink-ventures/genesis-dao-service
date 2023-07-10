@@ -35,6 +35,7 @@ class SubstrateEventHandler:
             self._register_votes,
             self._finalize_proposals,
             self._fault_proposals,
+            self._create_multisig_transaction,
         )
 
     @staticmethod
@@ -431,6 +432,44 @@ class SubstrateEventHandler:
                 proposal.fault = faulted_proposals[proposal.id]
                 proposal.status = models.ProposalStatus.FAULTED
             models.Proposal.objects.bulk_update(proposals, ("fault", "status"))
+
+    @staticmethod
+    def _create_multisig_transaction(block: models.Block):
+        multisig_transaction = models.MultisigTransaction()
+
+        if new_multisig := block.event_data.get("Multisig", {}).get("NewMultisig"):
+            call_hash = block.extrinsic_data.get("Multisig", {}).get("approve_as_multi", [{}])[0].get("call_hash", "")
+            multisig_address = new_multisig[0].get("multisig", "")
+            multi_signature = models.MultiSignature.objects.get(address__exact=multisig_address)
+            models.TransactionCallHash.objects.create(call_hash=call_hash, multisig=multi_signature)
+            initial_approving = new_multisig[0].get("approving", "")
+
+            multisig_transaction.multisig = multi_signature
+            multisig_transaction.approver = [initial_approving]
+            multisig_transaction.last_approver = initial_approving
+            multisig_transaction.status = models.TransactionStatus.APPROVED
+            multisig_transaction.save()
+
+        elif executed_multisig := block.event_data.get("Multisig", {}).get("MultisigExecuted"):
+            multisig_address = executed_multisig[0].get("multisig", "")
+            last_approver = executed_multisig[0].get("approving", "")
+            multi_signature = models.MultiSignature.objects.get(address__exact=multisig_address)
+            transaction_objects_get = models.MultisigTransaction.objects.get(multisig=multi_signature)
+
+            transaction_objects_get.status = models.TransactionStatus.EXECUTED
+            transaction_objects_get.approver.append(last_approver)
+            transaction_objects_get.last_approver = last_approver
+            transaction_objects_get.save()
+
+        elif cancelled_multisig := block.event_data.get("Multisig", {}).get("MultisigCancelled"):
+            multisig_address = cancelled_multisig[0].get("multisig", "")
+            canceled_by = cancelled_multisig[0].get("cancelling", "")
+            multi_signature = models.MultiSignature.objects.get(address__exact=multisig_address)
+            transaction_objects_get = models.MultisigTransaction.objects.get(multisig=multi_signature)
+
+            transaction_objects_get.status = models.TransactionStatus.CANCELLED
+            transaction_objects_get.cancelled_by = canceled_by
+            transaction_objects_get.save()
 
     @transaction.atomic
     def execute_actions(self, block: models.Block):
