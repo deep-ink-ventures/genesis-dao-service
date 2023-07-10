@@ -33,8 +33,8 @@ class ConfigSerializer(Serializer):  # noqa
 class BalanceSerializer(Serializer):  # noqa
     free = IntegerField(min_value=0)
     reserved = IntegerField(min_value=0)
-    misc_frozen = IntegerField(min_value=0)
-    fee_frozen = IntegerField(min_value=0)
+    frozen = IntegerField(min_value=0)
+    flags = IntegerField(min_value=0)
 
 
 class AccountSerializerDetail(ModelSerializer):

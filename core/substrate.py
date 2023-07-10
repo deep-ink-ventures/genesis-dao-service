@@ -101,8 +101,8 @@ class SubstrateService(object):
             {
                 "free": int,
                 "reserved": int,
-                "misc_frozen": int,
-                "fee_frozen": int,
+                "frozen": int,
+                "flags": int,
             }
 
         fetches Account's balance dict
