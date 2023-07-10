@@ -3,7 +3,7 @@ import logging
 import time
 from collections import defaultdict
 from functools import partial, wraps
-from typing import Optional
+from typing import List, Optional
 
 from django.conf import settings
 from django.core.cache import cache
@@ -85,8 +85,7 @@ class SubstrateService(object):
     @retry("initializing blockchain connection")
     def __init__(self):
         self.substrate_interface = settings.SUBSTRATE_INTERFACE(
-            url=settings.BLOCKCHAIN_URL,
-            type_registry_preset=settings.TYPE_REGISTRY_PRESET,
+            url=settings.BLOCKCHAIN_URL, type_registry_preset=settings.TYPE_REGISTRY_PRESET, ss58_format=42
         )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -543,6 +542,18 @@ class SubstrateService(object):
             ),
             wait_for_inclusion=wait_for_inclusion,
         )
+
+    def create_multisig_account(self, signatories: List[str] = None, threshold: int = None) -> str:
+        """
+        Args:
+            signatories: List of signatory addresses.
+            threshold: Number of signatories needed to execute the transaction.
+        Returns:
+             MultiSignature ss58 address: A unique identifier that is shared and used to verify signatures.
+        """
+        return self.substrate_interface.generate_multisig_account(
+            signatories=signatories, threshold=threshold
+        ).ss58_address
 
     @staticmethod
     def verify(address: str, challenge_address: str, signature: str) -> bool:

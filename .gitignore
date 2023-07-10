@@ -24,3 +24,4 @@ x2.py
 .envrc
 .direnv
 .devcontainer/
+*.pyc

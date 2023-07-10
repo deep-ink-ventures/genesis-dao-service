@@ -1,3 +1,4 @@
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
 from core import utils
@@ -119,3 +120,11 @@ class Block(TimestampableMixin):
 
     def __str__(self):
         return f"{self.number}"
+
+
+class MultiSignature(Account):
+    signatories = ArrayField(models.CharField(max_length=250))
+    threshold = models.PositiveIntegerField()
+
+    def __str__(self):
+        return f"{self.pk}"

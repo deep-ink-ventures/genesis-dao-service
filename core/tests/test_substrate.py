@@ -1081,3 +1081,17 @@ class SubstrateServiceTest(IntegrationTestCase):
                 call.exception(self.retry_msg),
             ]
         )
+
+    def test_create_multisig_account(self):
+        signatories = [
+            "5HpG9w8EBLe5XCrbczpwq5TSXvedjrBGCwqxK1iQ7qUsSWFc",
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+        ]
+        self.substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
+            ss58_address="some_address"
+        )
+
+        response = self.substrate_service.create_multisig_account(signatories, 2)
+
+        self.si.generate_multisig_account.assert_called_once_with(signatories=signatories, threshold=2)
+        self.assertEqual(response, "some_address")

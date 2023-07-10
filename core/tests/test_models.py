@@ -8,3 +8,6 @@ class ModelTest(UnitTestCase):
 
     def test_block_str(self):
         self.assertEqual(str(models.Block(number=1)), "1")
+
+    def test_multiSignature_str(self):
+        self.assertEqual(str(models.MultiSignature(pk=5)), "5")

@@ -3,6 +3,7 @@ from itertools import chain
 
 from django.conf import settings
 from django.core.cache import cache
+from django.db import IntegrityError
 from django.db.models import Q
 from django.utils.decorators import method_decorator
 from drf_yasg import openapi
@@ -128,6 +129,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
             "retrieve": serializers.DaoSerializer,
             "list": serializers.DaoSerializer,
             "add_metadata": serializers.AddDaoMetadataSerializer,
+            "create_multisig": serializers.CreateMultiSignatureSerializer,
         }.get(self.action)
 
     @swagger_auto_schema(
@@ -225,6 +227,33 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         challenge_token = secrets.token_hex(64)
         cache.set(key=self.get_object().owner_id, value=challenge_token, timeout=settings.CHALLENGE_LIFETIME)
         return Response(status=HTTP_200_OK, data={"challenge": challenge_token})
+
+    @swagger_auto_schema(
+        operation_id="Create Multi Signature Wallet",
+        operation_description="Creating a Multi Signature Wallet",
+        responses={201: openapi.Response("", serializers.CreateMultiSignatureSerializer)},
+        security=[{"Signature": []}],
+    )
+    @action(
+        methods=["POST"], detail=True, url_path="multisig", permission_classes=[IsDAOOwner], authentication_classes=[]
+    )
+    def create_multisig(self, request, *args, **kwargs):
+        from core.substrate import substrate_service
+
+        if (signatories := request.data.get("signatories")) and (threshold := request.data.get("threshold")):
+            try:
+                multi_signature_account = models.MultiSignature.objects.create(
+                    address=substrate_service.create_multisig_account(signatories=signatories, threshold=threshold),
+                    signatories=signatories,
+                    threshold=threshold,
+                )
+            except IntegrityError:
+                return Response({"message": "Multi signature account already exists."}, HTTP_400_BAD_REQUEST)
+
+            serializer = serializers.RetrieveMultiSignatureSerializer(multi_signature_account)
+
+            return Response(data=serializer.data, status=HTTP_201_CREATED)
+        return Response({"message": "Signatories or threshold are missing."}, HTTP_400_BAD_REQUEST)
 
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Asset."), "retrieve")
@@ -330,3 +359,11 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
             self.get_serializer(models.ProposalReport.objects.filter(proposal_id=kwargs["pk"]), many=True).data,
             status=HTTP_200_OK,
         )
+
+
+@method_decorator(swagger_auto_schema(operation_description="Retrieves A Multi Signature Account."), "retrieve")
+class MultiSignatureViewSet(ReadOnlyModelViewSet):
+    queryset = models.MultiSignature.objects.all()
+    pagination_class = MultiQsLimitOffsetPagination
+    serializer_class = serializers.RetrieveMultiSignatureSerializer
+    lookup_field = "address"
