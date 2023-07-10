@@ -1095,3 +1095,24 @@ class SubstrateServiceTest(IntegrationTestCase):
 
         self.si.generate_multisig_account.assert_called_once_with(signatories=signatories, threshold=2)
         self.assertEqual(response, "some_address")
+
+    def test_create_multisig_event(self):
+        keypair_alice = Keypair.create_from_uri("//Alice")
+        keypair_bob = Keypair.create_from_uri("//Bob")
+        value = 1
+        self.substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
+            ss58_address="5F3QVbS78a4aTYLiRAD8N3czjqVoNyV42L19CXyhqUMCh4Ch"
+        )
+        multisig_account = self.substrate_service.create_multisig_account([keypair_bob, keypair_alice], 2)
+
+        self.substrate_service.create_multisig_event(
+            keypair=keypair_alice, multisig_account=multisig_account, value=value, wait_for_inclusion=True
+        )
+
+        self.substrate_service.substrate_interface.compose_call(
+            call_module="Balances",
+            call_function="transfer",
+            call_params={"dest": keypair_alice.ss58_address, "value": value},
+        ),
+        # Error: AssertionError: Expected 'create_signed_extrinsic' to be called once. Called 0 times.
+        self.assert_signed_extrinsic_submitted(keypair=keypair_alice)

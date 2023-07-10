@@ -101,8 +101,8 @@ class SubstrateService(object):
             {
                 "free": int,
                 "reserved": int,
-                "misc_frozen": int,
-                "fee_frozen": int,
+                "frozen": int,
+                "flags": int,
             }
 
         fetches Account's balance dict
@@ -554,6 +554,38 @@ class SubstrateService(object):
         return self.substrate_interface.generate_multisig_account(
             signatories=signatories, threshold=threshold
         ).ss58_address
+
+    def create_multisig_event(self, keypair: Keypair, multisig_account, value: int, wait_for_inclusion=False):
+        """
+        Creates a multisig event by submitting an extrinsic to transfer funds from the multisig account
+        to the specified destination account.
+
+        Args:
+            keypair (Keypair): The keypair used to sign the extrinsic.
+            multisig_account: The multisig account from which the funds will be transferred.
+            value (int): The amount of funds to transfer.
+            wait_for_inclusion (bool, optional): Specifies whether to wait for the extrinsic to be included
+                in a block. Defaults to False.
+
+        Returns:
+            None
+
+        Raises:
+            Any exceptions that occur during the process of submitting the extrinsic.
+
+        """
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_multisig_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Balances",
+                    call_function="transfer",
+                    call_params={"dest": keypair.ss58_address, "value": value},
+                ),
+                keypair=keypair,
+                multisig_account=multisig_account,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
 
     @staticmethod
     def verify(address: str, challenge_address: str, signature: str) -> bool:

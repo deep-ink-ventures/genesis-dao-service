@@ -1,7 +1,7 @@
 import json
 import random
 from io import BytesIO
-from unittest.mock import call, patch
+from unittest.mock import Mock, call, patch
 
 from django.core.cache import cache
 from django.db import IntegrityError
@@ -15,6 +15,7 @@ from core.event_handler import (
     substrate_event_handler,
 )
 from core.file_handling.file_handler import file_handler
+from core.substrate import substrate_service
 from core.tests.testcases import IntegrationTestCase
 
 
@@ -144,7 +145,7 @@ class EventHandlerTest(IntegrationTestCase):
             models.Dao(id="dao2", name="dao2 name", owner_id="acc2"),
         ]
 
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6):
             substrate_event_handler._delete_daos(block)
 
         self.assertModelsEqual(models.Dao.objects.all(), expected_daos)
@@ -1167,6 +1168,95 @@ class EventHandlerTest(IntegrationTestCase):
             substrate_event_handler._fault_proposals(block)
 
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
+
+    def test_multisig_event(self):
+        signer_one = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+        signer_two = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty"
+
+        substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
+            ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+        )
+
+        multisig_address = substrate_service.create_multisig_account(signatories=[signer_one, signer_two], threshold=2)
+
+        models.MultiSignature.objects.create(
+            address=multisig_address, signatories=[signer_one, signer_two], threshold=2
+        )
+
+        models.Dao.objects.create(
+            id="dao1",
+            name="dao1 name",
+            creator_id=multisig_address,
+            owner_id=multisig_address,
+            metadata={"some": "data"},
+        )
+
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            extrinsic_data={
+                "Multisig": {
+                    "approve_as_multi": [
+                        {
+                            "call_hash": "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
+                            "threshold": 2,
+                            "max_weight": {"ref_time": 185307000, "proof_size": 3593},
+                            "maybe_timepoint": None,
+                            "other_signatories": [
+                                "5EZ6brKNPkWWuEtibPfobPkeYBR6vYz6brQQ5ccYyMjc3LXo",
+                                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                            ],
+                        }
+                    ]
+                },
+                "Timestamp": {"set": [{"now": 1689154704002}]},
+            },
+            event_data={
+                "Multisig": {
+                    "NewMultisig": [
+                        {
+                            "multisig": "5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw",
+                            "approving": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                            "call_hash": "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
+                        }
+                    ]
+                },
+            },
+        )
+        multisig_address = models.MultiSignature.objects.get(
+            address__iexact="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+        )
+        dao = models.Dao.objects.get(creator__address__exact=multisig_address)
+
+        with self.assertNumQueries(4):
+            substrate_event_handler._create_multisig_transaction(block)
+
+        expected_transaction = [
+            models.MultisigTransaction(
+                id=1,
+                dao=dao,
+                status=models.TransactionStatus.APPROVED,
+                multisig=multisig_address,
+                approver=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
+                last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                created_at="2023-07-13 08:27:43.054029+00:00",
+                executed_at=None,
+                cancelled_by=None,
+            )
+        ]
+
+        expected_transaction_call_hash = [
+            models.TransactionCallHash(
+                id=1,
+                call_hash="0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
+                multisig=multisig_address,
+            )
+        ]
+
+        self.assertModelsEqual(models.MultisigTransaction.objects.order_by("created_at"), expected_transaction)
+        self.assertModelsEqual(
+            models.TransactionCallHash.objects.order_by("created_at"), expected_transaction_call_hash
+        )
 
     @patch("core.event_handler.SubstrateEventHandler._create_accounts")
     @patch("core.event_handler.SubstrateEventHandler._create_daos")

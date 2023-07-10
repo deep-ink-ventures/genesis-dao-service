@@ -145,7 +145,7 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertDictEqual(res.data, expected_res)
 
     def test_account_get(self):
-        expected_balance = {"free": 1, "reserved": 2, "misc_frozen": 3, "fee_frozen": 4}
+        expected_balance = {"free": 1, "reserved": 2, "frozen": 3, "flags": 4}
 
         with patch("substrateinterface.SubstrateInterface"):
             from core.substrate import substrate_service
