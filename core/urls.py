@@ -13,6 +13,9 @@ router.register(r"multisig", views.MultiSignatureViewSet, basename="core-multi-s
 router.register(
     r"multisig-transaction", views.MultiSignatureTransactionViewSet, basename="core-multi-signature-transaction"
 )
+router.register(
+    r"multisig-transaction-data", views.TransactionHashAndDataViewSet, basename="core-transaction-original-data"
+)
 
 urlpatterns = router.urls + [
     path(r"", views.welcome, name="core-welcome"),

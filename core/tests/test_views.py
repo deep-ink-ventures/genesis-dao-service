@@ -907,8 +907,6 @@ class CoreViewSetTest(IntegrationTestCase):
             last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
         )
         expected_response = {
-            "created_at": "2023-07-13T15:59:24.365119",
-            "updated_at": "2023-07-13T15:59:24.365127",
             "executed_at": None,
             "status": "APPROVED",
             "approver": [
@@ -920,9 +918,12 @@ class CoreViewSetTest(IntegrationTestCase):
         }
 
         response = self.client.get(reverse("core-multi-signature-transaction-detail", kwargs={"pk": object_created.pk}))
+        modified_response_data = response.data.copy()
+        modified_response_data.pop("created_at")
+        modified_response_data.pop("updated_at")
 
         self.assertEqual(response.status_code, HTTP_200_OK)
-        self.assertEqual(response.data["status"], expected_response["status"])
+        self.assertEqual(modified_response_data, expected_response)
 
     def test_get__multisig_transactions_list(self):
         from core.substrate import substrate_service
@@ -950,8 +951,6 @@ class CoreViewSetTest(IntegrationTestCase):
             "previous": None,
             "results": [
                 {
-                    "created_at": "2023-07-13T15:59:24.365119",
-                    "updated_at": "2023-07-13T15:59:24.365127",
                     "status": "APPROVED",
                     "executed_at": None,
                     "approver": [
@@ -965,12 +964,12 @@ class CoreViewSetTest(IntegrationTestCase):
         }
 
         response = self.client.get(reverse("core-multi-signature-transaction-list"))
+        modified_response_data = response.data.copy()
+        modified_response_data["results"][0].pop("created_at")
+        modified_response_data["results"][0].pop("updated_at")
 
         self.assertEqual(response.status_code, HTTP_200_OK)
-        self.assertEqual(
-            response.data["results"][0]["last_approver"],
-            expected_response["results"][0]["last_approver"],
-        )
+        self.assertEqual(modified_response_data, expected_response)
 
     def test_get__multisig_transactions_filter_by_dao_id(self):
         from core.substrate import substrate_service
@@ -1008,8 +1007,6 @@ class CoreViewSetTest(IntegrationTestCase):
             "previous": None,
             "results": [
                 {
-                    "created_at": "2023-07-13T15:59:24.365119",
-                    "updated_at": "2023-07-13T15:59:24.365127",
                     "status": "EXECUTED",
                     "executed_at": None,
                     "approver": [
@@ -1023,9 +1020,12 @@ class CoreViewSetTest(IntegrationTestCase):
         }
 
         response = self.client.get(reverse("core-multi-signature-transaction-list") + "?dao_id=dao2")
+        modified_response_data = response.data.copy()
+        modified_response_data["results"][0].pop("created_at")
+        modified_response_data["results"][0].pop("updated_at")
 
         self.assertEqual(response.status_code, HTTP_200_OK)
-        self.assertEqual(response.data["results"][0]["last_approver"], expected_response["results"][0]["last_approver"])
+        self.assertEqual(modified_response_data, expected_response)
 
     def test_get__multisig_transactions_filter_by_status(self):
         from core.substrate import substrate_service
@@ -1063,8 +1063,6 @@ class CoreViewSetTest(IntegrationTestCase):
             "previous": None,
             "results": [
                 {
-                    "created_at": "2023-07-13T15:59:24.365119",
-                    "updated_at": "2023-07-13T15:59:24.365127",
                     "status": "APPROVED",
                     "executed_at": None,
                     "approver": [
@@ -1078,6 +1076,9 @@ class CoreViewSetTest(IntegrationTestCase):
         }
 
         response = self.client.get(reverse("core-multi-signature-transaction-list") + "?status=APPROVED")
+        modified_response_data = response.data.copy()
+        modified_response_data["results"][0].pop("created_at")
+        modified_response_data["results"][0].pop("updated_at")
 
         self.assertEqual(response.status_code, HTTP_200_OK)
-        self.assertEqual(response.data["results"][0]["status"], expected_response["results"][0]["status"])
+        self.assertEqual(modified_response_data, expected_response)

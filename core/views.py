@@ -374,3 +374,12 @@ class MultiSignatureTransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
     allowed_filter_fields = ("dao_id", "status")
     queryset = models.MultisigTransaction.objects.all()
     serializer_class = serializers.MultisigTransactionSerializer
+
+
+@method_decorator(
+    swagger_auto_schema(operation_description="Retrieves Transaction Original data and Hash."), "retrieve"
+)
+class TransactionHashAndDataViewSet(ReadOnlyModelViewSet, SearchableMixin):
+    queryset = models.TransactionCallHash.objects.all()
+    serializer_class = serializers.TransactionCallHashDataSerializer
+    lookup_field = "call_hash"

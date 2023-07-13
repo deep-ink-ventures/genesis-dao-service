@@ -446,20 +446,23 @@ class SubstrateEventHandler:
         """
         multisig_transaction = models.MultisigTransaction()
 
-        if new_multisig := block.event_data.get("Multisig", {}).get("NewMultisig"):
+        if new_multisig_event := block.event_data.get("Multisig", {}).get("NewMultisig"):
             call_hash = block.extrinsic_data.get("Multisig", {}).get("approve_as_multi", [{}])[0].get("call_hash", "")
-            multi_signature = models.MultiSignature.objects.get(address__exact=(new_multisig[0].get("multisig", "")))
+            multi_signature = models.MultiSignature.objects.get(
+                address__exact=(new_multisig_event[0].get("multisig", ""))
+            )
             models.TransactionCallHash.objects.create(call_hash=call_hash, multisig=multi_signature)
+
             multisig_transaction.multisig = multi_signature
             multisig_transaction.status = models.TransactionStatus.APPROVED
+            multisig_transaction.approver = [new_multisig_event[0].get("approving", "")]
+            multisig_transaction.last_approver = new_multisig_event[0].get("approving", "")
             multisig_transaction.dao = models.Dao.objects.get(
-                creator__address__exact=(new_multisig[0].get("multisig", ""))
+                creator__address__exact=(new_multisig_event[0].get("multisig", ""))
             )
-            multisig_transaction.approver = [(new_multisig[0].get("approving", ""))]
-            multisig_transaction.last_approver = new_multisig[0].get("approving", "")
             multisig_transaction.save()
 
-        if executed_multisig := block.event_data.get("Multisig", {}).get("MultisigExecuted"):
+        elif executed_multisig := block.event_data.get("Multisig", {}).get("MultisigExecuted"):
             multisig_transaction = models.MultisigTransaction.objects.get(
                 multisig=(models.MultiSignature.objects.get(address__exact=(executed_multisig[0].get("multisig", ""))))
             )

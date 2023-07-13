@@ -1172,6 +1172,29 @@ class EventHandlerTest(IntegrationTestCase):
     def test_multisig_event_handler(self):
         signer_one = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
         signer_two = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty"
+
+        substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
+            ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+        )
+        multisig_account = substrate_service.create_multisig_account(signatories=[signer_one, signer_two], threshold=2)
+        models.MultiSignature.objects.create(
+            address=multisig_account, signatories=[signer_one, signer_two], threshold=2
+        )
+        multisig_address = models.MultiSignature.objects.get(
+            address__iexact="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+        )
+        models.Dao.objects.create(
+            id="dao1",
+            name="dao1 name",
+            creator_id=multisig_address,
+            owner_id=multisig_address,
+            metadata={"some": "data"},
+        )
+
+        multisig_address = models.MultiSignature.objects.get(
+            address__iexact="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+        )
+        dao = models.Dao.objects.get(creator__address__exact=multisig_address)
         block_new_multisig_event = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -1268,24 +1291,6 @@ class EventHandlerTest(IntegrationTestCase):
                 },
             },
         )
-        substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
-            ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
-        )
-        multisig_account = substrate_service.create_multisig_account(signatories=[signer_one, signer_two], threshold=2)
-        models.MultiSignature.objects.create(
-            address=multisig_account, signatories=[signer_one, signer_two], threshold=2
-        )
-        multisig_address = models.MultiSignature.objects.get(
-            address__iexact="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
-        )
-        models.Dao.objects.create(
-            id="dao1",
-            name="dao1 name",
-            creator_id=multisig_address,
-            owner_id=multisig_address,
-            metadata={"some": "data"},
-        )
-        dao = models.Dao.objects.get(creator__address__exact=multisig_address)
 
         if models.Block.objects.filter(number=0).exists():
             self.create_new_multisig_event_action(block_new_multisig_event, dao, multisig_address)
@@ -1382,10 +1387,8 @@ class EventHandlerTest(IntegrationTestCase):
             )
         ]
 
-        self.assertModelsEqual(models.MultisigTransaction.objects.order_by("created_at"), expected_transaction)
-        self.assertModelsEqual(
-            models.TransactionCallHash.objects.order_by("created_at"), expected_transaction_call_hash
-        )
+        self.assertModelsEqual(models.MultisigTransaction.objects.order_by("id"), expected_transaction)
+        self.assertModelsEqual(models.TransactionCallHash.objects.order_by("id"), expected_transaction_call_hash)
 
     @patch("core.event_handler.SubstrateEventHandler._create_accounts")
     @patch("core.event_handler.SubstrateEventHandler._create_daos")

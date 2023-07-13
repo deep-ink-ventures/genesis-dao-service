@@ -152,7 +152,8 @@ class MultisigTransaction(TimestampableMixin):
 
 class TransactionCallHash(TimestampableMixin):
     multisig = models.ForeignKey(MultiSignature, related_name="hashes", on_delete=models.CASCADE)
-    call_hash = models.CharField(max_length=250)
+    call_hash = models.CharField(max_length=250, primary_key=True, unique=True, editable=False)
+    call_params = models.JSONField(default=dict)
 
     def __str__(self):
         return f"{self.call_hash}"

@@ -246,10 +246,17 @@ class MultisigTransactionSerializer(ModelSerializer):
         fields = (
             "created_at",
             "updated_at",
-            "executed_at",
             "status",
             "executed_at",
             "approver",
             "last_approver",
             "cancelled_by",
         )
+
+
+class TransactionCallHashDataSerializer(ModelSerializer):
+    multisig = CharField(source="multisig.address", required=True)
+
+    class Meta:
+        model = models.TransactionCallHash
+        fields = ("multisig", "call_hash", "call_params")
