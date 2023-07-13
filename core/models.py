@@ -147,7 +147,7 @@ class MultisigTransaction(TimestampableMixin):
     cancelled_by = models.CharField(max_length=150, null=True)
 
     def __str__(self):
-        return f"{self.status}"  # 1.PENDING
+        return f"{self.status}"  # PENDING
 
 
 class TransactionCallHash(TimestampableMixin):

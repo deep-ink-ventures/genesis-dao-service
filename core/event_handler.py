@@ -445,10 +445,10 @@ class SubstrateEventHandler:
             models.TransactionCallHash.objects.create(call_hash=call_hash, multisig=multi_signature)
 
             multisig_transaction.multisig = multi_signature
+            multisig_transaction.status = models.TransactionStatus.APPROVED
             multisig_transaction.dao = models.Dao.objects.get(creator__address__exact=multisig_address)
             multisig_transaction.approver = [(new_multisig[0].get("approving", ""))]
             multisig_transaction.last_approver = new_multisig[0].get("approving", "")
-            multisig_transaction.status = models.TransactionStatus.APPROVED
             multisig_transaction.save()
 
         elif executed_multisig := block.event_data.get("Multisig", {}).get("MultisigExecuted"):

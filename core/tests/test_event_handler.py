@@ -1192,8 +1192,8 @@ class EventHandlerTest(IntegrationTestCase):
         )
 
         block = models.Block.objects.create(
-            hash="hash 0",
-            number=0,
+            hash="hash 1",
+            number=1,
             extrinsic_data={
                 "Multisig": {
                     "approve_as_multi": [
@@ -1223,6 +1223,7 @@ class EventHandlerTest(IntegrationTestCase):
                 },
             },
         )
+
         multisig_address = models.MultiSignature.objects.get(
             address__iexact="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
         )
@@ -1253,10 +1254,8 @@ class EventHandlerTest(IntegrationTestCase):
             )
         ]
 
-        self.assertModelsEqual(models.MultisigTransaction.objects.order_by("created_at"), expected_transaction)
-        self.assertModelsEqual(
-            models.TransactionCallHash.objects.order_by("created_at"), expected_transaction_call_hash
-        )
+        self.assertModelsEqual(models.MultisigTransaction.objects.order_by("id"), expected_transaction)
+        self.assertModelsEqual(models.TransactionCallHash.objects.order_by("id"), expected_transaction_call_hash)
 
     @patch("core.event_handler.SubstrateEventHandler._create_accounts")
     @patch("core.event_handler.SubstrateEventHandler._create_daos")
