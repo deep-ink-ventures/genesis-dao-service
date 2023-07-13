@@ -246,7 +246,6 @@ class MultisigTransactionSerializer(ModelSerializer):
         fields = (
             "created_at",
             "updated_at",
-            "executed_at",
             "status",
             "executed_at",
             "approver",
