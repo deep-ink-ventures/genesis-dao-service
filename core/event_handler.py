@@ -1,6 +1,5 @@
 import collections
 import logging
-from datetime import datetime
 from functools import reduce
 
 from django.conf import settings
@@ -436,41 +435,45 @@ class SubstrateEventHandler:
 
     @staticmethod
     def _create_multisig_transaction(block: models.Block):
+        """
+        Args:
+            block: Block to multisignature transactions
+
+        Returns:
+            None
+
+        multisignature Transaction based on the Block's events
+        """
         multisig_transaction = models.MultisigTransaction()
 
         if new_multisig := block.event_data.get("Multisig", {}).get("NewMultisig"):
             call_hash = block.extrinsic_data.get("Multisig", {}).get("approve_as_multi", [{}])[0].get("call_hash", "")
-            multisig_address = new_multisig[0].get("multisig", "")
-            multi_signature = models.MultiSignature.objects.get(address__exact=multisig_address)
+            multi_signature = models.MultiSignature.objects.get(address__exact=(new_multisig[0].get("multisig", "")))
             models.TransactionCallHash.objects.create(call_hash=call_hash, multisig=multi_signature)
-
             multisig_transaction.multisig = multi_signature
-            multisig_transaction.dao = models.Dao.objects.get(creator__address__exact=multisig_address)
+            multisig_transaction.status = models.TransactionStatus.APPROVED
+            multisig_transaction.dao = models.Dao.objects.get(
+                creator__address__exact=(new_multisig[0].get("multisig", ""))
+            )
             multisig_transaction.approver = [(new_multisig[0].get("approving", ""))]
             multisig_transaction.last_approver = new_multisig[0].get("approving", "")
-            multisig_transaction.status = models.TransactionStatus.APPROVED
             multisig_transaction.save()
 
-        elif executed_multisig := block.event_data.get("Multisig", {}).get("MultisigExecuted"):
-            multisig_address = executed_multisig[0].get("multisig", "")
-            executed_at = block.extrinsic_data.get("Timestamp", {}).get("set", [{}])[0]["now"] / 1000
-            multi_signature = models.MultiSignature.objects.get(address__exact=multisig_address)
-            multisig_transaction = models.MultisigTransaction.objects.get(multisig=multi_signature)
-
+        if executed_multisig := block.event_data.get("Multisig", {}).get("MultisigExecuted"):
+            multisig_transaction = models.MultisigTransaction.objects.get(
+                multisig=(models.MultiSignature.objects.get(address__exact=(executed_multisig[0].get("multisig", ""))))
+            )
             multisig_transaction.status = models.TransactionStatus.EXECUTED
-            multisig_transaction.dao = models.Dao.objects.get(creator__address__exact=multisig_address)
             multisig_transaction.approver.append(executed_multisig[0].get("approving", ""))
             multisig_transaction.last_approver = executed_multisig[0].get("approving", "")
-            multisig_transaction.executed_at = str(datetime.fromtimestamp(executed_at))
+            multisig_transaction.executed_at = timezone.now().replace(microsecond=0)
             multisig_transaction.save()
 
-        elif cancelled_multisig := block.event_data.get("Multisig", {}).get("MultisigCancelled"):
-            multisig_address = cancelled_multisig[0].get("multisig", "")
-            multi_signature = models.MultiSignature.objects.get(address__exact=multisig_address)
-            multisig_transaction = models.MultisigTransaction.objects.get(multisig=multi_signature)
-
+        if cancelled_multisig := block.event_data.get("Multisig", {}).get("MultisigCancelled"):
+            multisig_transaction = models.MultisigTransaction.objects.get(
+                multisig=(models.MultiSignature.objects.get(address__exact=(cancelled_multisig[0].get("multisig", ""))))
+            )
             multisig_transaction.status = models.TransactionStatus.CANCELLED
-            multisig_transaction.dao = models.Dao.objects.get(creator__address__exact=multisig_address)
             multisig_transaction.cancelled_by = cancelled_multisig[0].get("cancelling", "")
             multisig_transaction.save()
 

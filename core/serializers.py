@@ -241,19 +241,15 @@ class CreateMultiSignatureSerializer(ModelSerializer):
 
 
 class MultisigTransactionSerializer(ModelSerializer):
-    multisig = CharField(source="multisig.address", required=True)
-    dao_id = CharField(source="dao.id", required=True)
-
     class Meta:
         model = models.MultisigTransaction
         fields = (
-            "multisig",
-            "dao_id",
+            "created_at",
+            "updated_at",
+            "executed_at",
             "status",
             "executed_at",
             "approver",
             "last_approver",
             "cancelled_by",
-            "created_at",
-            "updated_at",
         )

@@ -141,13 +141,13 @@ class MultisigTransaction(TimestampableMixin):
     multisig = models.ForeignKey(MultiSignature, related_name="transactions", on_delete=models.CASCADE)
     dao = models.ForeignKey(Dao, related_name="daos", on_delete=models.CASCADE)
     status = models.CharField(max_length=16, choices=TransactionStatus.as_choices(), default=TransactionStatus.PENDING)
-    executed_at = models.DateTimeField(blank=True, null=True, editable=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
     approver = ArrayField(models.CharField(max_length=250))
     last_approver = models.CharField(max_length=250)
     cancelled_by = models.CharField(max_length=150, null=True)
 
     def __str__(self):
-        return f"{self.status}"  # 1.PENDING
+        return f"{self.status}"
 
 
 class TransactionCallHash(TimestampableMixin):

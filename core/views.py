@@ -370,7 +370,7 @@ class MultiSignatureViewSet(ReadOnlyModelViewSet):
 
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves A Multi Signature Transaction."), "retrieve")
-class TransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
+class MultiSignatureTransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
     allowed_filter_fields = ("dao_id", "status")
     queryset = models.MultisigTransaction.objects.all()
     serializer_class = serializers.MultisigTransactionSerializer

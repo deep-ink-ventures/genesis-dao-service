@@ -883,3 +883,201 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data, expected_response)
+
+    #   TODO: TEST MULTI SIGNATURE TRANSACTION VIEW
+
+    def test_get_multisig_transaction_by_id(self):
+        from core.substrate import substrate_service
+
+        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        substrate_service.create_multisig_account = Mock(return_value=address)
+        multi_signature = models.MultiSignature.objects.create(
+            signatories=self.get_signatories(),
+            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
+            threshold=2,
+        )
+        object_created = models.MultisigTransaction.objects.create(
+            status=models.TransactionStatus.APPROVED,
+            multisig=multi_signature,
+            dao_id="dao1",
+            approver=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+        )
+        expected_response = {
+            "created_at": "2023-07-13T15:59:24.365119",
+            "updated_at": "2023-07-13T15:59:24.365127",
+            "executed_at": None,
+            "status": "APPROVED",
+            "approver": [
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            "last_approver": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            "cancelled_by": None,
+        }
+
+        response = self.client.get(reverse("core-multi-signature-transaction-detail", kwargs={"pk": object_created.pk}))
+
+        self.assertEqual(response.status_code, HTTP_200_OK)
+        self.assertEqual(response.data["status"], expected_response["status"])
+
+    def test_get__multisig_transactions_list(self):
+        from core.substrate import substrate_service
+
+        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        substrate_service.create_multisig_account = Mock(return_value=address)
+        multi_signature = models.MultiSignature.objects.create(
+            signatories=self.get_signatories(),
+            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
+            threshold=2,
+        )
+        models.MultisigTransaction.objects.create(
+            status=models.TransactionStatus.APPROVED,
+            multisig=multi_signature,
+            dao_id="dao1",
+            approver=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+        )
+        expected_response = {
+            "count": 1,
+            "next": None,
+            "previous": None,
+            "results": [
+                {
+                    "created_at": "2023-07-13T15:59:24.365119",
+                    "updated_at": "2023-07-13T15:59:24.365127",
+                    "status": "APPROVED",
+                    "executed_at": None,
+                    "approver": [
+                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    ],
+                    "last_approver": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    "cancelled_by": None,
+                }
+            ],
+        }
+
+        response = self.client.get(reverse("core-multi-signature-transaction-list"))
+
+        self.assertEqual(response.status_code, HTTP_200_OK)
+        self.assertEqual(
+            response.data["results"][0]["last_approver"],
+            expected_response["results"][0]["last_approver"],
+        )
+
+    def test_get__multisig_transactions_filter_by_dao_id(self):
+        from core.substrate import substrate_service
+
+        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        substrate_service.create_multisig_account = Mock(return_value=address)
+        multi_signature = models.MultiSignature.objects.create(
+            signatories=self.get_signatories(),
+            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
+            threshold=2,
+        )
+        models.MultisigTransaction.objects.create(
+            status=models.TransactionStatus.APPROVED,
+            multisig=multi_signature,
+            dao_id="dao1",
+            approver=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+        )
+        models.MultisigTransaction.objects.create(
+            status=models.TransactionStatus.EXECUTED,
+            multisig=multi_signature,
+            dao_id="dao2",
+            approver=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+        )
+        expected_response = {
+            "count": 1,
+            "next": None,
+            "previous": None,
+            "results": [
+                {
+                    "created_at": "2023-07-13T15:59:24.365119",
+                    "updated_at": "2023-07-13T15:59:24.365127",
+                    "status": "EXECUTED",
+                    "executed_at": None,
+                    "approver": [
+                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    ],
+                    "last_approver": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    "cancelled_by": None,
+                }
+            ],
+        }
+
+        response = self.client.get(reverse("core-multi-signature-transaction-list") + "?dao_id=dao2")
+
+        self.assertEqual(response.status_code, HTTP_200_OK)
+        self.assertEqual(response.data["results"][0]["last_approver"], expected_response["results"][0]["last_approver"])
+
+    def test_get__multisig_transactions_filter_by_status(self):
+        from core.substrate import substrate_service
+
+        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        substrate_service.create_multisig_account = Mock(return_value=address)
+        multi_signature = models.MultiSignature.objects.create(
+            signatories=self.get_signatories(),
+            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
+            threshold=2,
+        )
+        models.MultisigTransaction.objects.create(
+            status=models.TransactionStatus.APPROVED,
+            multisig=multi_signature,
+            dao_id="dao1",
+            approver=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+        )
+        models.MultisigTransaction.objects.create(
+            status=models.TransactionStatus.EXECUTED,
+            multisig=multi_signature,
+            dao_id="dao2",
+            approver=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+        )
+        expected_response = {
+            "count": 1,
+            "next": None,
+            "previous": None,
+            "results": [
+                {
+                    "created_at": "2023-07-13T15:59:24.365119",
+                    "updated_at": "2023-07-13T15:59:24.365127",
+                    "status": "APPROVED",
+                    "executed_at": None,
+                    "approver": [
+                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    ],
+                    "last_approver": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    "cancelled_by": None,
+                }
+            ],
+        }
+
+        response = self.client.get(reverse("core-multi-signature-transaction-list") + "?status=APPROVED")
+
+        self.assertEqual(response.status_code, HTTP_200_OK)
+        self.assertEqual(response.data["results"][0]["status"], expected_response["results"][0]["status"])
