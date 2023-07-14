@@ -1320,7 +1320,6 @@ class EventHandlerTest(IntegrationTestCase):
         ]
         expected_transaction_call_hash = [
             models.TransactionCallHash(
-                id=1,
                 call_hash="0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
                 multisig=multisig_address,
             )
@@ -1352,7 +1351,6 @@ class EventHandlerTest(IntegrationTestCase):
         ]
         expected_transaction_call_hash = [
             models.TransactionCallHash(
-                id=1,
                 call_hash="0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
                 multisig=multisig_address,
             )
@@ -1381,14 +1379,15 @@ class EventHandlerTest(IntegrationTestCase):
         ]
         expected_transaction_call_hash = [
             models.TransactionCallHash(
-                id=1,
                 call_hash="0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
                 multisig=multisig_address,
             )
         ]
 
-        self.assertModelsEqual(models.MultisigTransaction.objects.order_by("id"), expected_transaction)
-        self.assertModelsEqual(models.TransactionCallHash.objects.order_by("id"), expected_transaction_call_hash)
+        self.assertModelsEqual(models.MultisigTransaction.objects.order_by("created_at"), expected_transaction)
+        self.assertModelsEqual(
+            models.TransactionCallHash.objects.order_by("created_at"), expected_transaction_call_hash
+        )
 
     @patch("core.event_handler.SubstrateEventHandler._create_accounts")
     @patch("core.event_handler.SubstrateEventHandler._create_daos")
