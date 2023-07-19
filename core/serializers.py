@@ -183,6 +183,7 @@ class ProposalSerializer(ModelSerializer):
             "metadata_url",
             "metadata_hash",
             "birth_block_number",
+            "setup_complete",
         )
 
 

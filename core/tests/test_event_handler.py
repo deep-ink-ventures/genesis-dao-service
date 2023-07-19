@@ -727,6 +727,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_hash=metadata_hash_1,
                 metadata=metadata_1,
                 birth_block_number=10,
+                setup_complete=True,
             ),
             models.Proposal(
                 id="2",
@@ -735,6 +736,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_hash=metadata_hash_2,
                 metadata=metadata_2,
                 birth_block_number=10,
+                setup_complete=True,
             ),
         ]
         with self.assertNumQueries(4):
@@ -811,6 +813,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_hash="wrong hash",
                 metadata=None,
                 birth_block_number=10,
+                setup_complete=True,
             ),
             models.Proposal(
                 id="2",
@@ -819,6 +822,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_hash=metadata_hash_2,
                 metadata=metadata_2,
                 birth_block_number=10,
+                setup_complete=True,
             ),
             models.Proposal(
                 id="3",
@@ -827,6 +831,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_hash=None,
                 metadata=None,
                 birth_block_number=10,
+                setup_complete=False,
             ),
         ]
 
@@ -904,6 +909,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_hash=metadata_hash_1,
                 metadata=None,
                 birth_block_number=10,
+                setup_complete=True,
             ),
             models.Proposal(
                 id="2",
@@ -912,6 +918,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_hash=metadata_hash_2,
                 metadata=metadata_2,
                 birth_block_number=10,
+                setup_complete=True,
             ),
         ]
 
@@ -991,6 +998,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_hash=metadata_hash_1,
                 metadata=None,
                 birth_block_number=10,
+                setup_complete=True,
             ),
             models.Proposal(
                 id="2",
@@ -999,6 +1007,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata_hash=metadata_hash_2,
                 metadata=None,
                 birth_block_number=10,
+                setup_complete=True,
             ),
         ]
 
