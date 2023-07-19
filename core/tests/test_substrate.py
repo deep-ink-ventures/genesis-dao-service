@@ -1099,12 +1099,19 @@ class SubstrateServiceTest(IntegrationTestCase):
     def test_create_multisig_event(self):
         keypair_alice = Keypair.create_from_uri("//Alice")
         keypair_bob = Keypair.create_from_uri("//Bob")
+        call_module = "Balances"
+        call_function = "transfer"
         self.si.generate_multisig_account.return_value = Mock(
             ss58_address="5F3QVbS78a4aTYLiRAD8N3czjqVoNyV42L19CXyhqUMCh4Ch"
         )
         multisig_account = self.substrate_service.create_multisig_account([keypair_bob, keypair_alice], 2)
         self.substrate_service.create_multisig_event(
-            keypair=keypair_alice, multisig_account=multisig_account, value=1, wait_for_inclusion=True
+            keypair=keypair_alice,
+            multisig_account=multisig_account,
+            call_module=call_module,
+            call_function=call_function,
+            value=1,
+            wait_for_inclusion=True,
         )
 
         self.si.create_multisig_extrinsic.assert_called_once_with(

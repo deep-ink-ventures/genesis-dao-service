@@ -558,9 +558,9 @@ class SubstrateService(object):
     def create_transaction_call_hash(self, call_function: str, call_module: str, call_params: dict):
         """
         Parameters:
-            call_function (str): The name of the function to call within the specified call_module.
-            call_module (str): The name of the module containing the call_function to be executed.
-            call_params (dict): A dictionary containing the parameters required for the call_function.
+            call_function : The name of the function to call within the specified call_module.
+            call_module : The name of the module containing the call_function to be executed.
+            call_params : A dictionary containing the parameters required for the call_function.
 
         Returns:
             str: The transaction call hash as a hexadecimal string.
@@ -570,13 +570,23 @@ class SubstrateService(object):
             call_module=call_module, call_function=call_function, call_params=call_params
         ).call_hash.hex()
 
-    def create_multisig_event(self, keypair: Keypair, multisig_account, value: int, wait_for_inclusion=False):
+    def create_multisig_event(
+        self,
+        keypair: Keypair,
+        multisig_account,
+        value: int,
+        call_module: str,
+        call_function: str,
+        wait_for_inclusion=False,
+    ):
         """
         Args:
-            keypair (Keypair): The keypair used to sign the extrinsic.
+            call_function : The name of the function to call within the specified call_module.
+            call_module : The name of the module containing the call_function to be executed.
+            keypair: The keypair used to sign the extrinsic.
             multisig_account: The multisig account from which the funds will be transferred.
-            value (int): The amount of funds to transfer.
-            wait_for_inclusion (bool, optional): Specifies whether to wait for the extrinsic to be included
+            value: The amount of funds to transfer.
+            wait_for_inclusion: Specifies whether to wait for the extrinsic to be included
                 in a block. Defaults to False.
 
         Returns:
@@ -588,8 +598,8 @@ class SubstrateService(object):
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_multisig_extrinsic(
                 call=self.substrate_interface.compose_call(
-                    call_module="Balances",
-                    call_function="transfer",
+                    call_module=call_module,
+                    call_function=call_function,
                     call_params={"dest": keypair.ss58_address, "value": value},
                 ),
                 keypair=keypair,
