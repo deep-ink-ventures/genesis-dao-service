@@ -4,6 +4,7 @@ from rest_framework.fields import (
     CharField,
     EmailField,
     IntegerField,
+    JSONField,
     ListField,
     URLField,
 )
@@ -240,23 +241,35 @@ class CreateMultiSignatureSerializer(ModelSerializer):
         fields = ("signatories", "threshold")
 
 
-class MultisigTransactionSerializer(ModelSerializer):
+class TransactionOperationSerializer(ModelSerializer):
+    multisig_address = CharField(required=True, source="multisig.address")
+    call_params = JSONField(required=True)
+    call_module = CharField(required=True)
+    call_function = CharField(required=True)
+
     class Meta:
-        model = models.MultisigTransaction
+        model = models.MultisigTransactionOperation
+        fields = ("multisig_address", "call_module", "call_function", "call_params")
+
+
+class RetrieveTransactionOperationSerializer(ModelSerializer):
+    dao_id = CharField(source="dao.id")
+    multisig_address = CharField(source="multisig.address")
+
+    class Meta:
+        model = models.MultisigTransactionOperation
         fields = (
-            "created_at",
-            "updated_at",
+            "multisig_address",
+            "dao_id",
+            "call_hash",
+            "call_module",
+            "call_function",
+            "call_params",
             "status",
             "executed_at",
-            "approver",
+            "approvers",
             "last_approver",
             "cancelled_by",
+            "created_at",
+            "updated_at",
         )
-
-
-class TransactionCallHashDataSerializer(ModelSerializer):
-    multisig = CharField(source="multisig.address", required=True)
-
-    class Meta:
-        model = models.TransactionCallHash
-        fields = ("multisig", "call_hash", "call_params")

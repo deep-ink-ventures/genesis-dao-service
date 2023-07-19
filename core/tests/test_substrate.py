@@ -1114,3 +1114,18 @@ class SubstrateServiceTest(IntegrationTestCase):
             extrinsic=self.si.create_multisig_extrinsic(),
             wait_for_inclusion=True,
         )
+
+    def test_create_generate_transaction_call_hash(self):
+        substrate_service.substrate_interface.compose_call.hex = Mock(return_value="some_call_hash")
+
+        self.substrate_service.create_transaction_call_hash(
+            call_module="Balances",
+            call_function="transfer",
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+        )
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Balances",
+            call_function="transfer",
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+        )

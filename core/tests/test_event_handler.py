@@ -1169,224 +1169,383 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
 
-    def test_multisig_event_handler(self):
-        signer_one = "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
-        signer_two = "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty"
-
+    def test_new_multisig_transaction(self):
+        call_hash = "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162"
         substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
             ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
         )
-        multisig_account = substrate_service.create_multisig_account(signatories=[signer_one, signer_two], threshold=2)
-        models.MultiSignature.objects.create(
-            address=multisig_account, signatories=[signer_one, signer_two], threshold=2
+        multi_signature = models.MultiSignature.objects.create(
+            address=(
+                substrate_service.create_multisig_account(
+                    signatories=[
+                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    ],
+                    threshold=2,
+                )
+            ),
+            signatories=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            threshold=2,
         )
-        multisig_address = models.MultiSignature.objects.get(
-            address__iexact="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
-        )
-        models.Dao.objects.create(
+        dao = models.Dao.objects.create(
             id="dao1",
             name="dao1 name",
-            creator_id=multisig_address,
-            owner_id=multisig_address,
+            creator=multi_signature,
+            owner=multi_signature,
             metadata={"some": "data"},
         )
-
-        multisig_address = models.MultiSignature.objects.get(
-            address__iexact="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+        models.MultisigTransactionOperation.objects.create(
+            status=models.TransactionStatus.PENDING,
+            multisig=multi_signature,
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+            call_module="Balances",
+            call_function="transfer",
+            approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
+            last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+            call_hash=call_hash,
+            dao=dao,
         )
-        dao = models.Dao.objects.get(creator__address__exact=multisig_address)
-        block_new_multisig_event = models.Block.objects.create(
+        block = models.Block.objects.create(
             hash="hash 0",
             number=0,
-            extrinsic_data={
-                "Multisig": {
-                    "approve_as_multi": [
-                        {
-                            "call_hash": "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
-                            "threshold": 2,
-                            "max_weight": {"ref_time": 185307000, "proof_size": 3593},
-                            "maybe_timepoint": None,
-                            "other_signatories": [
-                                "5EZ6brKNPkWWuEtibPfobPkeYBR6vYz6brQQ5ccYyMjc3LXo",
-                                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            ],
-                        }
-                    ]
-                },
-                "Timestamp": {"set": [{"now": 1689154704002}]},
-            },
             event_data={
                 "Multisig": {
                     "NewMultisig": [
                         {
-                            "multisig": "5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw",
+                            "multisig": multi_signature.address,
                             "approving": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
                             "call_hash": "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
-                        }
-                    ]
+                        },
+                        #  this should create a new transaction, because "some_call_hash" do not exist
+                        {
+                            "multisig": multi_signature.address,
+                            "approving": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                            "call_hash": "some_call_hash",
+                        },
+                    ],
                 },
             },
         )
-        block_multisig_executed_event = models.Block.objects.create(
-            hash="hash 1",
-            number=1,
-            extrinsic_data={
+        expected_transaction = [
+            models.MultisigTransactionOperation(
+                status=models.TransactionStatus.PENDING,
+                multisig=multi_signature,
+                approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
+                last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+                call_module="Balances",
+                call_function="transfer",
+                call_hash=call_hash,
+                dao=dao,
+            ),
+            models.MultisigTransactionOperation(
+                status=models.TransactionStatus.PENDING,
+                multisig=multi_signature,
+                approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
+                last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                call_hash="some_call_hash",
+                dao=dao,
+            ),
+        ]
+
+        with self.assertNumQueries(6):
+            substrate_event_handler._multisig_transactions(block)
+
+        self.assertModelsEqual(models.MultisigTransactionOperation.objects.order_by("created_at"), expected_transaction)
+
+    def test_approval_multisig_transaction_and_status_changed(self):
+        call_hash = "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162"
+        substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
+            ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+        )
+        multi_signature = models.MultiSignature.objects.create(
+            address=(
+                substrate_service.create_multisig_account(
+                    signatories=[
+                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    ],
+                    threshold=2,
+                )
+            ),
+            signatories=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            threshold=2,
+        )
+        dao = models.Dao.objects.create(
+            id="dao1",
+            name="dao1 name",
+            creator=multi_signature,
+            owner=multi_signature,
+            metadata={"some": "data"},
+        )
+        models.MultisigTransactionOperation.objects.create(
+            status=models.TransactionStatus.PENDING,
+            multisig=multi_signature,
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+            call_module="Balances",
+            call_function="transfer",
+            approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
+            last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+            call_hash=call_hash,
+            dao=dao,
+        )
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            event_data={
                 "Multisig": {
-                    "as_multi": [
+                    "MultisigApproval": [
                         {
-                            "call_hash": "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
-                            "threshold": 2,
-                            "max_weight": {"ref_time": 185307000, "proof_size": 3593},
-                            "maybe_timepoint": None,
-                            "other_signatories": [
-                                "5EZ6brKNPkWWuEtibPfobPkeYBR6vYz6brQQ5ccYyMjc3LXo",
-                                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            ],
-                        }
-                    ]
+                            "multisig": multi_signature.address,
+                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                            "call_hash": call_hash,
+                        },
+                        {
+                            "multisig": multi_signature.address,
+                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                            "call_hash": "some_hash",
+                        },
+                    ],
                 },
-                "Timestamp": {"set": [{"now": 1689154704002}]},
             },
+        )
+        expected_transaction = [
+            models.MultisigTransactionOperation(
+                status=models.TransactionStatus.APPROVED,
+                multisig=multi_signature,
+                call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+                call_module="Balances",
+                call_function="transfer",
+                approvers=[
+                    "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                    "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                ],
+                last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                call_hash=call_hash,
+                dao=dao,
+            ),
+        ]
+
+        with self.assertNumQueries(5):
+            substrate_event_handler._multisig_transactions(block)
+
+        self.assertModelsEqual(models.MultisigTransactionOperation.objects.order_by("created_at"), expected_transaction)
+
+    def test_approval_multisig_transaction_and_status_not_changed(self):
+        call_hash = "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162"
+        substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
+            ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+        )
+        multi_signature = models.MultiSignature.objects.create(
+            address=(
+                substrate_service.create_multisig_account(
+                    signatories=[
+                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                        "5EZ6brKNPkWWuEtibPfobPkeYBR6vYz6brQQ5ccYyMjc3LXo",
+                    ],
+                    threshold=3,
+                )
+            ),
+            signatories=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                "5EZ6brKNPkWWuEtibPfobPkeYBR6vYz6brQQ5ccYyMjc3LXo",
+            ],
+            threshold=3,
+        )
+        dao = models.Dao.objects.create(
+            id="dao1",
+            name="dao1 name",
+            creator=multi_signature,
+            owner=multi_signature,
+            metadata={"some": "data"},
+        )
+        models.MultisigTransactionOperation.objects.create(
+            status=models.TransactionStatus.PENDING,
+            multisig=multi_signature,
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+            call_module="Balances",
+            call_function="transfer",
+            approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
+            last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+            call_hash=call_hash,
+            dao=dao,
+        )
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            event_data={
+                "Multisig": {
+                    "MultisigApproval": [
+                        {
+                            "multisig": multi_signature.address,
+                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                            "call_hash": call_hash,
+                        },
+                        {
+                            "multisig": multi_signature.address,
+                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                            "call_hash": "some_hash",
+                        },
+                    ],
+                },
+            },
+        )
+        expected_transaction = [
+            models.MultisigTransactionOperation(
+                status=models.TransactionStatus.PENDING,
+                multisig=multi_signature,
+                call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+                call_module="Balances",
+                call_function="transfer",
+                approvers=[
+                    "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                    "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                ],
+                last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                call_hash=call_hash,
+                dao=dao,
+            ),
+        ]
+
+        with self.assertNumQueries(5):
+            substrate_event_handler._multisig_transactions(block)
+
+        self.assertModelsEqual(models.MultisigTransactionOperation.objects.order_by("created_at"), expected_transaction)
+
+    def test_executed_and_cancel_multisig_transaction(self):
+        executed_call_hash = "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162"
+        cancelled_call_hash = "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c11ccccp"
+        substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
+            ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+        )
+        multi_signature = models.MultiSignature.objects.create(
+            address=(
+                substrate_service.create_multisig_account(
+                    signatories=[
+                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    ],
+                    threshold=2,
+                )
+            ),
+            signatories=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            threshold=2,
+        )
+        dao = models.Dao.objects.create(
+            id="dao1",
+            name="dao1 name",
+            creator=multi_signature,
+            owner=multi_signature,
+            metadata={"some": "data"},
+        )
+        models.MultisigTransactionOperation.objects.create(
+            status=models.TransactionStatus.EXECUTED,
+            multisig=multi_signature,
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+            call_module="Balances",
+            call_function="transfer",
+            approvers=[
+                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            ],
+            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            call_hash=executed_call_hash,
+            dao=dao,
+        )
+        models.MultisigTransactionOperation.objects.create(
+            status=models.TransactionStatus.CANCELLED,
+            multisig=multi_signature,
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+            call_module="Balances",
+            call_function="transfer",
+            approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
+            last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
+            cancelled_by="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+            call_hash=cancelled_call_hash,
+            dao=dao,
+        )
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
             event_data={
                 "Multisig": {
                     "MultisigExecuted": [
                         {
-                            "multisig": "5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw",
+                            "multisig": multi_signature.address,
                             "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            "call_hash": "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
-                        }
-                    ]
-                },
-            },
-        )
-        block__multisig_cancelled_event = models.Block.objects.create(
-            hash="hash 2",
-            number=2,
-            extrinsic_data={
-                "Multisig": {
-                    "as_multi": [
+                            "call_hash": executed_call_hash,
+                        },
                         {
-                            "call_hash": "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
-                            "threshold": 2,
-                            "max_weight": {"ref_time": 185307000, "proof_size": 3593},
-                            "maybe_timepoint": None,
-                            "other_signatories": [
-                                "5EZ6brKNPkWWuEtibPfobPkeYBR6vYz6brQQ5ccYyMjc3LXo",
-                                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            ],
-                        }
-                    ]
-                },
-                "Timestamp": {"set": [{"now": 1689154704002}]},
-            },
-            event_data={
-                "Multisig": {
+                            "multisig": multi_signature.address,
+                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                            "call_hash": "some_hash",
+                        },
+                    ],
                     "MultisigCancelled": [
                         {
-                            "multisig": "5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw",
+                            "multisig": multi_signature.address,
                             "cancelling": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            "call_hash": "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
-                        }
-                    ]
+                            "call_hash": cancelled_call_hash,
+                        },
+                        {
+                            "multisig": multi_signature.address,
+                            "cancelling": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                            "call_hash": "some_hash",
+                        },
+                    ],
                 },
             },
         )
-
-        if models.Block.objects.filter(number=0).exists():
-            self.create_new_multisig_event_action(block_new_multisig_event, dao, multisig_address)
-        if models.Block.objects.filter(number=1).exists():
-            self.create_multisig_executed_event_action(block_multisig_executed_event, dao, multisig_address)
-        if models.Block.objects.filter(number=2).exists():
-            self.create_multisig_cancelled_event_action(block__multisig_cancelled_event, dao, multisig_address)
-
-    def create_multisig_executed_event_action(self, block_executed, dao, multisig_address):
-        with self.assertNumQueries(3):
-            substrate_event_handler._create_multisig_transaction(block_executed)
         expected_transaction = [
-            models.MultisigTransaction(
-                id=1,
-                dao=dao,
+            models.MultisigTransactionOperation(
                 status=models.TransactionStatus.EXECUTED,
-                multisig=multisig_address,
-                approver=[
+                multisig=multi_signature,
+                call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+                call_module="Balances",
+                call_function="transfer",
+                executed_at=timezone.now(),
+                approvers=[
                     "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
                     "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
                 ],
                 last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                created_at="2023-07-13 08:27:43.054029+00:00",
-                executed_at=timezone.now().replace(microsecond=0),
-                cancelled_by=None,
-            )
-        ]
-        expected_transaction_call_hash = [
-            models.TransactionCallHash(
-                call_hash="0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
-                multisig=multisig_address,
-            )
-        ]
-
-        self.assertModelsEqual(models.MultisigTransaction.objects.order_by("created_at"), expected_transaction)
-        self.assertModelsEqual(
-            models.TransactionCallHash.objects.order_by("created_at"), expected_transaction_call_hash
-        )
-
-    def create_multisig_cancelled_event_action(self, block_cancelled, dao, multisig_address):
-        with self.assertNumQueries(3):
-            substrate_event_handler._create_multisig_transaction(block_cancelled)
-        expected_transaction = [
-            models.MultisigTransaction(
-                id=1,
+                call_hash=executed_call_hash,
                 dao=dao,
+            ),
+            models.MultisigTransactionOperation(
                 status=models.TransactionStatus.CANCELLED,
-                multisig=multisig_address,
-                approver=[
+                multisig=multi_signature,
+                call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+                call_module="Balances",
+                call_function="transfer",
+                approvers=[
                     "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                    "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
                 ],
-                last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                created_at="2023-07-13 08:27:43.054029+00:00",
-                executed_at=timezone.now().replace(microsecond=0),
-                cancelled_by="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            )
-        ]
-        expected_transaction_call_hash = [
-            models.TransactionCallHash(
-                call_hash="0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
-                multisig=multisig_address,
-            )
-        ]
-
-        self.assertModelsEqual(models.MultisigTransaction.objects.order_by("created_at"), expected_transaction)
-        self.assertModelsEqual(
-            models.TransactionCallHash.objects.order_by("created_at"), expected_transaction_call_hash
-        )
-
-    def create_new_multisig_event_action(self, block_new_multisig, dao, multisig_address):
-        with self.assertNumQueries(4):
-            substrate_event_handler._create_multisig_transaction(block_new_multisig)
-        expected_transaction = [
-            models.MultisigTransaction(
-                id=1,
-                dao=dao,
-                status=models.TransactionStatus.APPROVED,
-                multisig=multisig_address,
-                approver=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
                 last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                created_at="2023-07-13 08:27:43.054029+00:00",
-                executed_at=None,
-                cancelled_by=None,
-            )
-        ]
-        expected_transaction_call_hash = [
-            models.TransactionCallHash(
-                call_hash="0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
-                multisig=multisig_address,
-            )
+                cancelled_by="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                call_hash=cancelled_call_hash,
+                dao=dao,
+            ),
         ]
 
-        self.assertModelsEqual(models.MultisigTransaction.objects.order_by("created_at"), expected_transaction)
+        with self.assertNumQueries(6):
+            substrate_event_handler._multisig_transactions(block)
+
         self.assertModelsEqual(
-            models.TransactionCallHash.objects.order_by("created_at"), expected_transaction_call_hash
+            models.MultisigTransactionOperation.objects.order_by("created_at"),
+            expected_transaction,
+            ignore_fields=("executed_at", "created_at", "updated_at"),
         )
 
     @patch("core.event_handler.SubstrateEventHandler._create_accounts")
@@ -1401,6 +1560,7 @@ class EventHandlerTest(IntegrationTestCase):
     @patch("core.event_handler.SubstrateEventHandler._register_votes")
     @patch("core.event_handler.SubstrateEventHandler._finalize_proposals")
     @patch("core.event_handler.SubstrateEventHandler._fault_proposals")
+    @patch("core.event_handler.SubstrateEventHandler._multisig_transactions")
     def test_execute_actions(self, *mocks):
         event_handler = SubstrateEventHandler()
         block = models.Block.objects.create(hash="hash 0", number=0)

@@ -8,6 +8,7 @@ from ddt import data, ddt
 from django.conf import settings
 from django.core.cache import cache
 from django.urls import reverse
+from freezegun import freeze_time
 from rest_framework.exceptions import ErrorDetail
 from rest_framework.status import (
     HTTP_200_OK,
@@ -885,200 +886,266 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertEqual(response.data, expected_response)
 
     #   TODO: TEST MULTI SIGNATURE TRANSACTION VIEW
-
-    def test_get_multisig_transaction_by_id(self):
+    @freeze_time("2023-07-17 19:11:19.423013")
+    def test_get_list_multisig_transactions(self):
         from core.substrate import substrate_service
 
-        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
-        substrate_service.create_multisig_account = Mock(return_value=address)
-        multi_signature = models.MultiSignature.objects.create(
-            signatories=self.get_signatories(),
-            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
-            threshold=2,
-        )
-        object_created = models.MultisigTransaction.objects.create(
-            status=models.TransactionStatus.APPROVED,
-            multisig=multi_signature,
-            dao_id="dao1",
-            approver=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-        )
-        expected_response = {
-            "executed_at": None,
-            "status": "APPROVED",
-            "approver": [
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            "last_approver": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            "cancelled_by": None,
-        }
-
-        response = self.client.get(reverse("core-multi-signature-transaction-detail", kwargs={"pk": object_created.pk}))
-        modified_response_data = response.data.copy()
-        modified_response_data.pop("created_at")
-        modified_response_data.pop("updated_at")
-
-        self.assertEqual(response.status_code, HTTP_200_OK)
-        self.assertEqual(modified_response_data, expected_response)
-
-    def test_get__multisig_transactions_list(self):
-        from core.substrate import substrate_service
-
-        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
-        substrate_service.create_multisig_account = Mock(return_value=address)
-        multi_signature = models.MultiSignature.objects.create(
-            signatories=self.get_signatories(),
-            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
-            threshold=2,
-        )
-        models.MultisigTransaction.objects.create(
-            status=models.TransactionStatus.APPROVED,
-            multisig=multi_signature,
-            dao_id="dao1",
-            approver=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-        )
+        multisig_address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        call_hash_mock = "some_call_hash"
         expected_response = {
             "count": 1,
             "next": None,
             "previous": None,
             "results": [
                 {
-                    "status": "APPROVED",
+                    "multisig_address": "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH",
+                    "dao_id": "dao1",
+                    "call_hash": "some_call_hash",
+                    "call_module": "Balances",
+                    "call_function": "transfer",
+                    "call_params": {"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+                    "status": "PENDING",
                     "executed_at": None,
-                    "approver": [
-                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                    ],
-                    "last_approver": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    "approvers": [],
+                    "last_approver": None,
                     "cancelled_by": None,
+                    "created_at": "2023-07-17T19:11:19.423013Z",
+                    "updated_at": "2023-07-17T19:11:19.423013Z",
                 }
             ],
         }
+        substrate_service.create_multisig_account = Mock(return_value=multisig_address)
+        substrate_service.create_transaction_call_hash = Mock(return_value=call_hash_mock)
+        multi_signature = models.MultiSignature.objects.create(
+            signatories=self.get_signatories(),
+            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
+            threshold=2,
+        )
+        call_hash = substrate_service.create_transaction_call_hash(
+            call_function="transfer",
+            call_module="Balances",
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+        )
+        models.MultisigTransactionOperation.objects.create(
+            status=models.TransactionStatus.PENDING,
+            multisig=multi_signature,
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+            call_module="Balances",
+            call_function="transfer",
+            call_hash=call_hash,
+            dao_id="dao1",
+        )
 
-        response = self.client.get(reverse("core-multi-signature-transaction-list"))
-        modified_response_data = response.data.copy()
-        modified_response_data["results"][0].pop("created_at")
-        modified_response_data["results"][0].pop("updated_at")
+        with freeze_time("2023-07-17 19:11:19.423013"):
+            response = self.client.get(reverse("core-multi-signature-transaction-list"))
 
         self.assertEqual(response.status_code, HTTP_200_OK)
-        self.assertEqual(modified_response_data, expected_response)
+        self.assertEqual(response.data, expected_response)
 
+    @freeze_time("2023-07-17 19:11:19.423013")
+    def test_get_multisig_transaction(self):
+        from core.substrate import substrate_service
+
+        multisig_address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        call_hash_mock = "some_call_hash"
+        expected_response = {
+            "multisig_address": "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH",
+            "dao_id": "dao1",
+            "call_hash": "some_call_hash",
+            "call_module": "Balances",
+            "call_function": "transfer",
+            "call_params": {"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+            "status": "PENDING",
+            "executed_at": None,
+            "approvers": [],
+            "last_approver": None,
+            "cancelled_by": None,
+            "created_at": "2023-07-17T19:11:19.423013Z",
+            "updated_at": "2023-07-17T19:11:19.423013Z",
+        }
+        substrate_service.create_multisig_account = Mock(return_value=multisig_address)
+        substrate_service.create_transaction_call_hash = Mock(return_value=call_hash_mock)
+        multi_signature = models.MultiSignature.objects.create(
+            signatories=self.get_signatories(),
+            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
+            threshold=2,
+        )
+        call_hash = substrate_service.create_transaction_call_hash(
+            call_function="transfer",
+            call_module="Balances",
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+        )
+        models.MultisigTransactionOperation.objects.create(
+            status=models.TransactionStatus.PENDING,
+            multisig=multi_signature,
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+            call_module="Balances",
+            call_function="transfer",
+            call_hash=call_hash,
+            dao_id="dao1",
+        )
+
+        with freeze_time("2023-07-17 19:11:19.423013"):
+            response = self.client.get(
+                reverse("core-multi-signature-transaction-detail", kwargs={"pk": "some_call_hash"})
+            )
+
+        self.assertEqual(response.status_code, HTTP_200_OK)
+        self.assertEqual(response.data, expected_response)
+
+    @freeze_time("2023-07-17 19:11:19.423013")
     def test_get__multisig_transactions_filter_by_dao_id(self):
         from core.substrate import substrate_service
 
-        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
-        substrate_service.create_multisig_account = Mock(return_value=address)
-        multi_signature = models.MultiSignature.objects.create(
-            signatories=self.get_signatories(),
-            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
-            threshold=2,
-        )
-        models.MultisigTransaction.objects.create(
-            status=models.TransactionStatus.APPROVED,
-            multisig=multi_signature,
-            dao_id="dao1",
-            approver=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-        )
-        models.MultisigTransaction.objects.create(
-            status=models.TransactionStatus.EXECUTED,
-            multisig=multi_signature,
-            dao_id="dao2",
-            approver=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-        )
+        multisig_address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        call_hash_mock = "some_call_hash"
         expected_response = {
             "count": 1,
             "next": None,
             "previous": None,
             "results": [
                 {
-                    "status": "EXECUTED",
+                    "multisig_address": "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH",
+                    "dao_id": "dao2",
+                    "call_hash": "some_call_hash",
+                    "call_module": "Balances",
+                    "call_function": "transfer",
+                    "call_params": {"dest": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty", "value": 3},
+                    "status": "PENDING",
                     "executed_at": None,
-                    "approver": [
-                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                    ],
-                    "last_approver": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                    "approvers": [],
+                    "last_approver": None,
                     "cancelled_by": None,
+                    "created_at": "2023-07-17T19:11:19.423013Z",
+                    "updated_at": "2023-07-17T19:11:19.423013Z",
                 }
             ],
         }
+        substrate_service.create_multisig_account = Mock(return_value=multisig_address)
+        substrate_service.create_transaction_call_hash = Mock(return_value=call_hash_mock)
+        multi_signature = models.MultiSignature.objects.create(
+            signatories=self.get_signatories(),
+            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
+            threshold=2,
+        )
+        call_hash = substrate_service.create_transaction_call_hash(
+            call_function="transfer",
+            call_module="Balances",
+            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+        )
+        models.MultisigTransactionOperation.objects.create(
+            status=models.TransactionStatus.PENDING,
+            multisig=multi_signature,
+            call_params={"dest": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty", "value": 3},
+            call_module="Balances",
+            call_function="transfer",
+            call_hash=call_hash,
+            dao_id="dao2",
+        )
 
-        response = self.client.get(reverse("core-multi-signature-transaction-list") + "?dao_id=dao2")
-        modified_response_data = response.data.copy()
-        modified_response_data["results"][0].pop("created_at")
-        modified_response_data["results"][0].pop("updated_at")
+        with freeze_time("2023-07-17 19:11:19.423013"):
+            response = self.client.get(reverse("core-multi-signature-transaction-list") + "?dao_id=dao2")
 
         self.assertEqual(response.status_code, HTTP_200_OK)
-        self.assertEqual(modified_response_data, expected_response)
+        self.assertEqual(response.data, expected_response)
 
-    def test_get__multisig_transactions_filter_by_status(self):
+    @freeze_time("2023-07-17 19:11:19.423013")
+    def test_create_multisig_transaction(self):
         from core.substrate import substrate_service
 
-        address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
-        substrate_service.create_multisig_account = Mock(return_value=address)
-        multi_signature = models.MultiSignature.objects.create(
+        multisig_address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        call_hash_mock = "some_call_hash"
+        payload = {
+            "multisig_address": multisig_address,
+            "call_module": "Balances",
+            "call_function": "transfer",
+            "call_params": {"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+        }
+        expected_response = {
+            "multisig_address": "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH",
+            "dao_id": "dao1",
+            "call_hash": "some_call_hash",
+            "call_module": "Balances",
+            "call_function": "transfer",
+            "call_params": "Balances",
+            "status": "PENDING",
+            "executed_at": None,
+            "approvers": [],
+            "last_approver": None,
+            "cancelled_by": None,
+            "created_at": "2023-07-17T19:11:19.423013Z",
+            "updated_at": "2023-07-17T19:11:19.423013Z",
+        }
+        substrate_service.create_multisig_account = Mock(return_value=multisig_address)
+        substrate_service.create_transaction_call_hash = Mock(return_value=call_hash_mock)
+        models.MultiSignature.objects.create(
             signatories=self.get_signatories(),
             address=substrate_service.create_multisig_account(self.get_signatories(), 2),
             threshold=2,
         )
-        models.MultisigTransaction.objects.create(
-            status=models.TransactionStatus.APPROVED,
-            multisig=multi_signature,
-            dao_id="dao1",
-            approver=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-        )
-        models.MultisigTransaction.objects.create(
-            status=models.TransactionStatus.EXECUTED,
-            multisig=multi_signature,
-            dao_id="dao2",
-            approver=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-        )
-        expected_response = {
-            "count": 1,
-            "next": None,
-            "previous": None,
-            "results": [
-                {
-                    "status": "APPROVED",
-                    "executed_at": None,
-                    "approver": [
-                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                    ],
-                    "last_approver": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                    "cancelled_by": None,
-                }
-            ],
+
+        with freeze_time("2023-07-17 19:11:19.423013"):
+            response = self.client.post(
+                reverse("core-dao-create-multisig-transaction", kwargs={"pk": "dao1"}),
+                payload,
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, HTTP_201_CREATED)
+        self.assertEqual(response.data, expected_response)
+
+    def test_create_multisig_transaction_missing_call_params(self):
+        from core.substrate import substrate_service
+
+        multisig_address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        call_hash_mock = "some_call_hash"
+        payload = {
+            "multisig_address": multisig_address,
+            "call_module": "Balances",
+            "call_function": "transfer",
         }
+        expected_response = {"message": "call_module, call_function or call_params are missing."}
+        substrate_service.create_multisig_account = Mock(return_value=multisig_address)
+        substrate_service.create_transaction_call_hash = Mock(return_value=call_hash_mock)
+        models.MultiSignature.objects.create(
+            signatories=self.get_signatories(),
+            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
+            threshold=2,
+        )
 
-        response = self.client.get(reverse("core-multi-signature-transaction-list") + "?status=APPROVED")
-        modified_response_data = response.data.copy()
-        modified_response_data["results"][0].pop("created_at")
-        modified_response_data["results"][0].pop("updated_at")
+        response = self.client.post(
+            reverse("core-dao-create-multisig-transaction", kwargs={"pk": "dao1"}),
+            payload,
+            content_type="application/json",
+        )
 
-        self.assertEqual(response.status_code, HTTP_200_OK)
-        self.assertEqual(modified_response_data, expected_response)
+        self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, expected_response)
+
+    def test_create_multisig_transaction_missing_dao_multisig(self):
+        from core.substrate import substrate_service
+
+        multisig_address = "ETdJ5RGDZt65ZvEqFM4n2TLUTJxcoCeaeAJGGaiYfX7fxSH"
+        call_hash_mock = "some_call_hash"
+        payload = {
+            "call_module": "Balances",
+            "call_function": "transfer",
+            "call_params": {"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+        }
+        expected_response = {"message": "Multisignature account or Dao not found."}
+        substrate_service.create_multisig_account = Mock(return_value=multisig_address)
+        substrate_service.create_transaction_call_hash = Mock(return_value=call_hash_mock)
+        models.MultiSignature.objects.create(
+            signatories=self.get_signatories(),
+            address=substrate_service.create_multisig_account(self.get_signatories(), 2),
+            threshold=2,
+        )
+
+        response = self.client.post(
+            reverse("core-dao-create-multisig-transaction", kwargs={"pk": "dao3"}),
+            payload,
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, expected_response)

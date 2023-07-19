@@ -13,7 +13,4 @@ class ModelTest(UnitTestCase):
         self.assertEqual(str(models.MultiSignature(pk=5)), "5")
 
     def test_transaction_str(self):
-        self.assertEqual(str(models.MultisigTransaction(status="PENDING")), "PENDING")
-
-    def test_transaction_call_hash_str(self):
-        self.assertEqual(str(models.TransactionCallHash(call_hash="some_call_hash")), "some_call_hash")
+        self.assertEqual(str(models.MultisigTransactionOperation(pk=1)), "1")

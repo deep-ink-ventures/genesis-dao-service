@@ -137,23 +137,18 @@ class TransactionStatus(ChoiceEnum):
     EXECUTED = "executed"
 
 
-class MultisigTransaction(TimestampableMixin):
+class MultisigTransactionOperation(TimestampableMixin):
     multisig = models.ForeignKey(MultiSignature, related_name="transactions", on_delete=models.CASCADE)
     dao = models.ForeignKey(Dao, related_name="daos", on_delete=models.CASCADE)
+    call_hash = models.CharField(max_length=250, primary_key=True, unique=True, editable=False)
     status = models.CharField(max_length=16, choices=TransactionStatus.as_choices(), default=TransactionStatus.PENDING)
+    call_module = models.CharField(max_length=250, null=True)
+    call_function = models.CharField(max_length=250, null=True)
+    call_params = models.JSONField(default=dict, null=True)
     executed_at = models.DateTimeField(null=True, blank=True)
-    approver = ArrayField(models.CharField(max_length=250))
-    last_approver = models.CharField(max_length=250)
+    approvers = ArrayField(models.CharField(max_length=250), null=True, default=list)
+    last_approver = models.CharField(max_length=250, null=True)
     cancelled_by = models.CharField(max_length=150, null=True)
 
     def __str__(self):
-        return f"{self.status}"
-
-
-class TransactionCallHash(TimestampableMixin):
-    multisig = models.ForeignKey(MultiSignature, related_name="hashes", on_delete=models.CASCADE)
-    call_hash = models.CharField(max_length=250, primary_key=True, unique=True, editable=False)
-    call_params = models.JSONField(default=dict)
-
-    def __str__(self):
-        return f"{self.call_hash}"
+        return f"{self.pk}"

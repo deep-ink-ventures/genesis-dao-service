@@ -3,6 +3,7 @@ from itertools import chain
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.db.models import Q
 from django.utils.decorators import method_decorator
@@ -130,6 +131,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
             "list": serializers.DaoSerializer,
             "add_metadata": serializers.AddDaoMetadataSerializer,
             "create_multisig": serializers.CreateMultiSignatureSerializer,
+            "create_multisig_transaction": serializers.TransactionOperationSerializer,
         }.get(self.action)
 
     @swagger_auto_schema(
@@ -255,6 +257,48 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
             return Response(data=serializer.data, status=HTTP_201_CREATED)
         return Response({"message": "Signatories or threshold are missing."}, HTTP_400_BAD_REQUEST)
 
+    @swagger_auto_schema(
+        operation_id="Create Multi Signature Transaction",
+        operation_description="Creating a Multi Signature Transaction",
+        responses={201: openapi.Response("", serializers.TransactionOperationSerializer)},
+        security=[{"Signature": []}],
+    )
+    @action(
+        methods=["POST"],
+        detail=True,
+        url_path="multisig-transaction",
+        permission_classes=[IsDAOOwner],
+        authentication_classes=[],
+    )
+    def create_multisig_transaction(self, request, *args, **kwargs):
+        from core.substrate import substrate_service
+
+        if (
+            call_params := request.data.get("call_params")
+            and (call_function := request.data.get("call_function"))
+            and (call_module := request.data.get("call_module"))
+        ):
+            try:
+                multisig_transaction = models.MultisigTransactionOperation.objects.create(
+                    call_module=call_module,
+                    call_function=call_function,
+                    call_params=call_params,
+                    status=models.TransactionStatus.PENDING,
+                    multisig=models.MultiSignature.objects.filter(
+                        address__iexact=request.data.get("multisig_address", "")
+                    ).get(),
+                    dao=models.Dao.objects.filter(id__iexact=kwargs.get("pk")).get(),
+                    call_hash=substrate_service.create_transaction_call_hash(
+                        call_params=call_params, call_function=call_function, call_module=call_module
+                    ),
+                )
+                serializer = serializers.RetrieveTransactionOperationSerializer(multisig_transaction)
+                return Response(data=serializer.data, status=HTTP_201_CREATED)
+            except ObjectDoesNotExist:
+                return Response({"message": "Multisignature account or Dao not found."}, HTTP_400_BAD_REQUEST)
+
+        return Response({"message": "call_module, call_function or call_params are missing."}, HTTP_400_BAD_REQUEST)
+
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Asset."), "retrieve")
 class AssetViewSet(ReadOnlyModelViewSet, SearchableMixin):
@@ -369,17 +413,11 @@ class MultiSignatureViewSet(ReadOnlyModelViewSet):
     lookup_field = "address"
 
 
-@method_decorator(swagger_auto_schema(operation_description="Retrieves A Multi Signature Transaction."), "retrieve")
-class MultiSignatureTransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
-    allowed_filter_fields = ("dao_id", "status")
-    queryset = models.MultisigTransaction.objects.all()
-    serializer_class = serializers.MultisigTransactionSerializer
-
-
 @method_decorator(
     swagger_auto_schema(operation_description="Retrieves Transaction Original data and Hash."), "retrieve"
 )
-class TransactionHashAndDataViewSet(ReadOnlyModelViewSet, SearchableMixin):
-    queryset = models.TransactionCallHash.objects.all()
-    serializer_class = serializers.TransactionCallHashDataSerializer
-    lookup_field = "call_hash"
+class MultiSignatureTransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
+    queryset = models.MultisigTransactionOperation.objects.all()
+    serializer_class = serializers.RetrieveTransactionOperationSerializer
+    allowed_filter_fields = ("dao_id", "status")
+    lookup_field = "pk"

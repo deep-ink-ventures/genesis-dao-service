@@ -35,7 +35,7 @@ class SubstrateEventHandler:
             self._register_votes,
             self._finalize_proposals,
             self._fault_proposals,
-            self._create_multisig_transaction,
+            self._multisig_transactions,
         )
 
     @staticmethod
@@ -434,7 +434,7 @@ class SubstrateEventHandler:
             models.Proposal.objects.bulk_update(proposals, ("fault", "status"))
 
     @staticmethod
-    def _create_multisig_transaction(block: models.Block):
+    def _multisig_transactions(block: models.Block):
         """
         Args:
             block: Block to multisignature transactions
@@ -444,41 +444,75 @@ class SubstrateEventHandler:
 
         multisignature Transaction based on the Block's events
         """
-        multisig_transaction = models.MultisigTransaction()
-
-        if new_multisig_event := block.event_data.get("Multisig", {}).get("NewMultisig"):
-            call_hash = block.extrinsic_data.get("Multisig", {}).get("approve_as_multi", [{}])[0].get("call_hash", "")
-            multi_signature = models.MultiSignature.objects.get(
-                address__exact=(new_multisig_event[0].get("multisig", ""))
+        for new_event in block.event_data.get("Multisig", {}).get("NewMultisig", []):
+            transaction_to_create = []
+            transaction_to_update = []
+            transaction_instances = models.MultisigTransactionOperation.objects.filter(
+                call_hash__in=[new_event.get("call_hash")]
             )
-            models.TransactionCallHash.objects.create(call_hash=call_hash, multisig=multi_signature)
 
-            multisig_transaction.multisig = multi_signature
-            multisig_transaction.status = models.TransactionStatus.APPROVED
-            multisig_transaction.approver = [new_multisig_event[0].get("approving", "")]
-            multisig_transaction.last_approver = new_multisig_event[0].get("approving", "")
-            multisig_transaction.dao = models.Dao.objects.get(
-                creator__address__exact=(new_multisig_event[0].get("multisig", ""))
-            )
-            multisig_transaction.save()
+            if transaction_instances:
+                for transaction_instance in transaction_instances:
+                    transaction_instance.last_approver = new_event.get("approving")
+                    transaction_instance.approvers = [new_event.get("approving")]
+                    transaction_instance.status = models.TransactionStatus.PENDING
+                    transaction_to_update.append(transaction_instance)
+            else:
+                new_transaction = models.MultisigTransactionOperation(
+                    multisig=models.MultiSignature.objects.filter(address__iexact=new_event.get("multisig")).get(),
+                    dao=models.Dao.objects.filter(owner__address=new_event.get("multisig")).get(),
+                    call_hash=new_event.get("call_hash"),
+                    status=models.TransactionStatus.PENDING,
+                    last_approver=new_event.get("approving"),
+                    approvers=[new_event.get("approving")],
+                )
+                transaction_to_create.append(new_transaction)
 
-        elif executed_multisig := block.event_data.get("Multisig", {}).get("MultisigExecuted"):
-            multisig_transaction = models.MultisigTransaction.objects.get(
-                multisig=(models.MultiSignature.objects.get(address__exact=(executed_multisig[0].get("multisig", ""))))
-            )
-            multisig_transaction.status = models.TransactionStatus.EXECUTED
-            multisig_transaction.approver.append(executed_multisig[0].get("approving", ""))
-            multisig_transaction.last_approver = executed_multisig[0].get("approving", "")
-            multisig_transaction.executed_at = timezone.now().replace(microsecond=0)
-            multisig_transaction.save()
+            if transaction_to_update:
+                models.MultisigTransactionOperation.objects.bulk_update(
+                    transaction_to_update, ("last_approver", "approvers", "status")
+                )
 
-        if cancelled_multisig := block.event_data.get("Multisig", {}).get("MultisigCancelled"):
-            multisig_transaction = models.MultisigTransaction.objects.get(
-                multisig=(models.MultiSignature.objects.get(address__exact=(cancelled_multisig[0].get("multisig", ""))))
+            if transaction_to_create:
+                models.MultisigTransactionOperation.objects.bulk_create(transaction_to_create)
+
+        for approval_event in block.event_data.get("Multisig", {}).get("MultisigApproval", []):
+            multi_signature = models.MultiSignature.objects.get(address__iexact=approval_event.get("multisig"))
+            for transaction_instance in (
+                transaction_instances := models.MultisigTransactionOperation.objects.filter(
+                    call_hash__in=[approval_event.get("call_hash")]
+                )
+            ):
+                transaction_instance.last_approver = approval_event.get("approving")
+                transaction_instance.approvers.append(approval_event.get("approving"))
+                transaction_instance.status = models.TransactionStatus.PENDING
+                if len(transaction_instance.approvers) == multi_signature.threshold:
+                    transaction_instance.status = models.TransactionStatus.APPROVED
+
+            models.MultisigTransactionOperation.objects.bulk_update(
+                transaction_instances, ("last_approver", "approvers", "status")
             )
-            multisig_transaction.status = models.TransactionStatus.CANCELLED
-            multisig_transaction.cancelled_by = cancelled_multisig[0].get("cancelling", "")
-            multisig_transaction.save()
+
+        for executed_event in block.event_data.get("Multisig", {}).get("MultisigExecuted", []):
+            for transaction_instance in (
+                transaction_instances := models.MultisigTransactionOperation.objects.filter(
+                    call_hash__in=[executed_event.get("call_hash")]
+                )
+            ):
+                transaction_instance.status = models.TransactionStatus.EXECUTED
+                transaction_instance.executed_at = timezone.now()
+
+            models.MultisigTransactionOperation.objects.bulk_update(transaction_instances, ("status", "executed_at"))
+
+        for cancelled_event in block.event_data.get("Multisig", {}).get("MultisigCancelled", []):
+            for transaction_instance in (
+                transaction_instances := models.MultisigTransactionOperation.objects.filter(
+                    call_hash__in=[cancelled_event.get("call_hash")]
+                )
+            ):
+                transaction_instance.status = models.TransactionStatus.CANCELLED
+                transaction_instance.cancelled_by = cancelled_event.get("cancelling")
+            models.MultisigTransactionOperation.objects.bulk_update(transaction_instances, ("status", "cancelled_by"))
 
     @transaction.atomic
     def execute_actions(self, block: models.Block):

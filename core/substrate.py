@@ -555,11 +555,23 @@ class SubstrateService(object):
             signatories=signatories, threshold=threshold
         ).ss58_address
 
+    def create_transaction_call_hash(self, call_function: str, call_module: str, call_params: dict):
+        """
+        Parameters:
+            call_function (str): The name of the function to call within the specified call_module.
+            call_module (str): The name of the module containing the call_function to be executed.
+            call_params (dict): A dictionary containing the parameters required for the call_function.
+
+        Returns:
+            str: The transaction call hash as a hexadecimal string.
+
+        """
+        return self.substrate_interface.compose_call(
+            call_module=call_module, call_function=call_function, call_params=call_params
+        ).call_hash.hex()
+
     def create_multisig_event(self, keypair: Keypair, multisig_account, value: int, wait_for_inclusion=False):
         """
-        Creates a multisig event by submitting an extrinsic to transfer funds from the multisig account
-        to the specified destination account.
-
         Args:
             keypair (Keypair): The keypair used to sign the extrinsic.
             multisig_account: The multisig account from which the funds will be transferred.
@@ -572,7 +584,6 @@ class SubstrateService(object):
 
         Raises:
             Any exceptions that occur during the process of submitting the extrinsic.
-
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_multisig_extrinsic(
