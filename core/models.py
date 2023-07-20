@@ -35,6 +35,15 @@ class Dao(TimestampableMixin):
         verbose_name = "DAO"
         verbose_name_plural = "DAOs"
 
+    def number_of_token_holders(self) -> int:
+        return hasattr(self, "asset") and self.asset.holdings.count() or 0
+
+    def number_of_open_proposals(self) -> int:
+        return self.proposals.filter(status__in=(ProposalStatus.RUNNING, ProposalStatus.PENDING)).count()
+
+    def most_recent_proposals(self) -> list:
+        return list(self.proposals.order_by("-created_at")[:5].values_list("id", flat=True))
+
 
 class GovernanceType(ChoiceEnum):
     MAJORITY_VOTE = "majority vote"
@@ -92,6 +101,7 @@ class Proposal(TimestampableMixin):
     metadata = models.JSONField(null=True)
     metadata_url = models.CharField(max_length=256, null=True)
     metadata_hash = models.CharField(max_length=256, null=True)
+    setup_complete = models.BooleanField(default=False)
 
 
 class ProposalReport(TimestampableMixin):

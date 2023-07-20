@@ -1,6 +1,7 @@
 import collections
 import logging
 from functools import reduce
+from typing import DefaultDict
 
 from django.conf import settings
 from django.core.cache import cache
@@ -305,7 +306,7 @@ class SubstrateEventHandler:
                 )
             )
         if proposals:
-            dao_id_to_holding_data = collections.defaultdict(list)
+            dao_id_to_holding_data: DefaultDict = collections.defaultdict(list)
             for dao_id, owner_id, balance in models.AssetHolding.objects.filter(asset__dao__id__in=dao_ids).values_list(
                 "asset__dao_id", "owner_id", "balance"
             ):
@@ -357,7 +358,8 @@ class SubstrateEventHandler:
         if proposal_data:
             for proposal in (proposals := models.Proposal.objects.filter(id__in=proposal_data.keys())):
                 proposal.metadata_hash, proposal.metadata_url = proposal_data[proposal.id]
-            models.Proposal.objects.bulk_update(proposals, fields=["metadata_hash", "metadata_url"])
+                proposal.setup_complete = True
+            models.Proposal.objects.bulk_update(proposals, fields=["metadata_hash", "metadata_url", "setup_complete"])
             tasks.update_proposal_metadata.delay(proposal_ids=list(proposal_data.keys()))
 
     @staticmethod
