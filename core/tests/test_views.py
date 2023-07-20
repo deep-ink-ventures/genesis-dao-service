@@ -39,6 +39,9 @@ expected_dao1_res = {
     "metadata": {"some": "data"},
     "metadata_url": None,
     "metadata_hash": None,
+    "number_of_token_holders": 4,
+    "number_of_open_proposals": 1,
+    "most_recent_proposals": ["prop1"],
 }
 expected_dao2_res = {
     "id": "dao2",
@@ -53,6 +56,9 @@ expected_dao2_res = {
     "metadata": None,
     "metadata_url": None,
     "metadata_hash": None,
+    "number_of_token_holders": 1,
+    "number_of_open_proposals": 0,
+    "most_recent_proposals": ["prop2"],
 }
 
 
@@ -171,7 +177,7 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertDictEqual(res.data, expected_res)
 
     def test_dao_get(self):
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(4):
             res = self.client.get(reverse("core-dao-detail", kwargs={"pk": "dao1"}))
 
         self.assertDictEqual(res.data, expected_dao1_res)
@@ -179,7 +185,7 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_dao_get_list(self):
         expected_res = wrap_in_pagination_res([expected_dao1_res, expected_dao2_res])
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(8):
             res = self.client.get(reverse("core-dao-list"))
 
         self.assertDictEqual(res.data, expected_res)
@@ -193,7 +199,7 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_dao_list_filter(self, query_params):
         expected_res = wrap_in_pagination_res([expected_dao2_res])
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(5):
             res = self.client.get(reverse("core-dao-list"), query_params)
 
         self.assertDictEqual(res.data, expected_res)
@@ -218,6 +224,9 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
+                    "number_of_token_holders": 0,
+                    "number_of_open_proposals": 0,
+                    "most_recent_proposals": [],
                 },
             ],
         ),
@@ -237,6 +246,9 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
+                    "number_of_token_holders": 0,
+                    "number_of_open_proposals": 0,
+                    "most_recent_proposals": [],
                 },
                 expected_dao1_res,
                 expected_dao2_res,
@@ -260,6 +272,9 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
+                    "number_of_token_holders": 0,
+                    "number_of_open_proposals": 0,
+                    "most_recent_proposals": [],
                 },
             ],
         ),
@@ -270,7 +285,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
         expected_res = wrap_in_pagination_res(expected_res)
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(10):
             res = self.client.get(reverse("core-dao-list"), query_params)
 
         self.assertDictEqual(res.data, expected_res)
@@ -293,6 +308,9 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
+                    "number_of_token_holders": 1,
+                    "number_of_open_proposals": 0,
+                    "most_recent_proposals": [],
                 },
                 expected_dao2_res,
                 {
@@ -308,10 +326,13 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
+                    "number_of_token_holders": 1,
+                    "number_of_open_proposals": 0,
+                    "most_recent_proposals": [],
                 },
                 expected_dao1_res,
             ],
-            4,
+            16,
         ),
         (
             {"prioritise_holder": "acc3", "order_by": "-name"},
@@ -329,6 +350,9 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
+                    "number_of_token_holders": 1,
+                    "number_of_open_proposals": 0,
+                    "most_recent_proposals": [],
                 },
                 {
                     "id": "dao3",
@@ -343,11 +367,14 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
+                    "number_of_token_holders": 1,
+                    "number_of_open_proposals": 0,
+                    "most_recent_proposals": [],
                 },
                 expected_dao1_res,
                 expected_dao2_res,
             ],
-            4,
+            16,
         ),
         (
             {"prioritise_owner": "acc2", "prioritise_holder": "acc3", "order_by": "name"},
@@ -366,6 +393,9 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
+                    "number_of_token_holders": 1,
+                    "number_of_open_proposals": 0,
+                    "most_recent_proposals": [],
                 },
                 expected_dao1_res,
                 {
@@ -381,9 +411,12 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata": None,
                     "metadata_url": None,
                     "metadata_hash": None,
+                    "number_of_token_holders": 1,
+                    "number_of_open_proposals": 0,
+                    "most_recent_proposals": [],
                 },
             ],
-            5,
+            17,
         ),
     )
     def test_dao_list_prioritised(self, case):
@@ -406,7 +439,7 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_dao_list_no_limit(self):
         expected_res = [expected_dao1_res, expected_dao2_res]
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(8):
             res = self.client.get(reverse("core-dao-list"), {"prioritise_owner": "acc2"})
 
         self.assertCountEqual(res.data, expected_res)

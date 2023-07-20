@@ -1,5 +1,6 @@
 import bleach
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from rest_framework.fields import (
     CharField,
     EmailField,
@@ -61,6 +62,9 @@ class DaoSerializer(ModelSerializer):
     minimum_majority_per_1024 = IntegerField(
         source="governance.minimum_majority", help_text="ayes >= nays + token_supply / 1024 * minimum_majority_per_1024"
     )
+    number_of_token_holders = IntegerField(min_value=0, required=True)
+    number_of_open_proposals = IntegerField(min_value=0, required=True)
+    most_recent_proposals = ArrayField(base_field=CharField(help_text="Proposal ID"))
 
     class Meta:
         model = models.Dao
@@ -77,6 +81,9 @@ class DaoSerializer(ModelSerializer):
             "metadata",
             "metadata_url",
             "metadata_hash",
+            "number_of_token_holders",
+            "number_of_open_proposals",
+            "most_recent_proposals",
         )
 
 
