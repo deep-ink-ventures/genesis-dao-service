@@ -9,8 +9,8 @@ router.register(r"daos", views.DaoViewSet, "core-dao")
 router.register(r"assets", views.AssetViewSet, "core-asset")
 router.register(r"asset-holdings", views.AssetHoldingViewSet, "core-asset-holding")
 router.register(r"proposals", views.ProposalViewSet, "core-proposal")
-router.register(r"multisig", views.MultiSigViewSet, basename="core-multisig")
-router.register(r"transaction", views.TransactionViewSet, basename="core-transaction")
+router.register(r"multisigs", views.MultiSigViewSet, basename="core-multisig")
+router.register(r"transactions", views.TransactionViewSet, basename="core-transaction")
 
 
 urlpatterns = router.urls + [

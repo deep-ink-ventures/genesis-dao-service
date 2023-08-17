@@ -10,6 +10,7 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework.decorators import action, api_view
 from rest_framework.mixins import CreateModelMixin
 from rest_framework.response import Response
+from rest_framework.settings import api_settings
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_400_BAD_REQUEST
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.viewsets import ReadOnlyModelViewSet
@@ -115,7 +116,7 @@ class AccountViewSet(ReadOnlyModelViewSet, SearchableMixin):
         return Response(self.get_serializer(account).data)
 
 
-class DaoViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
+class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
     queryset = models.Dao.objects.all()
     allowed_filter_fields = ("id", "name", "creator_id", "owner_id")
     allowed_order_fields = ("id", "name", "creator_id", "owner_id")
@@ -131,6 +132,13 @@ class DaoViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
             "add_metadata": serializers.AddDaoMetadataSerializer,
             "create_transaction": serializers.CallSerializer,
         }.get(self.action)
+
+    @staticmethod
+    def get_success_headers(data):
+        try:
+            return {"Location": str(data[api_settings.URL_FIELD_NAME])}
+        except (TypeError, KeyError):
+            return {}
 
     @swagger_auto_schema(
         manual_parameters=[
