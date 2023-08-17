@@ -58,7 +58,7 @@ class DaoSerializer(ModelSerializer):
     asset_id = IntegerField(source="asset.id", required=False)
     proposal_duration = IntegerField(source="governance.proposal_duration", help_text="Proposal duration in blocks.")
     proposal_token_deposit = IntegerField(
-        source="governance.proposal_token_deposit", help_text="Token deposit required to create a Poposal"
+        source="governance.proposal_token_deposit", help_text="Token deposit required to create a Proposal"
     )
     minimum_majority_per_1024 = IntegerField(
         source="governance.minimum_majority", help_text="ayes >= nays + token_supply / 1024 * minimum_majority_per_1024"
@@ -230,54 +230,53 @@ class ChallengeSerializer(Serializer):  # noqa
     challenge = CharField(required=True, help_text=f"Valid for {settings.CHALLENGE_LIFETIME}s.")
 
 
-class RetrieveMultiSignatureSerializer(ModelSerializer):
+class MultiSigSerializer(ModelSerializer):
     address = CharField()
     signatories = ListField(child=CharField())
     threshold = IntegerField()
 
     class Meta:
-        model = models.MultiSignature
+        model = models.MultiSig
         fields = ("address", "signatories", "threshold")
 
 
-class CreateMultiSignatureSerializer(ModelSerializer):
-    signatories = ListField(child=CharField(), required=True)
+class CreateMultiSigSerializer(ModelSerializer):
+    signatories = ListField(child=CharField(required=True), required=True)
     threshold = IntegerField(required=True)
 
     class Meta:
-        model = models.MultiSignature
+        model = models.MultiSig
         fields = ("signatories", "threshold")
 
 
-class TransactionOperationSerializer(ModelSerializer):
-    multisig_address = CharField(required=True, source="multisig.address")
-    call_params = JSONField(required=True)
-    call_module = CharField(required=True)
-    call_function = CharField(required=True)
+class CallSerializer(Serializer):
+    hash = CharField()
+    module = CharField()
+    function = CharField()
+    args = JSONField()
 
     class Meta:
-        model = models.MultisigTransactionOperation
-        fields = ("multisig_address", "call_module", "call_function", "call_params")
+        fields = ("hash", "module", "function", "args")
 
 
-class RetrieveTransactionOperationSerializer(ModelSerializer):
-    dao_id = CharField(source="dao.id")
+class TransactionSerializer(ModelSerializer):
     multisig_address = CharField(source="multisig.address")
+    dao_id = CharField(source="dao.id", required=False, allow_null=True)
+    call = CallSerializer(required=False)
 
     class Meta:
-        model = models.MultisigTransactionOperation
+        model = models.Transaction
         fields = (
+            "id",
             "multisig_address",
             "dao_id",
+            "call",
             "call_hash",
-            "call_module",
-            "call_function",
-            "call_params",
             "status",
-            "executed_at",
             "approvers",
             "last_approver",
-            "cancelled_by",
+            "executed_at",
+            "canceled_by",
             "created_at",
             "updated_at",
         )

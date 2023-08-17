@@ -18,7 +18,7 @@ test-media/*
 *.rb
 .coverage
 coverage-reports
-scripts
+scripts.sh
 x.py
 x2.py
 .envrc

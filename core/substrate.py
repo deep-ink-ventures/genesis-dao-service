@@ -8,7 +8,7 @@ from typing import List, Optional
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, connection
-from scalecodec import GenericExtrinsic
+from scalecodec import GenericCall, GenericExtrinsic, MultiAccountId
 from substrateinterface import Keypair
 from websocket import WebSocketConnectionClosedException
 
@@ -117,9 +117,6 @@ class SubstrateService(object):
             extrinsic: extrinsic to submit
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        Returns:
-            None
-
         submits extrinsic logs errors messages if wait_for_inclusion=True
         """
         receipt = self.substrate_interface.submit_extrinsic(extrinsic=extrinsic, wait_for_inclusion=wait_for_inclusion)
@@ -128,9 +125,6 @@ class SubstrateService(object):
 
     def sync_initial_accs(self):
         """
-        Returns:
-            None
-
         fetches accounts from blockchain and creates an Account table entry for each
         """
         logger.info("Syncing initial accounts...")
@@ -149,8 +143,6 @@ class SubstrateService(object):
             dao_name: name of the new dao
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
-        Returns:
-            None
 
         submits a signed extrinsic to create a new dao on the blockchain
         """
@@ -174,9 +166,6 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        Returns:
-            None
-
         submits a singed extrinsic to change a dao's ownership on the blockchain
         """
         self.submit_extrinsic(
@@ -197,9 +186,6 @@ class SubstrateService(object):
             dao_id: dao id to destroy
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
-
-        Returns:
-            None
 
         submits a singed extrinsic to destroy a dao on the blockchain
         """
@@ -223,9 +209,6 @@ class SubstrateService(object):
             amount: amount of tokens to be issued
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
-
-        Returns:
-            None
 
         submits a singed extrinsic to issue tokens for a dao on the blockchain
         (creates a new asset and links it to the dao)
@@ -252,9 +235,6 @@ class SubstrateService(object):
             keypair: Keypair used to sign the
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        Returns:
-            None
-
         submits a singed extrinsic to transfer balance from an asset to an address / account on the blockchain
         """
         self.submit_extrinsic(
@@ -277,9 +257,6 @@ class SubstrateService(object):
             value: amount to transfer
             keypair: Keypair used to sign the
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
-
-        Returns:
-            None
 
         submits a singed extrinsic to transfer balance to a target address on the blockchain
         """
@@ -305,9 +282,6 @@ class SubstrateService(object):
             old_reserved: old reserve balance
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
-
-        Returns:
-            None
 
         submits a singed extrinsic to set new values for the balance (free and reserved)
         of the target address / account on the blockchain
@@ -340,9 +314,6 @@ class SubstrateService(object):
             metadata_hash: hash of the metadata
             keypair: Keypair used to sign the
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
-
-        Returns:
-            None
 
         submits a singed extrinsic to set metadata on a given dao
         """
@@ -378,9 +349,6 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        Returns:
-            None
-
         submits a singed extrinsic to set governance type to majority vote for a given dao
         """
         self.submit_extrinsic(
@@ -412,9 +380,6 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        Returns:
-            None
-
         submits a singed extrinsic to create a proposal for a given dao
         """
         self.submit_extrinsic(
@@ -445,9 +410,6 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        Returns:
-            None
-
         submits a singed extrinsic to set metadata for a given proposal
         """
         self.submit_extrinsic(
@@ -474,9 +436,6 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        Returns:
-            None
-
         submits singed extrinsic to vote on a given proposal
         """
         self.submit_extrinsic(
@@ -501,9 +460,6 @@ class SubstrateService(object):
              keypair: Keypair used to sign the extrinsic
              wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-         Returns:
-             None
-
              submits singed extrinsic to finalize a given proposal
         """
         self.submit_extrinsic(
@@ -526,8 +482,6 @@ class SubstrateService(object):
              keypair: Keypair used to sign the extrinsic
              wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-         Returns:
-             None
 
              submits singed extrinsic to fault a given proposal
         """
@@ -543,67 +497,94 @@ class SubstrateService(object):
             wait_for_inclusion=wait_for_inclusion,
         )
 
-    def create_multisig_account(self, signatories: List[str] = None, threshold: int = None) -> str:
+    def create_multisig_account(self, signatories: List[str] = None, threshold: int = None) -> MultiAccountId:
         """
         Args:
             signatories: List of signatory addresses.
             threshold: Number of signatories needed to execute the transaction.
         Returns:
-             MultiSignature ss58 address: A unique identifier that is shared and used to verify signatures.
+             a MultiSig Account
         """
-        return self.substrate_interface.generate_multisig_account(
-            signatories=signatories, threshold=threshold
-        ).ss58_address
+        return self.substrate_interface.generate_multisig_account(signatories=signatories, threshold=threshold)
 
-    def create_transaction_call_hash(self, call_function: str, call_module: str, call_params: dict):
+    def create_transaction_call_hash(self, module: str, function: str, args: dict, *_) -> str:
         """
-        Parameters:
-            call_function : The name of the function to call within the specified call_module.
-            call_module : The name of the module containing the call_function to be executed.
-            call_params : A dictionary containing the parameters required for the call_function.
+        Args:
+            module : name of the call module
+            function : name of the call function
+            args : args for the call function
 
         Returns:
-            str: The transaction call hash as a hexadecimal string.
+            The transaction call hash as a hexadecimal string.
 
         """
         return self.substrate_interface.compose_call(
-            call_module=call_module, call_function=call_function, call_params=call_params
+            call_module=module, call_function=function, call_params=args
         ).call_hash.hex()
 
-    def create_multisig_event(
+    def approve_multisig(
         self,
-        keypair: Keypair,
         multisig_account,
-        value: int,
-        call_module: str,
-        call_function: str,
+        call: GenericCall,
+        keypair: Keypair,
         wait_for_inclusion=False,
     ):
         """
         Args:
-            call_function : The name of the function to call within the specified call_module.
-            call_module : The name of the module containing the call_function to be executed.
-            keypair: The keypair used to sign the extrinsic.
             multisig_account: The multisig account from which the funds will be transferred.
-            value: The amount of funds to transfer.
-            wait_for_inclusion: Specifies whether to wait for the extrinsic to be included
-                in a block. Defaults to False.
+            call: GenericCall to sign and submit
+            keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        Returns:
-            None
-
-        Raises:
-            Any exceptions that occur during the process of submitting the extrinsic.
+        submits signed extrinsic to approve a multisig transaction
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_multisig_extrinsic(
-                call=self.substrate_interface.compose_call(
-                    call_module=call_module,
-                    call_function=call_function,
-                    call_params={"dest": keypair.ss58_address, "value": value},
-                ),
+                call=call,
                 keypair=keypair,
                 multisig_account=multisig_account,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
+
+    def cancel_multisig(
+        self,
+        multisig_account: MultiAccountId,
+        call: GenericCall,
+        keypair: Keypair,
+        wait_for_inclusion=False,
+    ):
+        """
+        Args:
+             multisig_account: corresponding multisig acc
+             call: call of the multisig transaction to cancel
+             keypair: Keypair used to sign the extrinsic
+             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+        submits singed extrinsic to cancel a multisig transaction
+        """
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Multisig",
+                    call_function="cancel_as_multi",
+                    call_params={
+                        "call_hash": call.call_hash,
+                        "other_signatories": [
+                            signatory
+                            for signatory in multisig_account.signatories
+                            if signatory != f"0x{keypair.public_key.hex()}"
+                        ],
+                        "threshold": multisig_account.threshold,
+                        "timepoint": self.substrate_interface.query(
+                            module="Multisig",
+                            storage_function="Multisigs",
+                            params=[multisig_account.value, call.call_hash],
+                        ).value["when"],
+                        "max_weight": self.substrate_interface.get_payment_info(call, keypair)["weight"],
+                    },
+                ),
+                keypair=keypair,
             ),
             wait_for_inclusion=wait_for_inclusion,
         )
@@ -713,9 +694,6 @@ class SubstrateService(object):
         """
         Args:
             start_time: start time
-
-        Returns:
-            None
 
         ensure at least BLOCK_CREATION_INTERVAL sleep time
         """

@@ -1083,56 +1083,86 @@ class SubstrateServiceTest(IntegrationTestCase):
         )
 
     def test_create_multisig_account(self):
-        signatories = [
-            "5HpG9w8EBLe5XCrbczpwq5TSXvedjrBGCwqxK1iQ7qUsSWFc",
-            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-        ]
         self.substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
             ss58_address="some_address"
         )
 
-        response = self.substrate_service.create_multisig_account(signatories, 2)
+        multisig_acc = self.substrate_service.create_multisig_account(signatories=["sig1", "sig2"], threshold=2)
 
-        self.si.generate_multisig_account.assert_called_once_with(signatories=signatories, threshold=2)
-        self.assertEqual(response, "some_address")
-
-    def test_create_multisig_event(self):
-        keypair_alice = Keypair.create_from_uri("//Alice")
-        keypair_bob = Keypair.create_from_uri("//Bob")
-        call_module = "Balances"
-        call_function = "transfer"
-        self.si.generate_multisig_account.return_value = Mock(
-            ss58_address="5F3QVbS78a4aTYLiRAD8N3czjqVoNyV42L19CXyhqUMCh4Ch"
-        )
-        multisig_account = self.substrate_service.create_multisig_account([keypair_bob, keypair_alice], 2)
-        self.substrate_service.create_multisig_event(
-            keypair=keypair_alice,
-            multisig_account=multisig_account,
-            call_module=call_module,
-            call_function=call_function,
-            value=1,
-            wait_for_inclusion=True,
-        )
-
-        self.si.create_multisig_extrinsic.assert_called_once_with(
-            call=self.si.compose_call(), multisig_account=multisig_account, keypair=keypair_alice
-        )
-        self.si.submit_extrinsic.assert_called_once_with(
-            extrinsic=self.si.create_multisig_extrinsic(),
-            wait_for_inclusion=True,
-        )
+        self.si.generate_multisig_account.assert_called_once_with(signatories=["sig1", "sig2"], threshold=2)
+        self.assertEqual(multisig_acc.ss58_address, "some_address")
 
     def test_create_generate_transaction_call_hash(self):
-        substrate_service.substrate_interface.compose_call.hex = Mock(return_value="some_call_hash")
+        self.si.compose_call.return_value.call_hash.hex.return_value = "some_hash"
 
-        self.substrate_service.create_transaction_call_hash(
-            call_module="Balances",
-            call_function="transfer",
-            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+        self.assertEqual(
+            self.substrate_service.create_transaction_call_hash(
+                module="module1", function="func1", args={"some": "args"}
+            ),
+            "some_hash",
         )
 
         self.si.compose_call.assert_called_once_with(
-            call_module="Balances",
-            call_function="transfer",
-            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
+            call_module="module1", call_function="func1", call_params={"some": "args"}
+        )
+
+    def test_approve_multisig(self):
+        keypair_alice = Keypair.create_from_uri("//Alice")
+        multisig_account = Mock()
+        _call = substrate_service.substrate_interface.compose_call(
+            call_module="DaoCore",
+            call_function="change_owner",
+            call_params={"dao_id": "DAO1", "new_owner": keypair_alice.ss58_address},
+        )
+
+        self.substrate_service.approve_multisig(
+            keypair=keypair_alice, multisig_account=multisig_account, wait_for_inclusion=True, call=_call
+        )
+
+        self.si.create_multisig_extrinsic.assert_called_once_with(
+            call=_call, multisig_account=multisig_account, keypair=keypair_alice
+        )
+        self.si.submit_extrinsic.assert_called_once_with(
+            extrinsic=self.si.create_multisig_extrinsic(), wait_for_inclusion=True
+        )
+
+    def test_cancel_multisig(self):
+        self.si.query.return_value = Mock(value={"when": "when"})
+        self.si.get_payment_info.return_value = {"weight": "weight"}
+        keypair_alice = Keypair.create_from_uri("//Alice")
+        multisig_account = Mock(signatories=["sig1", "sig2"], threshold=2, value=123)
+        _call = substrate_service.substrate_interface.compose_call(
+            call_module="DaoCore",
+            call_function="change_owner",
+            call_params={"dao_id": "DAO1", "new_owner": keypair_alice.ss58_address},
+        )
+        _call.call_hash = "some_hash"
+        self.substrate_service.cancel_multisig(
+            keypair=keypair_alice, multisig_account=multisig_account, wait_for_inclusion=True, call=_call
+        )
+
+        self.assertExactCalls(
+            self.si.compose_call,
+            [
+                call(
+                    call_module="DaoCore",
+                    call_function="change_owner",
+                    call_params={"dao_id": "DAO1", "new_owner": keypair_alice.ss58_address},
+                ),
+                call(
+                    call_module="Multisig",
+                    call_function="cancel_as_multi",
+                    call_params={
+                        "call_hash": "some_hash",
+                        "other_signatories": ["sig1", "sig2"],
+                        "threshold": 2,
+                        "timepoint": "when",
+                        "max_weight": "weight",
+                    },
+                ),
+            ],
+        )
+        self.si.create_signed_extrinsic.assert_called_once_with(call=self.si.compose_call(), keypair=keypair_alice)
+        self.si.submit_extrinsic.assert_called_once_with(
+            extrinsic=self.si.create_signed_extrinsic(), wait_for_inclusion=True
         )

@@ -3,13 +3,12 @@ from itertools import chain
 
 from django.conf import settings
 from django.core.cache import cache
-from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError
 from django.db.models import Q
 from django.utils.decorators import method_decorator
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.decorators import action, api_view
+from rest_framework.mixins import CreateModelMixin
 from rest_framework.response import Response
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_400_BAD_REQUEST
 from rest_framework.throttling import UserRateThrottle
@@ -116,7 +115,7 @@ class AccountViewSet(ReadOnlyModelViewSet, SearchableMixin):
         return Response(self.get_serializer(account).data)
 
 
-class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
+class DaoViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
     queryset = models.Dao.objects.all()
     allowed_filter_fields = ("id", "name", "creator_id", "owner_id")
     allowed_order_fields = ("id", "name", "creator_id", "owner_id")
@@ -130,8 +129,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
             "retrieve": serializers.DaoSerializer,
             "list": serializers.DaoSerializer,
             "add_metadata": serializers.AddDaoMetadataSerializer,
-            "create_multisig": serializers.CreateMultiSignatureSerializer,
-            "create_multisig_transaction": serializers.TransactionOperationSerializer,
+            "create_transaction": serializers.CallSerializer,
         }.get(self.action)
 
     @swagger_auto_schema(
@@ -231,73 +229,39 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         return Response(status=HTTP_200_OK, data={"challenge": challenge_token})
 
     @swagger_auto_schema(
-        operation_id="Create Multi Signature Wallet",
-        operation_description="Creating a Multi Signature Wallet",
-        responses={201: openapi.Response("", serializers.CreateMultiSignatureSerializer)},
-        security=[{"Signature": []}],
-    )
-    @action(
-        methods=["POST"], detail=True, url_path="multisig", permission_classes=[IsDAOOwner], authentication_classes=[]
-    )
-    def create_multisig(self, request, *args, **kwargs):
-        from core.substrate import substrate_service
-
-        if (signatories := request.data.get("signatories")) and (threshold := request.data.get("threshold")):
-            try:
-                multi_signature_account = models.MultiSignature.objects.create(
-                    address=substrate_service.create_multisig_account(signatories=signatories, threshold=threshold),
-                    signatories=signatories,
-                    threshold=threshold,
-                )
-            except IntegrityError:
-                return Response({"message": "Multi signature account already exists."}, HTTP_400_BAD_REQUEST)
-
-            serializer = serializers.RetrieveMultiSignatureSerializer(multi_signature_account)
-
-            return Response(data=serializer.data, status=HTTP_201_CREATED)
-        return Response({"message": "Signatories or threshold are missing."}, HTTP_400_BAD_REQUEST)
-
-    @swagger_auto_schema(
         operation_id="Create Multi Signature Transaction",
-        operation_description="Creating a Multi Signature Transaction",
-        responses={201: openapi.Response("", serializers.TransactionOperationSerializer)},
+        operation_description="Creates a MultiSig Transaction",
+        responses={201: openapi.Response("", serializers.TransactionSerializer)},
         security=[{"Signature": []}],
     )
     @action(
         methods=["POST"],
         detail=True,
-        url_path="multisig-transaction",
+        url_path="transaction",
         permission_classes=[IsDAOOwner],
         authentication_classes=[],
     )
-    def create_multisig_transaction(self, request, *args, **kwargs):
+    def create_transaction(self, request, *args, **kwargs):
         from core.substrate import substrate_service
 
-        if (
-            call_params := request.data.get("call_params")
-            and (call_function := request.data.get("call_function"))
-            and (call_module := request.data.get("call_module"))
-        ):
-            try:
-                multisig_transaction = models.MultisigTransactionOperation.objects.create(
-                    call_module=call_module,
-                    call_function=call_function,
-                    call_params=call_params,
-                    status=models.TransactionStatus.PENDING,
-                    multisig=models.MultiSignature.objects.filter(
-                        address__iexact=request.data.get("multisig_address", "")
-                    ).get(),
-                    dao=models.Dao.objects.filter(id__iexact=kwargs.get("pk")).get(),
-                    call_hash=substrate_service.create_transaction_call_hash(
-                        call_params=call_params, call_function=call_function, call_module=call_module
-                    ),
-                )
-                serializer = serializers.RetrieveTransactionOperationSerializer(multisig_transaction)
-                return Response(data=serializer.data, status=HTTP_201_CREATED)
-            except ObjectDoesNotExist:
-                return Response({"message": "Multisignature account or Dao not found."}, HTTP_400_BAD_REQUEST)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        call_data = serializer.data
+        if (call_hash := call_data["hash"]) != substrate_service.create_transaction_call_hash(**call_data):
+            return Response(data={"message": "Invalid call hash."}, status=HTTP_400_BAD_REQUEST)
 
-        return Response({"message": "call_module, call_function or call_params are missing."}, HTTP_400_BAD_REQUEST)
+        dao = self.get_object()
+        try:
+            multisig = models.MultiSig.objects.get(address=dao.owner.address)
+        except models.MultiSig.DoesNotExist:
+            return Response(
+                data={"message": "No MultiSig Account exists for the given Dao."}, status=HTTP_400_BAD_REQUEST
+            )
+
+        res_data = serializers.TransactionSerializer(
+            models.Transaction.objects.create(multisig=multisig, dao_id=dao.id, call=call_data, call_hash=call_hash)
+        ).data
+        return Response(data=res_data, status=HTTP_201_CREATED, headers=self.get_success_headers(data=res_data))
 
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Asset."), "retrieve")
@@ -405,19 +369,44 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
         )
 
 
-@method_decorator(swagger_auto_schema(operation_description="Retrieves A Multi Signature Account."), "retrieve")
-class MultiSignatureViewSet(ReadOnlyModelViewSet):
-    queryset = models.MultiSignature.objects.all()
+class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
+    queryset = models.MultiSig.objects.all()
     pagination_class = MultiQsLimitOffsetPagination
-    serializer_class = serializers.RetrieveMultiSignatureSerializer
+    serializer_class = serializers.MultiSigSerializer
+    allowed_filter_fields = ("address", "dao_id")
+    allowed_order_fields = ("address", "dao_id")
     lookup_field = "address"
 
+    @swagger_auto_schema(
+        operation_id="Create MultiSig Account",
+        operation_description="Creates a MultiSig Account",
+        request_body=serializers.CreateMultiSigSerializer,
+        responses={201: openapi.Response("", serializers.MultiSigSerializer)},
+        security=[{"Basic": []}],
+    )
+    def create(self, request, *args, **kwargs):
+        from core.substrate import substrate_service
 
-@method_decorator(
-    swagger_auto_schema(operation_description="Retrieves Transaction Original data and Hash."), "retrieve"
-)
-class MultiSignatureTransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
-    queryset = models.MultisigTransactionOperation.objects.all()
-    serializer_class = serializers.RetrieveTransactionOperationSerializer
-    allowed_filter_fields = ("dao_id", "status")
-    lookup_field = "pk"
+        serializer = serializers.CreateMultiSigSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.data
+        multisig_acc, created = models.MultiSig.objects.get_or_create(
+            address=substrate_service.create_multisig_account(
+                signatories=data["signatories"], threshold=data["threshold"]
+            ).ss58_address,
+            signatories=data["signatories"],
+            threshold=data["threshold"],
+        )
+        res_data = self.get_serializer(multisig_acc).data
+        return Response(
+            data=res_data,
+            status=HTTP_201_CREATED if created else HTTP_200_OK,
+            headers=self.get_success_headers(data=res_data),
+        )
+
+
+class TransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
+    queryset = models.Transaction.objects.all()
+    serializer_class = serializers.TransactionSerializer
+    allowed_filter_fields = ("dao_id", "status", "call_hash", "executed_at")
+    allowed_order_fields = ("dao_id", "status", "call_hash", "executed_at")

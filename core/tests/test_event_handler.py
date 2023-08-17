@@ -1,11 +1,12 @@
 import json
 import random
 from io import BytesIO
-from unittest.mock import Mock, call, patch
+from unittest.mock import call, patch
 
 from django.core.cache import cache
 from django.db import IntegrityError
 from django.utils import timezone
+from django.utils.timezone import now
 from freezegun import freeze_time
 
 from core import models
@@ -15,7 +16,6 @@ from core.event_handler import (
     substrate_event_handler,
 )
 from core.file_handling.file_handler import file_handler
-from core.substrate import substrate_service
 from core.tests.testcases import IntegrationTestCase
 
 
@@ -88,7 +88,8 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1", creator_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2", creator_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc2", creator_id="acc2")
-        models.Account.objects.create(address="acc3")
+        models.MultiSig.objects.create(address="acc3")
+
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -118,16 +119,72 @@ class EventHandlerTest(IntegrationTestCase):
             models.Account(address="acc4"),
         ]
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(5):
             substrate_event_handler._transfer_dao_ownerships(block)
 
         self.assertModelsEqual(models.Dao.objects.order_by("id"), expected_daos)
         self.assertModelsEqual(models.Account.objects.order_by("address"), expected_accounts)
+        self.assertModelsEqual(
+            models.MultiSig.objects.all(), [models.MultiSig(address="acc3", account_ptr_id="acc3", dao_id="dao1")]
+        )
+
+    def test__transfer_dao_ownerships_no_multisigs(self):
+        models.Account.objects.create(address="acc1")
+        models.Account.objects.create(address="acc2")
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1", creator_id="acc1")
+        models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2", creator_id="acc2")
+        models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc2", creator_id="acc2")
+
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            extrinsic_data={
+                "not": "interesting",
+            },
+            event_data={
+                "not": "interesting",
+                "DaoCore": {
+                    "DaoOwnerChanged": [
+                        {"new_owner": "acc3", "dao_id": "dao1", "not": "interesting"},
+                        {"new_owner": "acc1", "dao_id": "dao2", "not": "interesting"},
+                        {"new_owner": "acc4", "dao_id": "dao3", "not": "interesting"},
+                    ]
+                },
+            },
+        )
+        expected_daos = [
+            models.Dao(id="dao1", name="dao1 name", owner_id="acc3", creator_id="acc1", setup_complete=True),
+            models.Dao(id="dao2", name="dao2 name", owner_id="acc1", creator_id="acc2", setup_complete=True),
+            models.Dao(id="dao3", name="dao3 name", owner_id="acc4", creator_id="acc2", setup_complete=True),
+        ]
+        expected_accounts = [
+            models.Account(address="acc1"),
+            models.Account(address="acc2"),
+            models.Account(address="acc3"),
+            models.Account(address="acc4"),
+        ]
+
+        with self.assertNumQueries(4):
+            substrate_event_handler._transfer_dao_ownerships(block)
+
+        self.assertModelsEqual(models.Dao.objects.order_by("id"), expected_daos)
+        self.assertModelsEqual(models.Account.objects.order_by("address"), expected_accounts)
+        self.assertListEqual(list(models.MultiSig.objects.all()), [])
 
     def test__delete_daos(self):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner=models.Account.objects.create(address="acc1"))
         models.Dao.objects.create(id="dao2", name="dao2 name", owner=models.Account.objects.create(address="acc2"))
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc1")
+        multi1 = models.MultiSig.objects.create(address="multi1")
+        models.Dao.objects.create(id="dao4", name="dao4 name", owner=multi1)
+        multi1.dao_id = "dao4"
+        multi1.save()
+        multi2 = models.MultiSig.objects.create(address="multi2")
+        models.Dao.objects.create(id="dao5", name="dao5 name", owner=multi2)
+        multi2.dao_id = "dao5"
+        multi2.save()
+        models.Transaction.objects.create(multisig_id="multi1", dao_id="dao1", call_hash="hash1")
+        models.Transaction.objects.create(multisig_id="multi1", dao_id="dao1", call_hash="hash2")
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -137,18 +194,33 @@ class EventHandlerTest(IntegrationTestCase):
                     "DaoDestroyed": [
                         {"dao_id": "dao1", "not": "interesting"},
                         {"dao_id": "dao3", "not": "interesting"},
+                        {"dao_id": "dao4", "not": "interesting"},
                     ]
                 },
             },
         )
         expected_daos = [
             models.Dao(id="dao2", name="dao2 name", owner_id="acc2"),
+            models.Dao(id="dao5", name="dao5 name", owner_id="multi2"),
+        ]
+        expected_multisigs = [
+            models.MultiSig(address="multi1", account_ptr_id="multi1", dao_id=None),
+            models.MultiSig(address="multi2", account_ptr_id="multi2", dao_id="dao5"),
         ]
 
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(9):
             substrate_event_handler._delete_daos(block)
 
         self.assertModelsEqual(models.Dao.objects.all(), expected_daos)
+        self.assertModelsEqual(
+            models.Transaction.objects.all(),
+            [
+                models.Transaction(multisig_id="multi1", dao_id=None, call_hash="hash1"),
+                models.Transaction(multisig_id="multi1", dao_id=None, call_hash="hash2"),
+            ],
+            ignore_fields=("created_at", "updated_at", "id"),
+        )
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multisigs)
 
     def test__create_assets(self):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner=models.Account.objects.create(address="acc1"))
@@ -651,7 +723,7 @@ class EventHandlerTest(IntegrationTestCase):
             models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None),
         ]
 
-        with self.assertNumQueries(4), freeze_time(time):
+        with self.assertNumQueries(3), freeze_time(time):
             substrate_event_handler._create_proposals(block)
 
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
@@ -1178,45 +1250,21 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.Proposal.objects.order_by("id"), expected_proposals)
 
-    def test_new_multisig_transaction(self):
-        call_hash = "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162"
-        substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
-            ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+    def test__handle_new_transactions(self):
+        multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
+        models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1"
         )
-        multi_signature = models.MultiSignature.objects.create(
-            address=(
-                substrate_service.create_multisig_account(
-                    signatories=[
-                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                    ],
-                    threshold=2,
-                )
-            ),
-            signatories=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            threshold=2,
+        # these shouldn't change
+        # different hash
+        txn0 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
-        dao = models.Dao.objects.create(
-            id="dao1",
-            name="dao1 name",
-            creator=multi_signature,
-            owner=multi_signature,
-            metadata={"some": "data"},
+        # some multisig and hash but executed_at
+        txn1 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
-        models.MultisigTransactionOperation.objects.create(
-            status=models.TransactionStatus.PENDING,
-            multisig=multi_signature,
-            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
-            call_module="Balances",
-            call_function="transfer",
-            approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
-            last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-            call_hash=call_hash,
-            dao=dao,
-        )
+
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -1224,86 +1272,159 @@ class EventHandlerTest(IntegrationTestCase):
                 "Multisig": {
                     "NewMultisig": [
                         {
-                            "multisig": multi_signature.address,
-                            "approving": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                            "call_hash": "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162",
+                            "multisig": "addr1",
+                            "approving": "sig2",
+                            "call_hash": "hash1",
                         },
-                        #  this should create a new transaction, because "some_call_hash" do not exist
+                        # new transaction
                         {
-                            "multisig": multi_signature.address,
-                            "approving": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                            "call_hash": "some_call_hash",
+                            "multisig": "addr1",
+                            "approving": "sig2",
+                            "call_hash": "hash2",
+                        },
+                        # new multisig, new transaction
+                        {
+                            "multisig": "addr2",
+                            "approving": "sig2",
+                            "call_hash": "hash2",
                         },
                     ],
                 },
             },
         )
+        multisig2 = models.MultiSig(address="addr2", account_ptr_id="addr2")
+        expected_multi_sigs = [multisig, multisig2]
         expected_transaction = [
-            models.MultisigTransactionOperation(
-                status=models.TransactionStatus.PENDING,
-                multisig=multi_signature,
-                approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
-                last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
-                call_module="Balances",
-                call_function="transfer",
-                call_hash=call_hash,
-                dao=dao,
-            ),
-            models.MultisigTransactionOperation(
-                status=models.TransactionStatus.PENDING,
-                multisig=multi_signature,
-                approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
-                last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                call_hash="some_call_hash",
-                dao=dao,
-            ),
+            txn0,
+            txn1,
+            models.Transaction(call_hash="hash1", multisig=multisig, approvers=["sig1", "sig2"], call={"some": "data"}),
+            models.Transaction(call_hash="hash2", multisig=multisig, approvers=["sig2"]),
+            models.Transaction(call_hash="hash2", multisig=multisig2, approvers=["sig2"]),
         ]
 
-        with self.assertNumQueries(6):
-            substrate_event_handler._multisig_transactions(block)
+        with self.assertNumQueries(5):
+            substrate_event_handler._handle_new_transactions(block=block)
 
-        self.assertModelsEqual(models.MultisigTransactionOperation.objects.order_by("created_at"), expected_transaction)
-
-    def test_approval_multisig_transaction_and_status_changed(self):
-        call_hash = "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162"
-        substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
-            ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multi_sigs)
+        self.assertModelsEqual(
+            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            expected_transaction,
+            ignore_fields=("id", "created_at", "updated_at"),
         )
-        multi_signature = models.MultiSignature.objects.create(
-            address=(
-                substrate_service.create_multisig_account(
-                    signatories=[
-                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+
+    def test__handle_new_transactions_only_existing(self):
+        multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
+        models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1"
+        )
+        # these shouldn't change
+        # different hash
+        txn0 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
+        )
+        # some multisig and hash but executed_at
+        txn1 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
+        )
+
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            event_data={
+                "Multisig": {
+                    "NewMultisig": [{"multisig": "addr1", "approving": "sig2", "call_hash": "hash1"}],
+                }
+            },
+        )
+        expected_multi_sigs = [multisig]
+        expected_transaction = [
+            txn0,
+            txn1,
+            models.Transaction(call_hash="hash1", multisig=multisig, approvers=["sig1", "sig2"], call={"some": "data"}),
+        ]
+
+        with self.assertNumQueries(2):
+            substrate_event_handler._handle_new_transactions(block=block)
+
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multi_sigs)
+        self.assertModelsEqual(
+            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            expected_transaction,
+            ignore_fields=("id", "created_at", "updated_at"),
+        )
+
+    def test__handle_new_transactions_only_new(self):
+        multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
+        # these shouldn't change
+        # different hash
+        txn0 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
+        )
+        # some multisig and hash but executed_at
+        txn1 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
+        )
+
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            event_data={
+                "Multisig": {
+                    "NewMultisig": [
+                        # new transaction
+                        {
+                            "multisig": "addr1",
+                            "approving": "sig2",
+                            "call_hash": "hash2",
+                        },
+                        # new multisig, new transaction
+                        {
+                            "multisig": "addr2",
+                            "approving": "sig2",
+                            "call_hash": "hash2",
+                        },
                     ],
-                    threshold=2,
-                )
-            ),
-            signatories=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            threshold=2,
+                },
+            },
         )
-        dao = models.Dao.objects.create(
-            id="dao1",
-            name="dao1 name",
-            creator=multi_signature,
-            owner=multi_signature,
-            metadata={"some": "data"},
+        multisig2 = models.MultiSig(address="addr2", account_ptr_id="addr2")
+        expected_multi_sigs = [multisig, multisig2]
+        expected_transaction = [
+            txn0,
+            txn1,
+            models.Transaction(call_hash="hash2", multisig=multisig, approvers=["sig2"]),
+            models.Transaction(call_hash="hash2", multisig=multisig2, approvers=["sig2"]),
+        ]
+
+        with self.assertNumQueries(4):
+            substrate_event_handler._handle_new_transactions(block=block)
+
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multi_sigs)
+        self.assertModelsEqual(
+            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            expected_transaction,
+            ignore_fields=("id", "created_at", "updated_at"),
         )
-        models.MultisigTransactionOperation.objects.create(
-            status=models.TransactionStatus.PENDING,
-            multisig=multi_signature,
-            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
-            call_module="Balances",
-            call_function="transfer",
-            approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
-            last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-            call_hash=call_hash,
-            dao=dao,
+
+    def test__approve_transactions(self):
+        multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
+        multisig2 = models.MultiSig.objects.create(
+            address="addr2", signatories=["sig1", "sig2", "sig3", "sig4", "sig5"], threshold=4
         )
+        models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1"
+        )
+        models.Transaction.objects.create(multisig=multisig2, approvers=["sig1", "sig2"], call_hash="hash2")
+        # these shouldn't change
+        # different hash
+        txn0 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
+        )
+        # some multisig and hash but executed_at
+        txn1 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
+        )
+
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -1311,82 +1432,58 @@ class EventHandlerTest(IntegrationTestCase):
                 "Multisig": {
                     "MultisigApproval": [
                         {
-                            "multisig": multi_signature.address,
-                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            "call_hash": call_hash,
+                            "multisig": "addr1",
+                            "approving": "sig2",
+                            "call_hash": "hash1",
                         },
                         {
-                            "multisig": multi_signature.address,
-                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            "call_hash": "some_hash",
+                            "multisig": "addr2",
+                            "approving": "sig3",
+                            "call_hash": "hash2",
+                        },
+                        {
+                            "multisig": "addr2",
+                            "approving": "sig4",
+                            "call_hash": "hash2",
+                        },
+                        {
+                            "multisig": "does not exist",
+                            "approving": "shouldn't break",
+                            "call_hash": "anything",
                         },
                     ],
                 },
             },
         )
         expected_transaction = [
-            models.MultisigTransactionOperation(
-                status=models.TransactionStatus.APPROVED,
-                multisig=multi_signature,
-                call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
-                call_module="Balances",
-                call_function="transfer",
-                approvers=[
-                    "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                    "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                ],
-                last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                call_hash=call_hash,
-                dao=dao,
-            ),
+            txn0,
+            txn1,
+            models.Transaction(call_hash="hash1", multisig=multisig, approvers=["sig1", "sig2"], call={"some": "data"}),
+            models.Transaction(call_hash="hash2", multisig=multisig2, approvers=["sig1", "sig2", "sig3", "sig4"]),
         ]
 
-        with self.assertNumQueries(5):
-            substrate_event_handler._multisig_transactions(block)
+        with self.assertNumQueries(2):
+            substrate_event_handler._approve_transactions(block=block)
 
-        self.assertModelsEqual(models.MultisigTransactionOperation.objects.order_by("created_at"), expected_transaction)
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), [multisig, multisig2])
+        self.assertModelsEqual(
+            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            expected_transaction,
+            ignore_fields=("id", "created_at", "updated_at"),
+        )
 
-    def test_approval_multisig_transaction_and_status_not_changed(self):
-        call_hash = "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162"
-        substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
-            ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+    def test__approve_transactions_nothing_to_update(self):
+        multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
+        # these shouldn't change
+        # different hash
+        txn0 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
-        multi_signature = models.MultiSignature.objects.create(
-            address=(
-                substrate_service.create_multisig_account(
-                    signatories=[
-                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                        "5EZ6brKNPkWWuEtibPfobPkeYBR6vYz6brQQ5ccYyMjc3LXo",
-                    ],
-                    threshold=3,
-                )
-            ),
-            signatories=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                "5EZ6brKNPkWWuEtibPfobPkeYBR6vYz6brQQ5ccYyMjc3LXo",
-            ],
-            threshold=3,
+        # some multisig and hash but executed_at
+        txn1 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
-        dao = models.Dao.objects.create(
-            id="dao1",
-            name="dao1 name",
-            creator=multi_signature,
-            owner=multi_signature,
-            metadata={"some": "data"},
-        )
-        models.MultisigTransactionOperation.objects.create(
-            status=models.TransactionStatus.PENDING,
-            multisig=multi_signature,
-            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
-            call_module="Balances",
-            call_function="transfer",
-            approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
-            last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-            call_hash=call_hash,
-            dao=dao,
-        )
+
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -1394,96 +1491,62 @@ class EventHandlerTest(IntegrationTestCase):
                 "Multisig": {
                     "MultisigApproval": [
                         {
-                            "multisig": multi_signature.address,
-                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            "call_hash": call_hash,
+                            "multisig": "addr1",
+                            "approving": "sig2",
+                            "call_hash": "hash1",
                         },
                         {
-                            "multisig": multi_signature.address,
-                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            "call_hash": "some_hash",
+                            "multisig": "addr2",
+                            "approving": "sig3",
+                            "call_hash": "hash2",
+                        },
+                        {
+                            "multisig": "addr2",
+                            "approving": "sig4",
+                            "call_hash": "hash2",
+                        },
+                        {
+                            "multisig": "does not exist",
+                            "approving": "shouldn't break",
+                            "call_hash": "anything",
                         },
                     ],
                 },
             },
         )
-        expected_transaction = [
-            models.MultisigTransactionOperation(
-                status=models.TransactionStatus.PENDING,
-                multisig=multi_signature,
-                call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
-                call_module="Balances",
-                call_function="transfer",
-                approvers=[
-                    "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                    "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                ],
-                last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                call_hash=call_hash,
-                dao=dao,
-            ),
-        ]
+        expected_transaction = [txn0, txn1]
 
-        with self.assertNumQueries(5):
-            substrate_event_handler._multisig_transactions(block)
+        with self.assertNumQueries(1):
+            substrate_event_handler._approve_transactions(block=block)
 
-        self.assertModelsEqual(models.MultisigTransactionOperation.objects.order_by("created_at"), expected_transaction)
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), [multisig])
+        self.assertModelsEqual(
+            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            expected_transaction,
+            ignore_fields=("id", "created_at", "updated_at"),
+        )
 
-    def test_executed_and_cancel_multisig_transaction(self):
-        executed_call_hash = "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c111ae162"
-        cancelled_call_hash = "0x4168b921eb62c2a374e08be715a24c2a45c1b1acb46b997deda71f6c11ccccp"
-        substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(
-            ss58_address="5H2c4wcccpp7S8PP7HQdzJ5P2DLAGJn6gza3EdQpeQJ5d2Nw"
+    def test__execute_transactions(self):
+        multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
+        multisig2 = models.MultiSig.objects.create(
+            address="addr2", signatories=["sig1", "sig2", "sig3", "sig4", "sig5"], threshold=4
         )
-        multi_signature = models.MultiSignature.objects.create(
-            address=(
-                substrate_service.create_multisig_account(
-                    signatories=[
-                        "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                        "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                    ],
-                    threshold=2,
-                )
-            ),
-            signatories=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            threshold=2,
+        models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1", "sig3"], call_hash="hash1"
         )
-        dao = models.Dao.objects.create(
-            id="dao1",
-            name="dao1 name",
-            creator=multi_signature,
-            owner=multi_signature,
-            metadata={"some": "data"},
+        models.Transaction.objects.create(
+            multisig=multisig2, approvers=["sig1", "sig2", "sig4", "sig5"], call_hash="hash2"
         )
-        models.MultisigTransactionOperation.objects.create(
-            status=models.TransactionStatus.EXECUTED,
-            multisig=multi_signature,
-            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
-            call_module="Balances",
-            call_function="transfer",
-            approvers=[
-                "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            ],
-            last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            call_hash=executed_call_hash,
-            dao=dao,
+        # these shouldn't change
+        # different hash
+        txn0 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
-        models.MultisigTransactionOperation.objects.create(
-            status=models.TransactionStatus.CANCELLED,
-            multisig=multi_signature,
-            call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
-            call_module="Balances",
-            call_function="transfer",
-            approvers=["5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"],
-            last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-            cancelled_by="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-            call_hash=cancelled_call_hash,
-            dao=dao,
+        # some multisig and hash but executed_at
+        txn1 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
+
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -1491,70 +1554,226 @@ class EventHandlerTest(IntegrationTestCase):
                 "Multisig": {
                     "MultisigExecuted": [
                         {
-                            "multisig": multi_signature.address,
-                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            "call_hash": executed_call_hash,
+                            "multisig": "addr1",
+                            "approving": "sig2",
+                            "call_hash": "hash1",
                         },
                         {
-                            "multisig": multi_signature.address,
-                            "approving": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            "call_hash": "some_hash",
+                            "multisig": "addr2",
+                            "approving": "sig3",
+                            "call_hash": "hash2",
+                        },
+                        {
+                            "multisig": "does not exist",
+                            "approving": "shouldn't break",
+                            "call_hash": "anything",
                         },
                     ],
-                    "MultisigCancelled": [
+                },
+            },
+        )
+        timestamp = now()
+        expected_transaction = [
+            txn0,
+            txn1,
+            models.Transaction(
+                call_hash="hash1",
+                multisig=multisig,
+                approvers=["sig1", "sig3", "sig2"],
+                call={"some": "data"},
+                status=models.TransactionStatus.EXECUTED,
+                executed_at=timestamp,
+            ),
+            models.Transaction(
+                call_hash="hash2",
+                multisig=multisig2,
+                approvers=["sig1", "sig2", "sig4", "sig5", "sig3"],
+                status=models.TransactionStatus.EXECUTED,
+                executed_at=timestamp,
+            ),
+        ]
+
+        with self.assertNumQueries(2), freeze_time(time_to_freeze=timestamp):
+            substrate_event_handler._execute_transactions(block=block)
+
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), [multisig, multisig2])
+        self.assertModelsEqual(
+            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            expected_transaction,
+            ignore_fields=("id", "created_at", "updated_at"),
+        )
+
+    def test__execute_transactions_nothing_to_update(self):
+        multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
+        # these shouldn't change
+        # different hash
+        txn0 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
+        )
+        # some multisig and hash but executed_at
+        txn1 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
+        )
+
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            event_data={
+                "Multisig": {
+                    "MultisigExecuted": [
                         {
-                            "multisig": multi_signature.address,
-                            "cancelling": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            "call_hash": cancelled_call_hash,
+                            "multisig": "addr1",
+                            "approving": "sig2",
+                            "call_hash": "hash1",
                         },
                         {
-                            "multisig": multi_signature.address,
-                            "cancelling": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                            "call_hash": "some_hash",
+                            "multisig": "addr2",
+                            "approving": "sig3",
+                            "call_hash": "hash2",
+                        },
+                        {
+                            "multisig": "does not exist",
+                            "approving": "shouldn't break",
+                            "call_hash": "anything",
+                        },
+                    ],
+                },
+            },
+        )
+        expected_transaction = [txn0, txn1]
+
+        with self.assertNumQueries(1):
+            substrate_event_handler._execute_transactions(block=block)
+
+        self.assertModelsEqual(
+            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            expected_transaction,
+            ignore_fields=("id", "created_at", "updated_at"),
+        )
+
+    def test__cancel_transactions(self):
+        multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
+        multisig2 = models.MultiSig.objects.create(
+            address="addr2", signatories=["sig1", "sig2", "sig3", "sig4", "sig5"], threshold=4
+        )
+        models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1", "sig3"], call_hash="hash1"
+        )
+        models.Transaction.objects.create(
+            multisig=multisig2, approvers=["sig1", "sig2", "sig4", "sig5"], call_hash="hash2"
+        )
+        # these shouldn't change
+        # different hash
+        txn0 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
+        )
+        # some multisig and hash but executed_at
+        txn1 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
+        )
+
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            event_data={
+                "Multisig": {
+                    "MultisigCancelled": [
+                        {
+                            "multisig": "addr1",
+                            "cancelling": "sig1",
+                            "call_hash": "hash1",
+                        },
+                        {
+                            "multisig": "addr2",
+                            "cancelling": "sig2",
+                            "call_hash": "hash2",
+                        },
+                        {
+                            "multisig": "does not exist",
+                            "cancelling": "shouldn't break",
+                            "call_hash": "anything",
                         },
                     ],
                 },
             },
         )
         expected_transaction = [
-            models.MultisigTransactionOperation(
-                status=models.TransactionStatus.EXECUTED,
-                multisig=multi_signature,
-                call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
-                call_module="Balances",
-                call_function="transfer",
-                executed_at=timezone.now(),
-                approvers=[
-                    "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                    "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                ],
-                last_approver="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                call_hash=executed_call_hash,
-                dao=dao,
-            ),
-            models.MultisigTransactionOperation(
+            txn0,
+            txn1,
+            models.Transaction(
+                call_hash="hash1",
+                multisig=multisig,
+                approvers=["sig1", "sig3"],
+                call={"some": "data"},
                 status=models.TransactionStatus.CANCELLED,
-                multisig=multi_signature,
-                call_params={"dest": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY", "value": 3},
-                call_module="Balances",
-                call_function="transfer",
-                approvers=[
-                    "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                ],
-                last_approver="5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY",
-                cancelled_by="5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
-                call_hash=cancelled_call_hash,
-                dao=dao,
+                canceled_by="sig1",
+            ),
+            models.Transaction(
+                call_hash="hash2",
+                multisig=multisig2,
+                approvers=["sig1", "sig2", "sig4", "sig5"],
+                status=models.TransactionStatus.CANCELLED,
+                canceled_by="sig2",
             ),
         ]
 
-        with self.assertNumQueries(6):
-            substrate_event_handler._multisig_transactions(block)
+        with self.assertNumQueries(2):
+            substrate_event_handler._cancel_transactions(block=block)
 
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), [multisig, multisig2])
         self.assertModelsEqual(
-            models.MultisigTransactionOperation.objects.order_by("created_at"),
+            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
             expected_transaction,
-            ignore_fields=("executed_at", "created_at", "updated_at"),
+            ignore_fields=("id", "created_at", "updated_at"),
+        )
+
+    def test__cancel_transactions_nothing_to_update(self):
+        multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
+        # these shouldn't change
+        # different hash
+        txn0 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
+        )
+        # some multisig and hash but executed_at
+        txn1 = models.Transaction.objects.create(
+            multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
+        )
+
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            event_data={
+                "Multisig": {
+                    "MultisigCancelled": [
+                        {
+                            "multisig": "addr1",
+                            "cancelling": "sig1",
+                            "call_hash": "hash1",
+                        },
+                        {
+                            "multisig": "addr2",
+                            "cancelling": "sig2",
+                            "call_hash": "hash2",
+                        },
+                        {
+                            "multisig": "does not exist",
+                            "cancelling": "shouldn't break",
+                            "call_hash": "anything",
+                        },
+                    ],
+                },
+            },
+        )
+        expected_transaction = [txn0, txn1]
+
+        with self.assertNumQueries(1):
+            substrate_event_handler._cancel_transactions(block=block)
+
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), [multisig])
+        self.assertModelsEqual(
+            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            expected_transaction,
+            ignore_fields=("id", "created_at", "updated_at"),
         )
 
     @patch("core.event_handler.SubstrateEventHandler._create_accounts")
@@ -1569,7 +1788,10 @@ class EventHandlerTest(IntegrationTestCase):
     @patch("core.event_handler.SubstrateEventHandler._register_votes")
     @patch("core.event_handler.SubstrateEventHandler._finalize_proposals")
     @patch("core.event_handler.SubstrateEventHandler._fault_proposals")
-    @patch("core.event_handler.SubstrateEventHandler._multisig_transactions")
+    @patch("core.event_handler.SubstrateEventHandler._handle_new_transactions")
+    @patch("core.event_handler.SubstrateEventHandler._approve_transactions")
+    @patch("core.event_handler.SubstrateEventHandler._execute_transactions")
+    @patch("core.event_handler.SubstrateEventHandler._cancel_transactions")
     def test_execute_actions(self, *mocks):
         event_handler = SubstrateEventHandler()
         block = models.Block.objects.create(hash="hash 0", number=0)

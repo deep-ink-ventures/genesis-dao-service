@@ -1,12 +1,12 @@
-import collections
 import logging
+from collections import defaultdict
 from functools import reduce
 from typing import DefaultDict
 
-from django.conf import settings
 from django.core.cache import cache
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 from django.db.models import Q
+from django.db.transaction import atomic
 from django.utils import timezone
 
 from core import models, tasks
@@ -19,7 +19,7 @@ class ParseBlockException(Exception):
 
 
 class SubstrateEventHandler:
-    block_actions = None
+    block_actions: tuple = None
 
     def __init__(self):
         self.block_actions = (
@@ -36,7 +36,10 @@ class SubstrateEventHandler:
             self._register_votes,
             self._finalize_proposals,
             self._fault_proposals,
-            self._multisig_transactions,
+            self._handle_new_transactions,
+            self._approve_transactions,
+            self._execute_transactions,
+            self._cancel_transactions,
         )
 
     @staticmethod
@@ -44,9 +47,6 @@ class SubstrateEventHandler:
         """
         Args:
             block: Block to create Accounts from
-
-        Returns:
-            None
 
         creates Accounts based on the Block's extrinsics and events
         """
@@ -61,9 +61,6 @@ class SubstrateEventHandler:
         """
         Args:
             block: Block to create Accounts from
-
-        Returns:
-            None
 
         creates Daos based on the Block's extrinsics and events
         """
@@ -89,9 +86,6 @@ class SubstrateEventHandler:
         Args:
             block: Block to change Dao owners from
 
-        Returns:
-            None
-
         transfers ownerships of a Daos to new Accounts based on the Block's events
         """
         dao_id_to_new_owner_id = {}  # {dao_id: new_owner_id}
@@ -109,15 +103,18 @@ class SubstrateEventHandler:
                 ignore_conflicts=True,
             )
             models.Dao.objects.bulk_update(daos, ["owner_id", "setup_complete"])
+            # update MultiSig accs
+            if multisigs := models.MultiSig.objects.filter(address__in=dao_id_to_new_owner_id.values()):
+                owner_id_to_dao_id = {v: k for k, v in dao_id_to_new_owner_id.items()}
+                for multisig in multisigs:
+                    multisig.dao_id = owner_id_to_dao_id[multisig.address]
+                models.MultiSig.objects.bulk_update(multisigs, ["dao_id"])
 
     @staticmethod
     def _delete_daos(block: models.Block):
         """
         Args:
             block: Block to create Accounts from
-
-        Returns:
-            None
 
         deletes Daos based on the Block's extrinsics and events
         """
@@ -131,9 +128,6 @@ class SubstrateEventHandler:
         """
         Args:
             block: Block to create Accounts from
-
-        Returns:
-            None
 
         creates Assets based on the Block's extrinsics and events
         """
@@ -175,14 +169,11 @@ class SubstrateEventHandler:
         Args:
             block: Block to create Accounts from
 
-        Returns:
-            None
-
         transfers Assets based on the Block's extrinsics and events
         rephrase: transfers ownership of an amount of tokens (models.AssetHolding) from one Account to another
         """
         asset_holding_data = []  # [(asset_id, amount, from_acc, to_acc), ...]
-        asset_ids_to_owner_ids = collections.defaultdict(set)  # {1 (asset_id): {1, 2, 3} (owner_ids)...}
+        asset_ids_to_owner_ids = defaultdict(set)  # {1 (asset_id): {1, 2, 3} (owner_ids)...}
         for asset_issued_event in block.event_data.get("Assets", {}).get("Transferred", []):
             asset_id, amount = asset_issued_event["asset_id"], asset_issued_event["amount"]
             from_acc, to_acc = asset_issued_event["from"], asset_issued_event["to"]
@@ -191,7 +182,7 @@ class SubstrateEventHandler:
             asset_ids_to_owner_ids[asset_id].add(to_acc)
 
         if asset_holding_data:
-            existing_holdings = collections.defaultdict(dict)
+            existing_holdings = defaultdict(dict)
             for asset_holding in models.AssetHolding.objects.filter(
                 # WHERE (
                 #     (asset_holding.asset_id = 1 AND asset_holding.owner_id IN (1, 2))
@@ -235,9 +226,6 @@ class SubstrateEventHandler:
         Args:
             block: Block to create Accounts from
 
-        Returns:
-            None
-
         updates Daos' metadata_url and metadata_hash based on the Block's extrinsics and events
         """
         dao_metadata = {}  # {dao_id: {"metadata_url": metadata_url, "metadata_hash": metadata_hash}}
@@ -256,9 +244,6 @@ class SubstrateEventHandler:
         """
         Args:
             block: Block to set DAO's governance model from
-
-        Returns:
-            None
 
         updates Daos' governance based on the Block's extrinsics and events
         """
@@ -286,9 +271,6 @@ class SubstrateEventHandler:
         Args:
             block: Block to create Proposals from
 
-        Returns:
-            None
-
         create Proposals based on the Block's extrinsics and events
         """
         proposals = []
@@ -306,24 +288,11 @@ class SubstrateEventHandler:
                 )
             )
         if proposals:
-            dao_id_to_holding_data: DefaultDict = collections.defaultdict(list)
+            dao_id_to_holding_data: DefaultDict = defaultdict(list)
             for dao_id, owner_id, balance in models.AssetHolding.objects.filter(asset__dao__id__in=dao_ids).values_list(
                 "asset__dao_id", "owner_id", "balance"
             ):
                 dao_id_to_holding_data[dao_id].append((owner_id, balance))
-
-            dao_id_to_proposal_duration = {
-                dao_id: proposal_duration
-                for dao_id, proposal_duration in models.Governance.objects.filter(dao_id__in=dao_ids).values_list(
-                    "dao_id", "proposal_duration"
-                )
-            }
-            # set end dates for proposals
-            # current time + proposal duration in block * block creation interval (6s)
-            for proposal in proposals:
-                proposal.ends_at = timezone.now() + timezone.timedelta(
-                    seconds=dao_id_to_proposal_duration[proposal.dao_id] * settings.BLOCK_CREATION_INTERVAL
-                )
 
             models.Proposal.objects.bulk_create(proposals)
             # for all proposals: create a Vote placeholder for each Account holding tokens (AssetHoldings) of the
@@ -341,9 +310,6 @@ class SubstrateEventHandler:
         """
         Args:
             block: Block to set Proposal's metadata from
-
-        Returns:
-            None
 
         set Proposals' metadata based on the Block's extrinsics and events
         """
@@ -368,12 +334,9 @@ class SubstrateEventHandler:
         Args:
             block: Block to register votes from
 
-        Returns:
-            None
-
         registers Votes based on the Block's events
         """
-        proposal_ids_to_voting_data = collections.defaultdict(dict)  # {proposal_id: {voter_id: in_favor}}
+        proposal_ids_to_voting_data = defaultdict(dict)  # {proposal_id: {voter_id: in_favor}}
         for voting_event in block.event_data.get("Votes", {}).get("VoteCast", []):
             proposal_ids_to_voting_data[str(voting_event["proposal_id"])][voting_event["voter"]] = voting_event[
                 "in_favor"
@@ -404,9 +367,6 @@ class SubstrateEventHandler:
         Args:
             block: Block to finalize proposals from
 
-        Returns:
-            None
-
         finalizes Proposals based on the Block's events
         """
         votes_events = block.event_data.get("Votes", {})
@@ -421,9 +381,6 @@ class SubstrateEventHandler:
         Args:
             block: Block to fault proposals from
 
-        Returns:
-            None
-
         faults Proposals based on the Block's events
         """
         if faulted_proposals := {
@@ -436,94 +393,166 @@ class SubstrateEventHandler:
             models.Proposal.objects.bulk_update(proposals, ("fault", "status"))
 
     @staticmethod
-    def _multisig_transactions(block: models.Block):
+    def _handle_new_transactions(block: models.Block):
         """
         Args:
-            block: Block to multisignature transactions
+            block: Block to create / update Transactions from
 
-        Returns:
-            None
-
-        multisignature Transaction based on the Block's events
+        creates / updates Transactions based on the Block's events
         """
-        for new_event in block.event_data.get("Multisig", {}).get("NewMultisig", []):
-            transaction_to_create = []
-            transaction_to_update = []
-            transaction_instances = models.MultisigTransactionOperation.objects.filter(
-                call_hash__in=[new_event.get("call_hash")]
+        # update existing Transactions
+        if transaction_data := {
+            (multisig_event["call_hash"], multisig_event["multisig"]): multisig_event["approving"]
+            for multisig_event in block.event_data.get("Multisig", {}).get("NewMultisig", [])
+        }:
+            for transaction in (
+                transactions_to_update := models.Transaction.objects.filter(
+                    # WHERE (
+                    #     (call_hash = 1 AND multisig_id 2)
+                    #     OR (call_hash = 3 AND multisig_id 4)
+                    #     OR ...
+                    #     AND executed_at is null
+                    # )
+                    reduce(
+                        Q.__or__,
+                        [
+                            Q(call_hash=call_hash, multisig_id=multisig)
+                            for (call_hash, multisig) in transaction_data.keys()
+                        ],
+                    ),
+                    executed_at__isnull=True,
+                )
+            ):
+                transaction.approvers.append(transaction_data.pop((transaction.call_hash, transaction.multisig_id)))
+            if transactions_to_update:
+                models.Transaction.objects.bulk_update(transactions_to_update, ("approvers",))
+
+        # create new Transactions
+        if transaction_data:
+            multisigs_to_create = []
+            transactions_to_create = []
+            for (call_hash, multisig), approver in transaction_data.items():
+                multisigs_to_create.append(models.MultiSig(account_ptr_id=multisig))
+                transactions_to_create.append(
+                    models.Transaction(multisig_id=multisig, call_hash=call_hash, approvers=[approver])
+                )
+            models.MultiSig.objects.bulk_create(multisigs_to_create, ignore_conflicts=True)
+            models.Transaction.objects.bulk_create(transactions_to_create)
+
+    @staticmethod
+    def _approve_transactions(block: models.Block):
+        """
+        Args:
+            block: Block to approve Transactions from
+
+        approves Transactions based on the Block's events
+        """
+        data_by_call_hash: defaultdict = defaultdict(list)
+        for multisig_event in block.event_data.get("Multisig", {}).get("MultisigApproval", []):
+            data_by_call_hash[(multisig_event["call_hash"], multisig_event["multisig"])].append(
+                multisig_event["approving"]
             )
 
-            if transaction_instances:
-                for transaction_instance in transaction_instances:
-                    transaction_instance.last_approver = new_event.get("approving")
-                    transaction_instance.approvers = [new_event.get("approving")]
-                    transaction_instance.status = models.TransactionStatus.PENDING
-                    transaction_to_update.append(transaction_instance)
-            else:
-                new_transaction = models.MultisigTransactionOperation(
-                    multisig=models.MultiSignature.objects.filter(address__iexact=new_event.get("multisig")).get(),
-                    dao=models.Dao.objects.filter(owner__address=new_event.get("multisig")).get(),
-                    call_hash=new_event.get("call_hash"),
-                    status=models.TransactionStatus.PENDING,
-                    last_approver=new_event.get("approving"),
-                    approvers=[new_event.get("approving")],
+        if data_by_call_hash:
+            for transaction in (
+                transaction_to_update := models.Transaction.objects.filter(
+                    # WHERE (
+                    #     (call_hash = 1 AND multisig_id 2)
+                    #     OR (call_hash = 3 AND multisig_id 4)
+                    #     OR ...
+                    #     AND executed_at is null
+                    # )
+                    reduce(
+                        Q.__or__,
+                        [
+                            Q(call_hash=call_hash, multisig_id=multisig)
+                            for (call_hash, multisig) in data_by_call_hash.keys()
+                        ],
+                    ),
+                    executed_at__isnull=True,
                 )
-                transaction_to_create.append(new_transaction)
-
+            ):
+                transaction.approvers.extend(data_by_call_hash[(transaction.call_hash, transaction.multisig_id)])
             if transaction_to_update:
-                models.MultisigTransactionOperation.objects.bulk_update(
-                    transaction_to_update, ("last_approver", "approvers", "status")
-                )
+                models.Transaction.objects.bulk_update(transaction_to_update, ("approvers",))
 
-            if transaction_to_create:
-                models.MultisigTransactionOperation.objects.bulk_create(transaction_to_create)
+    @staticmethod
+    def _execute_transactions(block: models.Block):
+        """
+        Args:
+            block: Block to execute Transactions from
 
-        for approval_event in block.event_data.get("Multisig", {}).get("MultisigApproval", []):
-            multi_signature = models.MultiSignature.objects.get(address__iexact=approval_event.get("multisig"))
-            for transaction_instance in (
-                transaction_instances := models.MultisigTransactionOperation.objects.filter(
-                    call_hash__in=[approval_event.get("call_hash")]
-                )
-            ):
-                transaction_instance.last_approver = approval_event.get("approving")
-                transaction_instance.approvers.append(approval_event.get("approving"))
-                transaction_instance.status = models.TransactionStatus.PENDING
-                if len(transaction_instance.approvers) == multi_signature.threshold:
-                    transaction_instance.status = models.TransactionStatus.APPROVED
-
-            models.MultisigTransactionOperation.objects.bulk_update(
-                transaction_instances, ("last_approver", "approvers", "status")
-            )
-
-        for executed_event in block.event_data.get("Multisig", {}).get("MultisigExecuted", []):
-            for transaction_instance in (
-                transaction_instances := models.MultisigTransactionOperation.objects.filter(
-                    call_hash__in=[executed_event.get("call_hash")]
-                )
-            ):
-                transaction_instance.status = models.TransactionStatus.EXECUTED
-                transaction_instance.executed_at = timezone.now()
-
-            models.MultisigTransactionOperation.objects.bulk_update(transaction_instances, ("status", "executed_at"))
-
-        for cancelled_event in block.event_data.get("Multisig", {}).get("MultisigCancelled", []):
-            for transaction_instance in (
-                transaction_instances := models.MultisigTransactionOperation.objects.filter(
-                    call_hash__in=[cancelled_event.get("call_hash")]
+        executes Transactions based on the Block's events
+        """
+        if data_by_call_hash := {
+            (multisig_event["call_hash"], multisig_event["multisig"]): multisig_event["approving"]
+            for multisig_event in block.event_data.get("Multisig", {}).get("MultisigExecuted", [])
+        }:
+            for transaction in (
+                transaction_to_update := models.Transaction.objects.filter(
+                    # WHERE (
+                    #     (call_hash = 1 AND multisig_id 2)
+                    #     OR (call_hash = 3 AND multisig_id 4)
+                    #     OR ...
+                    #     AND executed_at is null
+                    # )
+                    reduce(
+                        Q.__or__,
+                        [
+                            Q(call_hash=call_hash, multisig_id=multisig)
+                            for (call_hash, multisig) in data_by_call_hash.keys()
+                        ],
+                    ),
+                    executed_at__isnull=True,
                 )
             ):
-                transaction_instance.status = models.TransactionStatus.CANCELLED
-                transaction_instance.cancelled_by = cancelled_event.get("cancelling")
-            models.MultisigTransactionOperation.objects.bulk_update(transaction_instances, ("status", "cancelled_by"))
+                transaction.approvers.append(data_by_call_hash[(transaction.call_hash, transaction.multisig_id)])
+                transaction.status = models.TransactionStatus.EXECUTED
+                transaction.executed_at = timezone.now()
+            if transaction_to_update:
+                models.Transaction.objects.bulk_update(transaction_to_update, ("approvers", "status", "executed_at"))
 
-    @transaction.atomic
+    @staticmethod
+    def _cancel_transactions(block: models.Block):
+        """
+        Args:
+            block: Block to cancels Transactions from
+
+        cancels Transactions based on the Block's events
+        """
+        if data_by_call_hash := {
+            (multisig_event["call_hash"], multisig_event["multisig"]): multisig_event["cancelling"]
+            for multisig_event in block.event_data.get("Multisig", {}).get("MultisigCancelled", [])
+        }:
+            for transaction in (
+                transaction_to_update := models.Transaction.objects.filter(
+                    # WHERE (
+                    #     (call_hash = 1 AND multisig_id 2)
+                    #     OR (call_hash = 3 AND multisig_id 4)
+                    #     OR ...
+                    #     AND executed_at is null
+                    # )
+                    reduce(
+                        Q.__or__,
+                        [
+                            Q(call_hash=call_hash, multisig_id=multisig)
+                            for (call_hash, multisig) in data_by_call_hash.keys()
+                        ],
+                    ),
+                    executed_at__isnull=True,
+                )
+            ):
+                transaction.canceled_by = data_by_call_hash[(transaction.call_hash, transaction.multisig_id)]
+                transaction.status = models.TransactionStatus.CANCELLED
+            if transaction_to_update:
+                models.Transaction.objects.bulk_update(transaction_to_update, ("canceled_by", "status"))
+
+    @atomic
     def execute_actions(self, block: models.Block):
         """
         Args:
              block: Block to execute
 
-         Returns:
-             None
 
          alters db's blockchain representation based on the Block's extrinsics and events
         """

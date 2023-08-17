@@ -1,11 +1,23 @@
 from collections.abc import Collection, Iterable
+from typing import Sequence
+from unittest.mock import Mock
 
 from django import test
+from django.core.cache import cache
 from django.db.models import Model
 
 
+class TestCaseBase(test.SimpleTestCase):
+    def tearDown(self):  # noqa
+        cache.clear()
+
+    def assertExactCalls(self, mock: Mock, calls: Sequence):
+        mock.assert_has_calls(calls=calls)
+        self.assertEqual(len(calls), mock.call_count)
+
+
 @test.tag("integration")
-class IntegrationTestCase(test.TestCase):
+class IntegrationTestCase(TestCaseBase, test.TestCase):
     databases = [
         "default",
     ]
@@ -17,9 +29,6 @@ class IntegrationTestCase(test.TestCase):
             obj_1: model instance 1
             obj_2: model instance 2
             ignore_fields: fields to ignore during comparison
-
-        Returns:
-            None
 
         Raises:
             self.failureException
@@ -50,9 +59,6 @@ class IntegrationTestCase(test.TestCase):
             col_2: sorted! collection of Model instances
             ignore_fields: fields to ignore during comparison
 
-        Returns:
-            None
-
         Raises:
             self.failureException
 
@@ -64,5 +70,5 @@ class IntegrationTestCase(test.TestCase):
 
 
 @test.tag("unit")
-class UnitTestCase(test.SimpleTestCase):
+class UnitTestCase(TestCaseBase, test.SimpleTestCase):
     maxDiff = None
