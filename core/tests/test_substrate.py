@@ -49,9 +49,9 @@ class SubstrateServiceTest(IntegrationTestCase):
         BrokenPipeError,
         Exception,
     )
-    @patch("core.substrate.logger")
+    @patch("core.substrate.slack_logger")
     @patch("core.substrate.time.sleep")
-    def test_retry(self, exception_type, sleep_mock, logger_mock):
+    def test_retry(self, exception_type, sleep_mock, slack_logger_mock):
         sleep_mock.side_effect = None, None, Exception("break retry")
 
         def _test(**_kwargs):
@@ -60,9 +60,9 @@ class SubstrateServiceTest(IntegrationTestCase):
         with override_settings(RETRY_DELAYS=(1, 2, 3)), self.assertRaisesMessage(Exception, "break retry"):
             retry("some description")(_test)(block_number=1, block_hash="a")
 
-        logger_mock = logger_mock.exception if exception_type == Exception else logger_mock.error
+        slack_logger_mock = slack_logger_mock.exception if exception_type == Exception else slack_logger_mock.error
         error_description = "Unexpected error" if exception_type == Exception else exception_type.__name__
-        logger_mock.assert_has_calls(
+        slack_logger_mock.assert_has_calls(
             [
                 call(f"{error_description} while some description. Block number: 1. Block hash: a. Retrying in 1s ..."),
                 call(f"{error_description} while some description. Block number: 1. Block hash: a. Retrying in 2s ..."),
@@ -742,15 +742,15 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.si.get_block.assert_called_once_with(block_hash="block hash", block_number=None)
 
     @patch("core.substrate.time.sleep")
-    @patch("core.substrate.logger")
-    def test_fetch_and_parse_block_error(self, logger_mock, sleep_mock):
+    @patch("core.substrate.slack_logger")
+    def test_fetch_and_parse_block_error(self, slack_logger_mock, sleep_mock):
         self.si.get_block.side_effect = Exception("whoops")
         sleep_mock.side_effect = Exception("break")
 
         with self.assertRaisesMessage(Exception, "break"):
             self.assertIsNone(self.substrate_service.fetch_and_parse_block())
 
-        logger_mock.exception.assert_called_once_with(
+        slack_logger_mock.exception.assert_called_once_with(
             "Unexpected error while fetching block from chain. Retrying in 0s ..."
         )
         self.assertListEqual(list(models.Block.objects.all()), [])
@@ -783,8 +783,8 @@ class SubstrateServiceTest(IntegrationTestCase):
 
     @patch("core.substrate.SubstrateService.sleep")
     @patch("core.substrate.SubstrateService.sync_initial_accs")
-    @patch("core.substrate.logger")
-    def test_clear_db(self, logger_mock, sync_initial_accs_mock, sleep_mock):
+    @patch("core.substrate.slack_logger")
+    def test_clear_db(self, slack_logger_mock, sync_initial_accs_mock, sleep_mock):
         models.Account.objects.create(address="acc1")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
@@ -812,7 +812,7 @@ class SubstrateServiceTest(IntegrationTestCase):
 
         sync_initial_accs_mock.assert_called_once_with()
         sleep_mock.assert_called_once_with(start_time=1)
-        logger_mock.info.assert_called_once_with("DB and chain are out of sync! Recreating DB...")
+        slack_logger_mock.info.assert_called_once_with("DB and chain are out of sync! Recreating DB...")
         self.assertListEqual(list(models.Account.objects.all()), [])
         self.assertListEqual(list(models.Dao.objects.all()), [])
         self.assertListEqual(list(models.Asset.objects.all()), [])
@@ -822,8 +822,8 @@ class SubstrateServiceTest(IntegrationTestCase):
 
     @patch("core.substrate.SubstrateService.sleep")
     @patch("core.substrate.SubstrateService.sync_initial_accs")
-    @patch("core.substrate.logger")
-    def test_clear_db_no_start_time(self, logger_mock, sync_initial_accs_mock, sleep_mock):
+    @patch("core.substrate.slack_logger")
+    def test_clear_db_no_start_time(self, slack_logger_mock, sync_initial_accs_mock, sleep_mock):
         models.Account.objects.create(address="acc1")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
@@ -851,7 +851,7 @@ class SubstrateServiceTest(IntegrationTestCase):
 
         sync_initial_accs_mock.assert_called_once_with()
         sleep_mock.assert_not_called()
-        logger_mock.info.assert_called_once_with("DB and chain are out of sync! Recreating DB...")
+        slack_logger_mock.info.assert_called_once_with("DB and chain are out of sync! Recreating DB...")
         self.assertListEqual(list(models.Account.objects.all()), [])
         self.assertListEqual(list(models.Dao.objects.all()), [])
         self.assertListEqual(list(models.Asset.objects.all()), [])
@@ -892,22 +892,25 @@ class SubstrateServiceTest(IntegrationTestCase):
         execute_actions_mock.assert_called_once_with(block)
 
     @patch("core.substrate.substrate_event_handler.execute_actions")
+    @patch("core.substrate.slack_logger")
     @patch("core.substrate.logger")
-    def test_listen_last_block_not_executed_failure(self, logger_mock, execute_actions_mock):
+    def test_listen_last_block_not_executed_failure(self, logger_mock, slack_logger_mock, execute_actions_mock):
         self.substrate_service.clear_db = Mock(side_effect=Exception("break"))
         execute_actions_mock.side_effect = Exception("failure")
         block = models.Block.objects.create(number=0, executed=False, hash="some hash")
-        expected_msg = "Last Block was not executed. Retrying... number: 0 | hash: some hash"
 
         with self.assertRaisesMessage(Exception, "break"):
             self.substrate_service.listen()
 
-        logger_mock.error.assert_called_once_with(expected_msg)
+        logger_mock.error.assert_called_once_with(
+            "Last Block was not executed. Retrying... number: 0 | hash: some hash"
+        )
+        slack_logger_mock.exception.assert_called_once_with("Block not executable. number: 0 | hash: some hash")
         execute_actions_mock.assert_called_once_with(block)
 
     @patch("core.substrate.time.sleep")
-    @patch("core.substrate.logger")
-    def test_listen_oos(self, logger_mock, sleep_mock):
+    @patch("core.substrate.slack_logger")
+    def test_listen_oos(self, slack_logger_mock, sleep_mock):
         sleep_mock.side_effect = Exception("break retry")
         self.substrate_service.clear_db = Mock()
         models.Block.objects.create(number=0, hash="hash 0", executed=True)
@@ -920,13 +923,13 @@ class SubstrateServiceTest(IntegrationTestCase):
         with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(Exception, "break retry"):
             self.substrate_service.listen()
 
-        logger_mock.exception.assert_called_once_with(self.retry_msg)
+        slack_logger_mock.exception.assert_called_once_with(self.retry_msg)
         self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 2)
         self.substrate_service.clear_db.assert_called_once_with(start_time=ANY)
 
     @patch("core.substrate.time.sleep")
-    @patch("core.substrate.logger")
-    def test_listen_last_block_greater_current_block(self, logger_mock, sleep_mock):
+    @patch("core.substrate.slack_logger")
+    def test_listen_last_block_greater_current_block(self, slack_logger_mock, sleep_mock):
         sleep_mock.side_effect = Exception("break retry")
         self.substrate_service.clear_db = Mock()
         models.Block.objects.create(number=1, executed=True, hash="some hash")
@@ -939,13 +942,14 @@ class SubstrateServiceTest(IntegrationTestCase):
         with override_settings(BLOCK_CREATION_INTERVAL=0), self.assertRaisesMessage(Exception, "break retry"):
             self.substrate_service.listen()
 
-        logger_mock.exception.assert_called_once_with(self.retry_msg)
+        slack_logger_mock.exception.assert_called_once_with(self.retry_msg)
         self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 2)
         self.substrate_service.clear_db.assert_called_once_with(start_time=ANY)
 
     @patch("core.substrate.time.sleep")
+    @patch("core.substrate.slack_logger")
     @patch("core.substrate.logger")
-    def test_listen_empty_db(self, logger_mock, sleep_mock):
+    def test_listen_empty_db(self, logger_mock, slack_logger_mock, sleep_mock):
         sleep_mock.side_effect = Exception("break retry")
         self.si.get_block.side_effect = (
             {"header": {"number": 0, "hash": "hash 0", "parentHash": None}, "extrinsics": []},
@@ -959,7 +963,7 @@ class SubstrateServiceTest(IntegrationTestCase):
             self.substrate_service.listen()
 
         self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 4)
-        logger_mock.exception.assert_called_once_with(self.retry_msg)
+        slack_logger_mock.exception.assert_called_once_with(self.retry_msg)
         logger_mock.info.assert_has_calls(
             [
                 call("Processing latest block | number: 0 | hash: hash 0"),
@@ -975,8 +979,9 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.assertModelsEqual(models.Block.objects.all(), expected_blocks)
 
     @patch("core.substrate.time.sleep")
+    @patch("core.substrate.slack_logger")
     @patch("core.substrate.logger")
-    def test_listen_in_sync(self, logger_mock, sleep_mock):
+    def test_listen_in_sync(self, logger_mock, slack_logger_mock, sleep_mock):
         sleep_mock.side_effect = Exception("break retry")
         models.Block.objects.create(number=0, hash="hash 0", parent_hash=None, executed=True)
         self.si.get_block.side_effect = (
@@ -991,7 +996,7 @@ class SubstrateServiceTest(IntegrationTestCase):
             self.substrate_service.listen()
 
         self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 4)
-        logger_mock.exception.assert_called_once_with(self.retry_msg)
+        slack_logger_mock.exception.assert_called_once_with(self.retry_msg)
         logger_mock.info.assert_has_calls(
             [
                 call("Processing latest block | number: 1 | hash: hash 1"),
@@ -1008,10 +1013,12 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.assertModelsEqual(models.Block.objects.all(), expected_blocks)
 
     @patch("core.substrate.time.sleep")
+    @patch("core.substrate.slack_logger")
     @patch("core.substrate.logger")
     def test_listen_catching_up(
         self,
         logger_mock,
+        slack_logger_mock,
         sleep_mock,
     ):
         sleep_mock.side_effect = None, None, None, Exception("break retry")  # 3 sleeps while catching up + 1 in retry
@@ -1036,7 +1043,7 @@ class SubstrateServiceTest(IntegrationTestCase):
                 call(block_hash=None, block_number=None),
             ]
         )
-        logger_mock.exception.assert_called_once_with(self.retry_msg)
+        slack_logger_mock.exception.assert_called_once_with(self.retry_msg)
         logger_mock.info.assert_has_calls(
             [
                 call("Catching up | number: 1"),
@@ -1055,8 +1062,9 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.assertModelsEqual(models.Block.objects.all(), expected_blocks)
 
     @patch("core.substrate.time.sleep")
+    @patch("core.substrate.slack_logger")
     @patch("core.substrate.logger")
-    def test_listen_fetching_same_block_twice(self, logger_mock, sleep_mock):
+    def test_listen_fetching_same_block_twice(self, logger_mock, slack_logger_mock, sleep_mock):
         sleep_mock.side_effect = Exception("break retry")
         models.Block.objects.create(number=0, hash="hash 0", parent_hash=None, executed=True)
         self.si.get_block.side_effect = (
@@ -1071,7 +1079,7 @@ class SubstrateServiceTest(IntegrationTestCase):
             self.substrate_service.listen()
 
         self.si.get_block.assert_has_calls([call(block_hash=None, block_number=None)] * 4)
-        logger_mock.exception.assert_called_once_with(self.retry_msg)
+        slack_logger_mock.exception.assert_called_once_with(self.retry_msg)
         logger_mock.info.assert_has_calls(
             [
                 call("Processing latest block | number: 1 | hash: hash 1"),
@@ -1087,8 +1095,9 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.assertModelsEqual(models.Block.objects.all(), expected_blocks)
 
     @patch("core.substrate.logger")
+    @patch("core.substrate.slack_logger")
     @patch("core.substrate.time.sleep")
-    def test_listen_sleep(self, sleep_mock, logger_mock):
+    def test_listen_sleep(self, sleep_mock, slack_logger_mock, logger_mock):
         sleep_mock.side_effect = None, Exception("break retry")
         models.Block.objects.create(number=0, hash="hash 0", parent_hash=None, executed=True)
         self.si.get_block.side_effect = (
@@ -1103,12 +1112,8 @@ class SubstrateServiceTest(IntegrationTestCase):
         sleep_time = sleep_mock.call_args_list[0][0][0]
         self.assertLess(sleep_time, settings.BLOCK_CREATION_INTERVAL)
         self.assertGreaterEqual(sleep_time, settings.BLOCK_CREATION_INTERVAL - 0.01)
-        logger_mock.assert_has_calls(
-            [
-                call.info("Waiting for new block | number 0 | hash: hash 0"),
-                call.exception(self.retry_msg),
-            ]
-        )
+        logger_mock.info.assert_called_once_with("Waiting for new block | number 0 | hash: hash 0")
+        slack_logger_mock.exception.assert_called_once_with(self.retry_msg)
 
     def test_create_multisig_account(self):
         self.substrate_service.substrate_interface.generate_multisig_account.return_value = Mock(

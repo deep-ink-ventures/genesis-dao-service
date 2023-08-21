@@ -3,7 +3,7 @@ set -e
 
 if [  "$1" = "web" ]; then
   python manage.py save_setup
-  daphne -b 0.0.0.0 -p 8000 service.asgi:application
+  daphne -b 0.0.0.0 -p 8000 -v 0 service.asgi:application
 
 elif [ "$1" = "worker" ]; then
   python manage.py save_setup

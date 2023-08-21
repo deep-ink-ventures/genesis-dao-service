@@ -16,6 +16,7 @@ from core import models
 from core.event_handler import substrate_event_handler
 
 logger = logging.getLogger("alerts")
+slack_logger = logging.getLogger("alerts.slack")
 
 
 def retry(description: str):
@@ -36,7 +37,8 @@ def retry(description: str):
             max_delay = retry_delays[-1]
             retry_delays = iter(retry_delays)
 
-            def log_and_sleep(err_msg: str, log_exception=False):
+            def log_and_sleep(err_msg: str, log_exception=False, log_to_slack=True):
+                _logger = slack_logger if log_to_slack else logger
                 retry_delay = next(retry_delays, max_delay)
                 err_msg = f"{err_msg} while {description}. "
                 if block_number := kwargs.get("block_number"):
@@ -45,9 +47,9 @@ def retry(description: str):
                     err_msg += f"Block hash: {block_hash}. "
                 err_msg += f"Retrying in {retry_delay}s ..."
                 if log_exception:
-                    logger.exception(err_msg)
+                    _logger.exception(err_msg)
                 else:
-                    logger.error(err_msg)
+                    _logger.error(err_msg)
                 time.sleep(retry_delay)
 
             while True:
@@ -740,7 +742,7 @@ class SubstrateService(object):
 
         empties db, fetches seed accounts, sleeps if start_time was given, returns start Block
         """
-        logger.info("DB and chain are out of sync! Recreating DB...")
+        slack_logger.info("DB and chain are out of sync! Recreating DB...")
         with connection.cursor() as cursor:
             cursor.execute(
                 """
@@ -772,7 +774,7 @@ class SubstrateService(object):
             try:
                 substrate_event_handler.execute_actions(last_block)
             except Exception:  # noqa E722
-                logger.exception(f"Block not executable. number: {last_block.number} | hash: {last_block.hash}")
+                slack_logger.exception(f"Block not executable. number: {last_block.number} | hash: {last_block.hash}")
                 last_block = self.clear_db()
         # set start value for empty db
         if not last_block:

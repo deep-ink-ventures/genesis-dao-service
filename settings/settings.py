@@ -53,6 +53,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.RequestLoggingMiddleware",
 ]
 
 CORS_ORIGIN_ALLOW_ALL = True
@@ -121,18 +122,27 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "info").upper()
 
+SLACK_DEFAULT_URL = os.environ.get("SLACK_DEFAULT_URL")
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+        "slack": {"class": "core.management.logger.slack.SlackHandler"},
+    },
     "loggers": {
-        "django.request": {
+        "requests": {
             "handlers": ["console"],
-            "level": "ERROR",
-            "propagate": True,
+            "level": "INFO",
+            "propagate": False,
         },
         "alerts": {
             "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": True,
+        },
+        "alerts.slack": {
+            "handlers": ["slack"],
             "level": LOG_LEVEL,
             "propagate": True,
         },
@@ -233,7 +243,6 @@ SWAGGER_SETTINGS = {
 
 APPLICATION_STAGE = os.environ.get("APPLICATION_STAGE", "development")
 DEBUG = APPLICATION_STAGE == "development"
-
 if APPLICATION_STAGE == "development":
     from .dev import *  # noqa: F401,F403
 
