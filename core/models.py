@@ -204,7 +204,9 @@ class TransactionStatus(ChoiceEnum):
 
 class Transaction(TimestampableMixin):
     multisig = models.ForeignKey(MultiSig, related_name="transactions", on_delete=models.CASCADE)
+    asset = models.ForeignKey(Asset, related_name="transactions", null=True, on_delete=models.SET_NULL)
     dao = models.ForeignKey(Dao, related_name="transactions", null=True, on_delete=models.SET_NULL)
+    proposal = models.ForeignKey(Proposal, related_name="transactions", null=True, on_delete=models.SET_NULL)
     call = models.JSONField(null=True)
     call_hash = models.CharField(max_length=256)
     approvers = ArrayField(models.CharField(max_length=256), default=list)

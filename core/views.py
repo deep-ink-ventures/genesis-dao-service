@@ -267,7 +267,15 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
             )
 
         res_data = serializers.TransactionSerializer(
-            models.Transaction.objects.create(multisig=multisig, dao_id=dao.id, call=call_data, call_hash=call_hash)
+            models.Transaction.objects.create(
+                **{
+                    **substrate_service.parse_call_data(call_data=call_data),
+                    "multisig": multisig,
+                    "call": call_data,
+                    "call_hash": call_hash,
+                    "dao_id": dao.id,
+                }
+            )
         ).data
         return Response(data=res_data, status=HTTP_201_CREATED, headers=self.get_success_headers(data=res_data))
 

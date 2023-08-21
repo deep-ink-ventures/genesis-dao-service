@@ -262,6 +262,34 @@ class SubstrateServiceTest(IntegrationTestCase):
         )
         self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
+    @data(
+        # call_data, corresponding_models
+        (
+            {"args": {"dao_id": "DAO1"}, "function": "some_func", "module": "some_module"},
+            {"asset_id": None, "dao_id": "DAO1", "proposal_id": None},
+        ),
+        (
+            {
+                "args": {"asset_id": 1, "dao_id": "DAO1", "proposal_id": "PROP1"},
+                "function": "some_func",
+                "module": "some_module",
+            },
+            {"asset_id": 1, "dao_id": "DAO1", "proposal_id": "PROP1"},
+        ),
+        (
+            {"args": {"id": 1}, "function": "some_func", "module": "Assets"},
+            {"asset_id": 1, "dao_id": None, "proposal_id": None},
+        ),
+        (
+            {"args": {"asset_id": 1, "id": 2}, "function": "some_func", "module": "Assets"},
+            {"asset_id": 1, "dao_id": None, "proposal_id": None},
+        ),
+    )
+    def test_parse_call_data(self, case):
+        call_data, expected_corresponding_model_ids = case
+
+        self.assertEqual(substrate_service.parse_call_data(call_data=call_data), expected_corresponding_model_ids)
+
     def test_verify(self):
         challenge_token = "something_to_sign"
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())

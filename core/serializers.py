@@ -1,12 +1,14 @@
 import bleach
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
+from drf_yasg.utils import swagger_serializer_method
 from rest_framework.fields import (
     CharField,
     EmailField,
     IntegerField,
     JSONField,
     ListField,
+    SerializerMethodField,
     URLField,
 )
 from rest_framework.serializers import ModelSerializer, Serializer, ValidationError
@@ -259,10 +261,21 @@ class CallSerializer(Serializer):
         fields = ("hash", "module", "function", "args")
 
 
+class CorrespondingModelsSerializer(ModelSerializer):
+    asset = AssetSerializer(required=False, allow_null=True)
+    dao = DaoSerializer(required=False, allow_null=True)
+    proposal = ProposalSerializer(required=False, allow_null=True)
+
+    class Meta:
+        model = models.Transaction
+        fields = ("asset", "dao", "proposal")
+
+
 class TransactionSerializer(ModelSerializer):
     multisig_address = CharField(source="multisig.address")
     dao_id = CharField(source="dao.id", required=False, allow_null=True)
     call = CallSerializer(required=False)
+    corresponding_models = SerializerMethodField()
 
     class Meta:
         model = models.Transaction
@@ -272,6 +285,7 @@ class TransactionSerializer(ModelSerializer):
             "dao_id",
             "call",
             "call_hash",
+            "corresponding_models",
             "status",
             "approvers",
             "last_approver",
@@ -280,3 +294,11 @@ class TransactionSerializer(ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+    @swagger_serializer_method(serializer_or_field=CorrespondingModelsSerializer)
+    def get_corresponding_models(self, txn: models.Transaction):
+        return {
+            "asset": AssetSerializer(txn.asset).data if txn.asset else None,
+            "dao": DaoSerializer(txn.dao).data if txn.dao else None,
+            "proposal": ProposalSerializer(txn.proposal).data if txn.proposal else None,
+        }

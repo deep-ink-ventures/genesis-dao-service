@@ -590,6 +590,35 @@ class SubstrateService(object):
         )
 
     @staticmethod
+    def parse_call_data(call_data: dict) -> dict:
+        """
+        Args:
+            call_data: keys: hash, module, function, args
+
+        Returns:
+            dict containing the keys asset_id, dao_id, proposal_id
+            all values are optional
+
+        parses call_data and returns a dict of affected model ids
+        used to populate corresponding models during Transaction creation
+        """
+        corresponding_model_ids = {
+            "asset_id": None,
+            "dao_id": None,
+            "proposal_id": None,
+        }
+        module, args = call_data["module"], call_data["args"]
+        # set direct references
+        for model_id in corresponding_model_ids.keys():
+            if model_id in args:
+                corresponding_model_ids[model_id] = args[model_id]
+        # set ambiguous references
+        match module:
+            case "Assets":
+                corresponding_model_ids["asset_id"] = corresponding_model_ids["asset_id"] or args.get("id")
+        return corresponding_model_ids
+
+    @staticmethod
     def verify(address: str, challenge_address: str, signature: str) -> bool:
         """
         Args:
