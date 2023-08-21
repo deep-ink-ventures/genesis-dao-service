@@ -28,7 +28,7 @@ class BlockMetadataMiddleware(MiddlewareMixin):
 class RequestLoggingMiddleware(MiddlewareMixin):
     @staticmethod
     def process_response(request, response):
-        if settings.TESTING:
+        if getattr(settings, "TESTING", None):
             return response
         client = ":".join(str(_) for _ in request.scope.get("client", [])) if hasattr(request, "scope") else None
         request_logger.info(f"{request.scheme} {request.method} {request.path} [{client}] {response.status_code}")

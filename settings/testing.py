@@ -16,3 +16,4 @@ FILE_UPLOAD_CLASS = "core.file_handling.test.file_handler_mock"
 CELERY_TASK_ALWAYS_EAGER = True
 RETRY_DELAYS = [0]
 SUBSTRATE_INTERFACE = Mock()
+SLACK_DEFAULT_URL = "slack url"
