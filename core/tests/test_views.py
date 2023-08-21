@@ -16,11 +16,12 @@ from rest_framework.status import (
     HTTP_201_CREATED,
     HTTP_400_BAD_REQUEST,
     HTTP_403_FORBIDDEN,
+    HTTP_429_TOO_MANY_REQUESTS,
 )
 from substrateinterface import Keypair
 
 from core import models
-from core.serializers import TransactionSerializer
+from core.serializers import MultiSigTransactionSerializer
 from core.tests.testcases import IntegrationTestCase
 
 
@@ -47,7 +48,7 @@ expected_dao1_res = {
     "metadata_hash": None,
     "number_of_token_holders": 4,
     "number_of_open_proposals": 1,
-    "most_recent_proposals": ["prop1"],
+    "most_recent_proposals": [1],
 }
 expected_dao2_res = {
     "id": "dao2",
@@ -64,7 +65,7 @@ expected_dao2_res = {
     "metadata_hash": None,
     "number_of_token_holders": 1,
     "number_of_open_proposals": 0,
-    "most_recent_proposals": ["prop2"],
+    "most_recent_proposals": [2],
 }
 
 
@@ -95,7 +96,7 @@ class CoreViewSetTest(IntegrationTestCase):
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc4", balance=100)
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=200)
         models.Proposal.objects.create(
-            id="prop1",
+            id=1,
             dao_id="dao1",
             creator_id="acc1",
             metadata_url="url1",
@@ -104,7 +105,7 @@ class CoreViewSetTest(IntegrationTestCase):
             birth_block_number=10,
         )
         models.Proposal.objects.create(
-            id="prop2",
+            id=2,
             dao_id="dao2",
             creator_id="acc2",
             metadata_url="url2",
@@ -115,11 +116,11 @@ class CoreViewSetTest(IntegrationTestCase):
             birth_block_number=15,
             setup_complete=True,
         )
-        models.Vote.objects.create(proposal_id="prop1", voter_id="acc1", in_favor=True, voting_power=500)
-        models.Vote.objects.create(proposal_id="prop1", voter_id="acc2", in_favor=True, voting_power=300)
-        models.Vote.objects.create(proposal_id="prop1", voter_id="acc3", in_favor=False, voting_power=100)
-        models.Vote.objects.create(proposal_id="prop1", voter_id="acc4", voting_power=100)
-        models.Vote.objects.create(proposal_id="prop2", voter_id="acc2", in_favor=False, voting_power=200)
+        models.Vote.objects.create(proposal_id=1, voter_id="acc1", in_favor=True, voting_power=500)
+        models.Vote.objects.create(proposal_id=1, voter_id="acc2", in_favor=True, voting_power=300)
+        models.Vote.objects.create(proposal_id=1, voter_id="acc3", in_favor=False, voting_power=100)
+        models.Vote.objects.create(proposal_id=1, voter_id="acc4", voting_power=100)
+        models.Vote.objects.create(proposal_id=2, voter_id="acc2", in_favor=False, voting_power=200)
 
     def test_welcome(self):
         expected_res = {"success": True, "message": "Welcome traveler."}
@@ -605,7 +606,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
     def test_proposal_get(self):
         expected_res = {
-            "id": "prop1",
+            "id": 1,
             "dao_id": "dao1",
             "creator_id": "acc1",
             "metadata": {"a": 1},
@@ -619,7 +620,7 @@ class CoreViewSetTest(IntegrationTestCase):
         }
 
         with self.assertNumQueries(2):
-            res = self.client.get(reverse("core-proposal-detail", kwargs={"pk": "prop1"}))
+            res = self.client.get(reverse("core-proposal-detail", kwargs={"pk": 1}))
 
         self.assertDictEqual(res.data, expected_res)
 
@@ -627,7 +628,7 @@ class CoreViewSetTest(IntegrationTestCase):
         expected_res = wrap_in_pagination_res(
             [
                 {
-                    "id": "prop1",
+                    "id": 1,
                     "dao_id": "dao1",
                     "creator_id": "acc1",
                     "metadata": {"a": 1},
@@ -640,7 +641,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "setup_complete": False,
                 },
                 {
-                    "id": "prop2",
+                    "id": 2,
                     "dao_id": "dao2",
                     "creator_id": "acc2",
                     "metadata": {"a": 2},
@@ -664,7 +665,7 @@ class CoreViewSetTest(IntegrationTestCase):
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
         acc = models.Account.objects.create(address=keypair.ss58_address)
-        models.Proposal.objects.create(id="PROP1", dao_id="dao1", creator=acc, birth_block_number=10)
+        models.Proposal.objects.create(id=3, dao_id="dao1", creator=acc, birth_block_number=10)
         cache.set(key="acc1", value=self.challenge_key, timeout=5)
         post_data = {
             "title": "some title",
@@ -675,12 +676,12 @@ class CoreViewSetTest(IntegrationTestCase):
         expected_res = {
             "metadata": post_data,
             "metadata_hash": "d22aaac3a17b4510ef9bd8ed67188bb6fbb29a75347aed1d23b6dcf3cf6e6c7b",
-            "metadata_url": "https://some_storage.some_region.com/dao1/proposals/PROP1/metadata.json",
+            "metadata_url": "https://some_storage.some_region.com/dao1/proposals/3/metadata.json",
         }
 
         with self.assertNumQueries(4):
             res = self.client.post(
-                reverse("core-proposal-add-metadata", kwargs={"pk": "PROP1"}),
+                reverse("core-proposal-add-metadata", kwargs={"pk": 3}),
                 post_data,
                 content_type="application/json",
                 HTTP_SIGNATURE=signature,
@@ -698,7 +699,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
         with self.assertNumQueries(3):
             res = self.client.post(
-                reverse("core-proposal-add-metadata", kwargs={"pk": "prop1"}),
+                reverse("core-proposal-add-metadata", kwargs={"pk": 1}),
                 post_data,
                 content_type="application/json",
                 HTTP_SIGNATURE="wrong signature",
@@ -716,43 +717,99 @@ class CoreViewSetTest(IntegrationTestCase):
             },
         )
 
-    def test_proposal_report_faulted(self):
+    @patch("core.substrate.substrate_service")
+    def test_proposal_report_faulted(self, substrate_mock):
+        substrate_mock.create_multisig_transaction_call_hash.return_value = "some_hash"
         cache.clear()
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key="acc1", value=self.challenge_key, timeout=5)
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
-        acc = models.Account.objects.create(address=keypair.ss58_address)
-        models.AssetHolding.objects.create(owner=acc, asset_id=1, balance=10)
-        proposal_id = "prop1"
+        acc = models.MultiSig.objects.create(address=keypair.ss58_address)
+        dao = models.Dao.objects.create(owner=acc)
+        prop = models.Proposal.objects.create(id=3, dao=dao, birth_block_number=0)
+        asset = models.Asset.objects.create(id=3, dao=dao, owner=acc, total_supply=10)
+        models.AssetHolding.objects.create(owner=acc, asset=asset, balance=10)
         post_data = {"reason": "very good reason"}
+        expected_transactions = [
+            models.MultiSigTransaction(
+                multisig=acc,
+                dao=dao,
+                proposal=prop,
+                call={
+                    "call_hash": "some_hash",
+                    "module": "Votes",
+                    "function": "fault_proposal",
+                    "args": {"proposal_id": prop.id, **post_data},
+                },
+                call_hash="some_hash",
+            )
+        ]
 
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(7):
             res = self.client.post(
-                reverse("core-proposal-report-faulted", kwargs={"pk": proposal_id}),
+                reverse("core-proposal-report-faulted", kwargs={"pk": prop.id}),
                 post_data,
                 content_type="application/json",
                 HTTP_SIGNATURE=signature,
             )
 
-        self.assertEqual(res.data, {**post_data, "proposal_id": proposal_id})
+        self.assertEqual(res.status_code, HTTP_201_CREATED)
+        self.assertEqual(res.data, {**post_data, "proposal_id": prop.id})
+        self.assertModelsEqual(
+            models.MultiSigTransaction.objects.all(),
+            expected_transactions,
+            ignore_fields=("id", "updated_at", "created_at"),
+        )
+        substrate_mock.create_multisig_transaction_call_hash.assert_called_once_with(
+            module="Votes", function="fault_proposal", args={"proposal_id": prop.id, "reason": "very good reason"}
+        )
 
-    def test_proposal_report_faulted_no_holdings(self):
+    @patch("core.substrate.substrate_service")
+    def test_proposal_report_faulted_no_multisig(self, substrate_mock):
         cache.clear()
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key="acc1", value=self.challenge_key, timeout=5)
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
-        models.Account.objects.create(address=keypair.ss58_address)
-        proposal_id = "prop1"
+        acc = models.Account.objects.create(address=keypair.ss58_address)
+        dao = models.Dao.objects.create(owner=acc)
+        prop = models.Proposal.objects.create(id=3, dao=dao, birth_block_number=0)
+        asset = models.Asset.objects.create(id=3, dao=dao, owner=acc, total_supply=10)
+        models.AssetHolding.objects.create(owner=acc, asset=asset, balance=10)
+        post_data = {"reason": "very good reason"}
+
+        with self.assertNumQueries(5):
+            res = self.client.post(
+                reverse("core-proposal-report-faulted", kwargs={"pk": prop.id}),
+                post_data,
+                content_type="application/json",
+                HTTP_SIGNATURE=signature,
+            )
+
+        self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.data, {"detail": "The corresponding DAO is not managed by a MultiSig Account."})
+        self.assertListEqual(list(models.MultiSigTransaction.objects.all()), [])
+        substrate_mock.create_multisig_transaction_call_hash.assert_not_called()
+
+    @patch("core.substrate.substrate_service")
+    def test_proposal_report_faulted_no_holdings(self, substrate_mock):
+        cache.clear()
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        acc = models.MultiSig.objects.create(address=keypair.ss58_address)
+        dao = models.Dao.objects.create(owner=acc)
+        prop = models.Proposal.objects.create(id=3, dao=dao, birth_block_number=0)
         post_data = {"reason": "very good reason"}
 
         with self.assertNumQueries(2):
             res = self.client.post(
-                reverse("core-proposal-report-faulted", kwargs={"pk": proposal_id}),
+                reverse("core-proposal-report-faulted", kwargs={"pk": prop.id}),
                 post_data,
                 content_type="application/json",
                 HTTP_SIGNATURE=signature,
             )
 
+        self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
         self.assertEqual(
             res.data,
             {
@@ -762,36 +819,51 @@ class CoreViewSetTest(IntegrationTestCase):
                 )
             },
         )
+        substrate_mock.create_multisig_transaction_call_hash.assert_not_called()
 
-    def test_proposal_report_faulted_throttle(self):
+    @patch("core.substrate.substrate_service")
+    def test_proposal_report_faulted_throttle(self, substrate_mock):
+        substrate_mock.create_multisig_transaction_call_hash.return_value = "some_hash"
         cache.clear()
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key="acc1", value=self.challenge_key, timeout=5)
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
-        acc = models.Account.objects.create(address=keypair.ss58_address)
-        models.AssetHolding.objects.create(owner=acc, asset_id=1, balance=10)
-        proposal_id = "prop1"
-        post_data = {"reason": "very good reason", "proposal_id": proposal_id}
+        acc = models.MultiSig.objects.create(address=keypair.ss58_address)
+        dao = models.Dao.objects.create(owner=acc)
+        prop = models.Proposal.objects.create(id=3, dao=dao, birth_block_number=0)
+        asset = models.Asset.objects.create(id=3, dao=dao, owner=acc, total_supply=10)
+        models.AssetHolding.objects.create(owner=acc, asset=asset, balance=10)
+        post_data = {"reason": "very good reason"}
 
-        call = partial(
+        call_view = partial(
             self.client.post,
-            reverse("core-proposal-report-faulted", kwargs={"pk": proposal_id}),
+            reverse("core-proposal-report-faulted", kwargs={"pk": prop.id}),
             post_data,
             content_type="application/json",
             HTTP_SIGNATURE=signature,
         )
         for count in range(7):
+            substrate_mock.create_multisig_transaction_call_hash.reset_mock()
             if count < 3:
-                with self.assertNumQueries(4):
-                    res = call()
-                self.assertEqual(res.data, post_data)
+                with self.assertNumQueries(7):
+                    res = call_view()
+                self.assertEqual(res.status_code, HTTP_201_CREATED)
+                self.assertEqual(res.data, {**post_data, "proposal_id": prop.id})
+                substrate_mock.create_multisig_transaction_call_hash.assert_called_once_with(
+                    module="Votes",
+                    function="fault_proposal",
+                    args={"proposal_id": 3, "reason": "very good reason"},
+                )
             elif count < 5:
-                with self.assertNumQueries(3):
-                    res = call()
+                with self.assertNumQueries(4):
+                    res = call_view()
+                self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
                 self.assertEqual(res.data, {"detail": "The proposal report maximum has already been reached."})
+                substrate_mock.create_multisig_transaction_call_hash.assert_not_called()
             else:
                 with self.assertNumQueries(2):
-                    res = call()
+                    res = call_view()
+                self.assertEqual(res.status_code, HTTP_429_TOO_MANY_REQUESTS)
                 self.assertEqual(
                     res.data,
                     {
@@ -800,17 +872,18 @@ class CoreViewSetTest(IntegrationTestCase):
                         )
                     },
                 )
+                substrate_mock.create_multisig_transaction_call_hash.assert_not_called()
 
     def test_reports(self):
-        models.ProposalReport.objects.create(proposal_id="prop1", reason="reason 1")
-        models.ProposalReport.objects.create(proposal_id="prop1", reason="reason 2")
-        models.ProposalReport.objects.create(proposal_id="prop2", reason="reason 3")  # should not appear
+        models.ProposalReport.objects.create(proposal_id=1, reason="reason 1")
+        models.ProposalReport.objects.create(proposal_id=1, reason="reason 2")
+        models.ProposalReport.objects.create(proposal_id=2, reason="reason 3")  # should not appear
         expected_res = [
-            {"proposal_id": "prop1", "reason": "reason 1"},
-            {"proposal_id": "prop1", "reason": "reason 2"},
+            {"proposal_id": 1, "reason": "reason 1"},
+            {"proposal_id": 1, "reason": "reason 2"},
         ]
         with self.assertNumQueries(1):
-            res = self.client.get(reverse("core-proposal-reports", kwargs={"pk": "prop1"}))
+            res = self.client.get(reverse("core-proposal-reports", kwargs={"pk": 1}))
 
         self.assertCountEqual(res.data, expected_res)
 
@@ -865,11 +938,11 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_get_transaction(self):
         call_hash = "some_call_hash"
         call = {"hash": call_hash, "module": "some_module", "function": "some_function", "args": {"some": "args"}}
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2"], threshold=2),
             dao_id="dao1",
             asset_id=1,
-            proposal_id="prop1",
+            proposal_id=1,
             call_hash=call_hash,
             call=call,
             approvers=["sig1", "sig2"],
@@ -897,10 +970,10 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata_hash": None,
                     "number_of_token_holders": 4,
                     "number_of_open_proposals": 1,
-                    "most_recent_proposals": ["prop1"],
+                    "most_recent_proposals": [1],
                 },
                 "proposal": {
-                    "id": "prop1",
+                    "id": 1,
                     "dao_id": "dao1",
                     "creator_id": "acc1",
                     "status": models.ProposalStatus.RUNNING,
@@ -922,13 +995,13 @@ class CoreViewSetTest(IntegrationTestCase):
             "updated_at": fmt_dt(txn1.updated_at),
         }
 
-        res = self.client.get(reverse("core-transaction-detail", kwargs={"pk": txn1.id}))
+        res = self.client.get(reverse("core-multisig-transaction-detail", kwargs={"pk": txn1.id}))
 
         self.assertEqual(res.status_code, HTTP_200_OK)
         self.assertDictEqual(res.data, expected_res)
 
     def test_list_transactions(self):
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2"], threshold=2),
             dao_id="dao1",
             call_hash="call_hash1",
@@ -942,7 +1015,7 @@ class CoreViewSetTest(IntegrationTestCase):
             executed_at=now(),
             status=models.TransactionStatus.EXECUTED,
         )
-        txn2 = models.Transaction.objects.create(
+        txn2 = models.MultiSigTransaction.objects.create(
             multisig=models.MultiSig.objects.create(address="addr2", signatories=["sig3", "sig4"], threshold=3),
             call_hash="call_hash2",
         )
@@ -976,7 +1049,7 @@ class CoreViewSetTest(IntegrationTestCase):
                             "metadata_hash": None,
                             "number_of_token_holders": 4,
                             "number_of_open_proposals": 1,
-                            "most_recent_proposals": ["prop1"],
+                            "most_recent_proposals": [1],
                         },
                         "proposal": None,
                     },
@@ -1010,14 +1083,14 @@ class CoreViewSetTest(IntegrationTestCase):
             ]
         )
 
-        res = self.client.get(reverse("core-transaction-list"))
+        res = self.client.get(reverse("core-multisig-transaction-list"))
 
         self.assertEqual(res.status_code, HTTP_200_OK)
         self.assertDictEqual(res.data, expected_res)
 
-    @patch("core.substrate.substrate_service.create_transaction_call_hash")
-    def test_create_transaction(self, create_transaction_call_hash_mock):
-        create_transaction_call_hash_mock.return_value = "some_call_hash"
+    @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
+    def test_create_multisig_transaction(self, create_multisig_transaction_call_hash_mock):
+        create_multisig_transaction_call_hash_mock.return_value = "some_call_hash"
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
         cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
@@ -1032,25 +1105,27 @@ class CoreViewSetTest(IntegrationTestCase):
             "args": {"a": "1", "b": 2},
         }
         expected_transactions = [
-            models.Transaction(multisig=multisig, dao_id="DAO1", call_hash="some_call_hash", call=payload)
+            models.MultiSigTransaction(multisig=multisig, dao_id="DAO1", call_hash="some_call_hash", call=payload)
         ]
 
         res = self.client.post(
-            reverse("core-dao-create-transaction", kwargs={"pk": "DAO1"}),
+            reverse("core-dao-create-multisig-transaction", kwargs={"pk": "DAO1"}),
             payload,
             content_type="application/json",
             HTTP_SIGNATURE=signature,
         )
 
         self.assertEqual(res.status_code, HTTP_201_CREATED)
-        self.assertDictEqual(res.data, TransactionSerializer(models.Transaction.objects.get()).data)
+        self.assertDictEqual(res.data, MultiSigTransactionSerializer(models.MultiSigTransaction.objects.get()).data)
         self.assertModelsEqual(
-            models.Transaction.objects.all(), expected_transactions, ignore_fields=("created_at", "updated_at", "id")
+            models.MultiSigTransaction.objects.all(),
+            expected_transactions,
+            ignore_fields=("created_at", "updated_at", "id"),
         )
 
-    @patch("core.substrate.substrate_service.create_transaction_call_hash")
-    def test_create_transaction_wrong_hash(self, create_transaction_call_hash_mock):
-        create_transaction_call_hash_mock.return_value = "different_hash"
+    @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
+    def test_create_multisig_transaction_wrong_hash(self, create_multisig_transaction_call_hash_mock):
+        create_multisig_transaction_call_hash_mock.return_value = "different_hash"
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
         cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
@@ -1066,7 +1141,7 @@ class CoreViewSetTest(IntegrationTestCase):
         }
 
         res = self.client.post(
-            reverse("core-dao-create-transaction", kwargs={"pk": "DAO1"}),
+            reverse("core-dao-create-multisig-transaction", kwargs={"pk": "DAO1"}),
             payload,
             content_type="application/json",
             HTTP_SIGNATURE=signature,
@@ -1074,11 +1149,11 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
         self.assertDictEqual(res.data, {"message": "Invalid call hash."})
-        self.assertListEqual(list(models.Transaction.objects.all()), [])
+        self.assertListEqual(list(models.MultiSigTransaction.objects.all()), [])
 
-    @patch("core.substrate.substrate_service.create_transaction_call_hash")
-    def test_create_transaction_missing_multisig(self, create_transaction_call_hash_mock):
-        create_transaction_call_hash_mock.return_value = "some_call_hash"
+    @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
+    def test_create_multisig_transaction_missing_multisig(self, create_multisig_transaction_call_hash_mock):
+        create_multisig_transaction_call_hash_mock.return_value = "some_call_hash"
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
         cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
         signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
@@ -1095,7 +1170,7 @@ class CoreViewSetTest(IntegrationTestCase):
         }
 
         res = self.client.post(
-            reverse("core-dao-create-transaction", kwargs={"pk": "DAO1"}),
+            reverse("core-dao-create-multisig-transaction", kwargs={"pk": "DAO1"}),
             payload,
             content_type="application/json",
             HTTP_SIGNATURE=signature,
@@ -1103,4 +1178,4 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
         self.assertDictEqual(res.data, {"message": "No MultiSig Account exists for the given Dao."})
-        self.assertListEqual(list(models.Transaction.objects.all()), [])
+        self.assertListEqual(list(models.MultiSigTransaction.objects.all()), [])

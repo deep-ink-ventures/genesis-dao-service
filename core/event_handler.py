@@ -317,7 +317,7 @@ class SubstrateEventHandler:
         for proposal_created_event in block.event_data.get("Votes", {}).get("ProposalMetadataSet", []):
             for proposal_created_extrinsic in block.extrinsic_data.get("Votes", {}).get("set_metadata", []):
                 if (proposal_id := proposal_created_extrinsic["proposal_id"]) == proposal_created_event["proposal_id"]:
-                    proposal_data[str(proposal_id)] = (
+                    proposal_data[proposal_id] = (
                         proposal_created_extrinsic["hash"],
                         proposal_created_extrinsic["meta"],
                     )
@@ -338,9 +338,7 @@ class SubstrateEventHandler:
         """
         proposal_ids_to_voting_data = defaultdict(dict)  # {proposal_id: {voter_id: in_favor}}
         for voting_event in block.event_data.get("Votes", {}).get("VoteCast", []):
-            proposal_ids_to_voting_data[str(voting_event["proposal_id"])][voting_event["voter"]] = voting_event[
-                "in_favor"
-            ]
+            proposal_ids_to_voting_data[voting_event["proposal_id"]][voting_event["voter"]] = voting_event["in_favor"]
         if proposal_ids_to_voting_data:
             for vote in (
                 votes_to_update := models.Vote.objects.filter(
@@ -384,7 +382,7 @@ class SubstrateEventHandler:
         faults Proposals based on the Block's events
         """
         if faulted_proposals := {
-            str(fault_event["proposal_id"]): fault_event["reason"]
+            fault_event["proposal_id"]: fault_event["reason"]
             for fault_event in block.event_data.get("Votes", {}).get("ProposalFaulted", [])
         }:
             for proposal in (proposals := models.Proposal.objects.filter(id__in=faulted_proposals.keys())):
@@ -406,7 +404,7 @@ class SubstrateEventHandler:
             for multisig_event in block.event_data.get("Multisig", {}).get("NewMultisig", [])
         }:
             for transaction in (
-                transactions_to_update := models.Transaction.objects.filter(
+                transactions_to_update := models.MultiSigTransaction.objects.filter(
                     # WHERE (
                     #     (call_hash = 1 AND multisig_id 2)
                     #     OR (call_hash = 3 AND multisig_id 4)
@@ -425,7 +423,7 @@ class SubstrateEventHandler:
             ):
                 transaction.approvers.append(transaction_data.pop((transaction.call_hash, transaction.multisig_id)))
             if transactions_to_update:
-                models.Transaction.objects.bulk_update(transactions_to_update, ("approvers",))
+                models.MultiSigTransaction.objects.bulk_update(transactions_to_update, ("approvers",))
 
         # create new Transactions
         if transaction_data:
@@ -434,10 +432,10 @@ class SubstrateEventHandler:
             for (call_hash, multisig), approver in transaction_data.items():
                 multisigs_to_create.append(models.MultiSig(account_ptr_id=multisig))
                 transactions_to_create.append(
-                    models.Transaction(multisig_id=multisig, call_hash=call_hash, approvers=[approver])
+                    models.MultiSigTransaction(multisig_id=multisig, call_hash=call_hash, approvers=[approver])
                 )
             models.MultiSig.objects.bulk_create(multisigs_to_create, ignore_conflicts=True)
-            models.Transaction.objects.bulk_create(transactions_to_create)
+            models.MultiSigTransaction.objects.bulk_create(transactions_to_create)
 
     @staticmethod
     def _approve_transactions(block: models.Block):
@@ -455,7 +453,7 @@ class SubstrateEventHandler:
 
         if data_by_call_hash:
             for transaction in (
-                transaction_to_update := models.Transaction.objects.filter(
+                transaction_to_update := models.MultiSigTransaction.objects.filter(
                     # WHERE (
                     #     (call_hash = 1 AND multisig_id 2)
                     #     OR (call_hash = 3 AND multisig_id 4)
@@ -474,7 +472,7 @@ class SubstrateEventHandler:
             ):
                 transaction.approvers.extend(data_by_call_hash[(transaction.call_hash, transaction.multisig_id)])
             if transaction_to_update:
-                models.Transaction.objects.bulk_update(transaction_to_update, ("approvers",))
+                models.MultiSigTransaction.objects.bulk_update(transaction_to_update, ("approvers",))
 
     @staticmethod
     def _execute_transactions(block: models.Block):
@@ -489,7 +487,7 @@ class SubstrateEventHandler:
             for multisig_event in block.event_data.get("Multisig", {}).get("MultisigExecuted", [])
         }:
             for transaction in (
-                transaction_to_update := models.Transaction.objects.filter(
+                transaction_to_update := models.MultiSigTransaction.objects.filter(
                     # WHERE (
                     #     (call_hash = 1 AND multisig_id 2)
                     #     OR (call_hash = 3 AND multisig_id 4)
@@ -510,7 +508,9 @@ class SubstrateEventHandler:
                 transaction.status = models.TransactionStatus.EXECUTED
                 transaction.executed_at = timezone.now()
             if transaction_to_update:
-                models.Transaction.objects.bulk_update(transaction_to_update, ("approvers", "status", "executed_at"))
+                models.MultiSigTransaction.objects.bulk_update(
+                    transaction_to_update, ("approvers", "status", "executed_at")
+                )
 
     @staticmethod
     def _cancel_transactions(block: models.Block):
@@ -525,7 +525,7 @@ class SubstrateEventHandler:
             for multisig_event in block.event_data.get("Multisig", {}).get("MultisigCancelled", [])
         }:
             for transaction in (
-                transaction_to_update := models.Transaction.objects.filter(
+                transaction_to_update := models.MultiSigTransaction.objects.filter(
                     # WHERE (
                     #     (call_hash = 1 AND multisig_id 2)
                     #     OR (call_hash = 3 AND multisig_id 4)
@@ -545,7 +545,7 @@ class SubstrateEventHandler:
                 transaction.canceled_by = data_by_call_hash[(transaction.call_hash, transaction.multisig_id)]
                 transaction.status = models.TransactionStatus.CANCELLED
             if transaction_to_update:
-                models.Transaction.objects.bulk_update(transaction_to_update, ("canceled_by", "status"))
+                models.MultiSigTransaction.objects.bulk_update(transaction_to_update, ("canceled_by", "status"))
 
     @atomic
     def execute_actions(self, block: models.Block):

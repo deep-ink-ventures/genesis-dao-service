@@ -217,7 +217,7 @@ class ProposalMetadataResponseSerialzier(Serializer):  # noqa
 
 
 class ReportFaultedSerializer(ModelSerializer):
-    proposal_id = CharField(max_length=128)
+    proposal_id = IntegerField()
     reason = CharField(max_length=1024)
 
     class Meta:
@@ -267,18 +267,18 @@ class CorrespondingModelsSerializer(ModelSerializer):
     proposal = ProposalSerializer(required=False, allow_null=True)
 
     class Meta:
-        model = models.Transaction
+        model = models.MultiSigTransaction
         fields = ("asset", "dao", "proposal")
 
 
-class TransactionSerializer(ModelSerializer):
+class MultiSigTransactionSerializer(ModelSerializer):
     multisig_address = CharField(source="multisig.address")
     dao_id = CharField(source="dao.id", required=False, allow_null=True)
     call = CallSerializer(required=False)
     corresponding_models = SerializerMethodField()
 
     class Meta:
-        model = models.Transaction
+        model = models.MultiSigTransaction
         fields = (
             "id",
             "multisig_address",
@@ -296,7 +296,7 @@ class TransactionSerializer(ModelSerializer):
         )
 
     @swagger_serializer_method(serializer_or_field=CorrespondingModelsSerializer)
-    def get_corresponding_models(self, txn: models.Transaction):
+    def get_corresponding_models(self, txn: models.MultiSigTransaction):
         return {
             "asset": AssetSerializer(txn.asset).data if txn.asset else None,
             "dao": DaoSerializer(txn.dao).data if txn.dao else None,

@@ -270,11 +270,11 @@ class SubstrateServiceTest(IntegrationTestCase):
         ),
         (
             {
-                "args": {"asset_id": 1, "dao_id": "DAO1", "proposal_id": "PROP1"},
+                "args": {"asset_id": 1, "dao_id": "DAO1", "proposal_id": 1},
                 "function": "some_func",
                 "module": "some_module",
             },
-            {"asset_id": 1, "dao_id": "DAO1", "proposal_id": "PROP1"},
+            {"asset_id": 1, "dao_id": "DAO1", "proposal_id": 1},
         ),
         (
             {"args": {"id": 1}, "function": "some_func", "module": "Assets"},
@@ -373,7 +373,7 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.assert_signed_extrinsic_submitted(keypair=keypair)
 
     def test_vote_on_proposal(self):
-        proposal_id = "prop1"
+        proposal_id = 1
         in_favor = True
         keypair = object()
 
@@ -387,7 +387,7 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.assert_signed_extrinsic_submitted(keypair=keypair)
 
     def test_finalize_proposal(self):
-        proposal_id = "prop1"
+        proposal_id = 1
         keypair = object()
 
         self.substrate_service.finalize_proposal(proposal_id=proposal_id, keypair=keypair)
@@ -400,7 +400,7 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.assert_signed_extrinsic_submitted(keypair=keypair)
 
     def test_fault_proposal(self):
-        proposal_id = "prop1"
+        proposal_id = 1
         reason = "some reason"
         keypair = object()
 
@@ -790,7 +790,7 @@ class SubstrateServiceTest(IntegrationTestCase):
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
         models.Proposal.objects.create(
-            id="prop1",
+            id=1,
             dao_id="dao1",
             metadata_url="url1",
             metadata_hash="hash1",
@@ -829,7 +829,7 @@ class SubstrateServiceTest(IntegrationTestCase):
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=100)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100)
         models.Proposal.objects.create(
-            id="prop1",
+            id=1,
             dao_id="dao1",
             metadata_url="url1",
             metadata_hash="hash1",
@@ -1129,7 +1129,7 @@ class SubstrateServiceTest(IntegrationTestCase):
         self.si.compose_call.return_value.call_hash.hex.return_value = "some_hash"
 
         self.assertEqual(
-            self.substrate_service.create_transaction_call_hash(
+            self.substrate_service.create_multisig_transaction_call_hash(
                 module="module1", function="func1", args={"some": "args"}
             ),
             "some_hash",

@@ -130,7 +130,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
             "retrieve": serializers.DaoSerializer,
             "list": serializers.DaoSerializer,
             "add_metadata": serializers.AddDaoMetadataSerializer,
-            "create_transaction": serializers.CallSerializer,
+            "create_multisig_transaction": serializers.CallSerializer,
         }.get(self.action)
 
     @staticmethod
@@ -237,25 +237,25 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         return Response(status=HTTP_200_OK, data={"challenge": challenge_token})
 
     @swagger_auto_schema(
-        operation_id="Create Multi Signature Transaction",
-        operation_description="Creates a MultiSig Transaction",
-        responses={201: openapi.Response("", serializers.TransactionSerializer)},
+        operation_id="Create MultiSigTransaction",
+        operation_description="Creates a MultiSigTransaction",
+        responses={201: openapi.Response("", serializers.MultiSigTransactionSerializer)},
         security=[{"Signature": []}],
     )
     @action(
         methods=["POST"],
         detail=True,
-        url_path="transaction",
+        url_path="multisig-transaction",
         permission_classes=[IsDAOOwner],
         authentication_classes=[],
     )
-    def create_transaction(self, request, *args, **kwargs):
+    def create_multisig_transaction(self, request, *args, **kwargs):
         from core.substrate import substrate_service
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         call_data = serializer.data
-        if (call_hash := call_data["hash"]) != substrate_service.create_transaction_call_hash(**call_data):
+        if (call_hash := call_data["hash"]) != substrate_service.create_multisig_transaction_call_hash(**call_data):
             return Response(data={"message": "Invalid call hash."}, status=HTTP_400_BAD_REQUEST)
 
         dao = self.get_object()
@@ -266,8 +266,8 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
                 data={"message": "No MultiSig Account exists for the given Dao."}, status=HTTP_400_BAD_REQUEST
             )
 
-        res_data = serializers.TransactionSerializer(
-            models.Transaction.objects.create(
+        res_data = serializers.MultiSigTransactionSerializer(
+            models.MultiSigTransaction.objects.create(
                 **{
                     **substrate_service.parse_call_data(call_data=call_data),
                     "multisig": multisig,
@@ -357,15 +357,38 @@ class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
         throttle_classes=[UserRateThrottle],
     )
     def report_faulted(self, request, *args, **kwargs):
-        proposal_id = kwargs["pk"]
-        if models.ProposalReport.objects.filter(proposal_id=proposal_id).count() >= 3:
+        from core.substrate import substrate_service
+
+        proposal = models.Proposal.objects.select_related("dao").get(id=kwargs["pk"])
+        if models.ProposalReport.objects.filter(proposal=proposal).count() >= 3:
             return Response(
                 {"detail": "The proposal report maximum has already been reached."}, status=HTTP_400_BAD_REQUEST
             )
-        request.data["proposal_id"] = proposal_id
+        try:
+            multisig = models.MultiSig.objects.get(address=proposal.dao.owner_id)
+        except models.MultiSig.DoesNotExist:
+            return Response(
+                {"detail": "The corresponding DAO is not managed by a MultiSig Account."}, status=HTTP_400_BAD_REQUEST
+            )
+        request.data["proposal_id"] = proposal.id
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        call_hash = substrate_service.create_multisig_transaction_call_hash(
+            module="Votes", function="fault_proposal", args=serializer.data
+        )
+        models.MultiSigTransaction.objects.create(
+            multisig=multisig,
+            proposal=proposal,
+            dao=proposal.dao,
+            call={
+                "module": "Votes",
+                "function": "fault_proposal",
+                "args": {**serializer.data},
+                "call_hash": call_hash,
+            },
+            call_hash=call_hash,
+        )
         return Response(serializer.data, status=HTTP_201_CREATED)
 
     @swagger_auto_schema(
@@ -421,8 +444,8 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
         )
 
 
-class TransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
-    queryset = models.Transaction.objects.all()
-    serializer_class = serializers.TransactionSerializer
+class MultiSigTransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
+    queryset = models.MultiSigTransaction.objects.all()
+    serializer_class = serializers.MultiSigTransactionSerializer
     allowed_filter_fields = ("dao_id", "status", "call_hash", "executed_at")
     allowed_order_fields = ("dao_id", "status", "call_hash", "executed_at")

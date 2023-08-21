@@ -183,8 +183,8 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao5", name="dao5 name", owner=multi2)
         multi2.dao_id = "dao5"
         multi2.save()
-        models.Transaction.objects.create(multisig_id="multi1", dao_id="dao1", call_hash="hash1")
-        models.Transaction.objects.create(multisig_id="multi1", dao_id="dao1", call_hash="hash2")
+        models.MultiSigTransaction.objects.create(multisig_id="multi1", dao_id="dao1", call_hash="hash1")
+        models.MultiSigTransaction.objects.create(multisig_id="multi1", dao_id="dao1", call_hash="hash2")
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -213,10 +213,10 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.Dao.objects.all(), expected_daos)
         self.assertModelsEqual(
-            models.Transaction.objects.all(),
+            models.MultiSigTransaction.objects.all(),
             [
-                models.Transaction(multisig_id="multi1", dao_id=None, call_hash="hash1"),
-                models.Transaction(multisig_id="multi1", dao_id=None, call_hash="hash2"),
+                models.MultiSigTransaction(multisig_id="multi1", dao_id=None, call_hash="hash1"),
+                models.MultiSigTransaction(multisig_id="multi1", dao_id=None, call_hash="hash2"),
             ],
             ignore_fields=("created_at", "updated_at", "id"),
         )
@@ -703,24 +703,24 @@ class EventHandlerTest(IntegrationTestCase):
                 "Votes": {
                     "not": "interesting",
                     "ProposalCreated": [
-                        {"proposal_id": "prop1", "dao_id": "dao1", "creator": "acc1", "not": "interesting"},
-                        {"proposal_id": "prop2", "dao_id": "dao2", "creator": "acc2", "not": "interesting"},
+                        {"proposal_id": 1, "dao_id": "dao1", "creator": "acc1", "not": "interesting"},
+                        {"proposal_id": 2, "dao_id": "dao2", "creator": "acc2", "not": "interesting"},
                     ],
                 },
             },
         )
         time = timezone.now()
         expected_proposals = [
-            models.Proposal(id="prop1", dao_id="dao1", creator_id="acc1", birth_block_number=123),
-            models.Proposal(id="prop2", dao_id="dao2", creator_id="acc2", birth_block_number=123),
+            models.Proposal(id=1, dao_id="dao1", creator_id="acc1", birth_block_number=123),
+            models.Proposal(id=2, dao_id="dao2", creator_id="acc2", birth_block_number=123),
         ]
         expected_votes = [
-            models.Vote(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=None),
-            models.Vote(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=None),
-            models.Vote(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=None),
-            models.Vote(proposal_id="prop2", voter_id="acc3", voting_power=50, in_favor=None),
-            models.Vote(proposal_id="prop2", voter_id="acc2", voting_power=30, in_favor=None),
-            models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None),
+            models.Vote(proposal_id=1, voter_id="acc1", voting_power=50, in_favor=None),
+            models.Vote(proposal_id=1, voter_id="acc2", voting_power=30, in_favor=None),
+            models.Vote(proposal_id=1, voter_id="acc3", voting_power=20, in_favor=None),
+            models.Vote(proposal_id=2, voter_id="acc3", voting_power=50, in_favor=None),
+            models.Vote(proposal_id=2, voter_id="acc2", voting_power=30, in_favor=None),
+            models.Vote(proposal_id=2, voter_id="acc1", voting_power=20, in_favor=None),
         ]
 
         with self.assertNumQueries(3), freeze_time(time):
@@ -739,8 +739,8 @@ class EventHandlerTest(IntegrationTestCase):
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Proposal.objects.create(id="1", dao_id="dao1", birth_block_number=10)
-        models.Proposal.objects.create(id="2", dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id=1, dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id=2, dao_id="dao2", birth_block_number=10)
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -794,7 +794,7 @@ class EventHandlerTest(IntegrationTestCase):
         )
         expected_proposals = [
             models.Proposal(
-                id="1",
+                id=1,
                 dao_id="dao1",
                 metadata_url="url1",
                 metadata_hash=metadata_hash_1,
@@ -803,7 +803,7 @@ class EventHandlerTest(IntegrationTestCase):
                 setup_complete=True,
             ),
             models.Proposal(
-                id="2",
+                id=2,
                 dao_id="dao2",
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
@@ -880,7 +880,7 @@ class EventHandlerTest(IntegrationTestCase):
         )
         expected_proposals = [
             models.Proposal(
-                id="1",
+                id=1,
                 dao_id="dao1",
                 metadata_url="url1",
                 metadata_hash="wrong hash",
@@ -889,7 +889,7 @@ class EventHandlerTest(IntegrationTestCase):
                 setup_complete=True,
             ),
             models.Proposal(
-                id="2",
+                id=2,
                 dao_id="dao2",
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
@@ -898,7 +898,7 @@ class EventHandlerTest(IntegrationTestCase):
                 setup_complete=True,
             ),
             models.Proposal(
-                id="3",
+                id=3,
                 dao_id="dao3",
                 metadata_url=None,
                 metadata_hash=None,
@@ -923,8 +923,8 @@ class EventHandlerTest(IntegrationTestCase):
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Proposal.objects.create(id="1", dao_id="dao1", birth_block_number=10)
-        models.Proposal.objects.create(id="2", dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id=1, dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id=2, dao_id="dao2", birth_block_number=10)
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -976,7 +976,7 @@ class EventHandlerTest(IntegrationTestCase):
         )
         expected_proposals = [
             models.Proposal(
-                id="1",
+                id=1,
                 dao_id="dao1",
                 metadata_url="url1",
                 metadata_hash=metadata_hash_1,
@@ -985,7 +985,7 @@ class EventHandlerTest(IntegrationTestCase):
                 setup_complete=True,
             ),
             models.Proposal(
-                id="2",
+                id=2,
                 dao_id="dao2",
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
@@ -1017,8 +1017,8 @@ class EventHandlerTest(IntegrationTestCase):
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Proposal.objects.create(id="1", dao_id="dao1", birth_block_number=10)
-        models.Proposal.objects.create(id="2", dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id=1, dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id=2, dao_id="dao2", birth_block_number=10)
         metadata_1 = {"a": 1}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
@@ -1037,14 +1037,14 @@ class EventHandlerTest(IntegrationTestCase):
                     "set_metadata": [
                         {
                             "dao_id": "dao1",
-                            "proposal_id": "1",
+                            "proposal_id": 1,
                             "hash": metadata_hash_1,
                             "meta": "url1",
                             "not": "interesting",
                         },
                         {
                             "dao_id": "dao2",
-                            "proposal_id": "2",
+                            "proposal_id": 2,
                             "hash": metadata_hash_2,
                             "meta": "url2",
                             "not": "interesting",
@@ -1057,15 +1057,15 @@ class EventHandlerTest(IntegrationTestCase):
                 "Votes": {
                     "not": "interesting",
                     "ProposalMetadataSet": [
-                        {"proposal_id": "1", "not": "interesting"},
-                        {"proposal_id": "2", "not": "interesting"},
+                        {"proposal_id": 1, "not": "interesting"},
+                        {"proposal_id": 2, "not": "interesting"},
                     ],
                 },
             },
         )
         expected_proposals = [
             models.Proposal(
-                id="1",
+                id=1,
                 dao_id="dao1",
                 metadata_url="url1",
                 metadata_hash=metadata_hash_1,
@@ -1074,7 +1074,7 @@ class EventHandlerTest(IntegrationTestCase):
                 setup_complete=True,
             ),
             models.Proposal(
-                id="2",
+                id=2,
                 dao_id="dao2",
                 metadata_url="url2",
                 metadata_hash=metadata_hash_2,
@@ -1106,14 +1106,14 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Dao.objects.create(id="dao3", name="dao3 name", owner_id="acc3")
-        models.Proposal.objects.create(id="prop1", dao_id="dao1", birth_block_number=10)
-        models.Proposal.objects.create(id="prop2", dao_id="dao2", birth_block_number=10)
-        models.Vote.objects.create(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=None)
-        models.Vote.objects.create(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=None)
-        models.Vote.objects.create(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=None)
-        models.Vote.objects.create(proposal_id="prop2", voter_id="acc3", voting_power=50, in_favor=None)
-        models.Vote.objects.create(proposal_id="prop2", voter_id="acc2", voting_power=30, in_favor=None)
-        models.Vote.objects.create(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=None)
+        models.Proposal.objects.create(id=1, dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id=2, dao_id="dao2", birth_block_number=10)
+        models.Vote.objects.create(proposal_id=1, voter_id="acc1", voting_power=50, in_favor=None)
+        models.Vote.objects.create(proposal_id=1, voter_id="acc2", voting_power=30, in_favor=None)
+        models.Vote.objects.create(proposal_id=1, voter_id="acc3", voting_power=20, in_favor=None)
+        models.Vote.objects.create(proposal_id=2, voter_id="acc3", voting_power=50, in_favor=None)
+        models.Vote.objects.create(proposal_id=2, voter_id="acc2", voting_power=30, in_favor=None)
+        models.Vote.objects.create(proposal_id=2, voter_id="acc1", voting_power=20, in_favor=None)
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -1125,22 +1125,22 @@ class EventHandlerTest(IntegrationTestCase):
                 "Votes": {
                     "not": "interesting",
                     "VoteCast": [
-                        {"proposal_id": "prop1", "voter": "acc1", "in_favor": True, "not": "interesting"},
-                        {"proposal_id": "prop1", "voter": "acc2", "in_favor": False, "not": "interesting"},
-                        {"proposal_id": "prop1", "voter": "acc3", "in_favor": False, "not": "interesting"},
-                        {"proposal_id": "prop2", "voter": "acc1", "in_favor": True, "not": "interesting"},
-                        {"proposal_id": "prop2", "voter": "acc2", "in_favor": True, "not": "interesting"},
+                        {"proposal_id": 1, "voter": "acc1", "in_favor": True, "not": "interesting"},
+                        {"proposal_id": 1, "voter": "acc2", "in_favor": False, "not": "interesting"},
+                        {"proposal_id": 1, "voter": "acc3", "in_favor": False, "not": "interesting"},
+                        {"proposal_id": 2, "voter": "acc1", "in_favor": True, "not": "interesting"},
+                        {"proposal_id": 2, "voter": "acc2", "in_favor": True, "not": "interesting"},
                     ],
                 },
             },
         )
         expected_votes = [
-            models.Vote(proposal_id="prop1", voter_id="acc1", voting_power=50, in_favor=True),
-            models.Vote(proposal_id="prop1", voter_id="acc2", voting_power=30, in_favor=False),
-            models.Vote(proposal_id="prop1", voter_id="acc3", voting_power=20, in_favor=False),
-            models.Vote(proposal_id="prop2", voter_id="acc1", voting_power=20, in_favor=True),
-            models.Vote(proposal_id="prop2", voter_id="acc2", voting_power=30, in_favor=True),
-            models.Vote(proposal_id="prop2", voter_id="acc3", voting_power=50, in_favor=None),
+            models.Vote(proposal_id=1, voter_id="acc1", voting_power=50, in_favor=True),
+            models.Vote(proposal_id=1, voter_id="acc2", voting_power=30, in_favor=False),
+            models.Vote(proposal_id=1, voter_id="acc3", voting_power=20, in_favor=False),
+            models.Vote(proposal_id=2, voter_id="acc1", voting_power=20, in_favor=True),
+            models.Vote(proposal_id=2, voter_id="acc2", voting_power=30, in_favor=True),
+            models.Vote(proposal_id=2, voter_id="acc3", voting_power=50, in_favor=None),
         ]
 
         with self.assertNumQueries(2):
@@ -1157,14 +1157,14 @@ class EventHandlerTest(IntegrationTestCase):
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Proposal.objects.create(id="prop1", dao_id="dao1", birth_block_number=10)
-        models.Proposal.objects.create(id="prop2", dao_id="dao1", birth_block_number=10)
-        models.Proposal.objects.create(id="prop3", dao_id="dao2", birth_block_number=10)
-        models.Proposal.objects.create(id="prop4", dao_id="dao2", birth_block_number=10)
-        models.Proposal.objects.create(id="prop5", dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id=1, dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id=2, dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id=3, dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id=4, dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id=5, dao_id="dao2", birth_block_number=10)
         # not changed
-        models.Proposal.objects.create(id="prop6", dao_id="dao1", birth_block_number=10)
-        models.Proposal.objects.create(id="prop7", dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id=6, dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id=7, dao_id="dao2", birth_block_number=10)
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -1176,25 +1176,25 @@ class EventHandlerTest(IntegrationTestCase):
                 "Votes": {
                     "not": "interesting",
                     "ProposalAccepted": [
-                        {"proposal_id": "prop1", "not": "interesting"},
-                        {"proposal_id": "prop3", "not": "interesting"},
-                        {"proposal_id": "prop4", "not": "interesting"},
+                        {"proposal_id": 1, "not": "interesting"},
+                        {"proposal_id": 3, "not": "interesting"},
+                        {"proposal_id": 4, "not": "interesting"},
                     ],
                     "ProposalRejected": [
-                        {"proposal_id": "prop2", "not": "interesting"},
-                        {"proposal_id": "prop5", "not": "interesting"},
+                        {"proposal_id": 2, "not": "interesting"},
+                        {"proposal_id": 5, "not": "interesting"},
                     ],
                 },
             },
         )
         expected_proposals = [
-            models.Proposal(id="prop1", dao_id="dao1", status=models.ProposalStatus.PENDING, birth_block_number=10),
-            models.Proposal(id="prop2", dao_id="dao1", status=models.ProposalStatus.REJECTED, birth_block_number=10),
-            models.Proposal(id="prop3", dao_id="dao2", status=models.ProposalStatus.PENDING, birth_block_number=10),
-            models.Proposal(id="prop4", dao_id="dao2", status=models.ProposalStatus.PENDING, birth_block_number=10),
-            models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.REJECTED, birth_block_number=10),
-            models.Proposal(id="prop6", dao_id="dao1", status=models.ProposalStatus.RUNNING, birth_block_number=10),
-            models.Proposal(id="prop7", dao_id="dao2", status=models.ProposalStatus.RUNNING, birth_block_number=10),
+            models.Proposal(id=1, dao_id="dao1", status=models.ProposalStatus.PENDING, birth_block_number=10),
+            models.Proposal(id=2, dao_id="dao1", status=models.ProposalStatus.REJECTED, birth_block_number=10),
+            models.Proposal(id=3, dao_id="dao2", status=models.ProposalStatus.PENDING, birth_block_number=10),
+            models.Proposal(id=4, dao_id="dao2", status=models.ProposalStatus.PENDING, birth_block_number=10),
+            models.Proposal(id=5, dao_id="dao2", status=models.ProposalStatus.REJECTED, birth_block_number=10),
+            models.Proposal(id=6, dao_id="dao1", status=models.ProposalStatus.RUNNING, birth_block_number=10),
+            models.Proposal(id=7, dao_id="dao2", status=models.ProposalStatus.RUNNING, birth_block_number=10),
         ]
 
         with self.assertNumQueries(2):
@@ -1207,12 +1207,12 @@ class EventHandlerTest(IntegrationTestCase):
         models.Account.objects.create(address="acc2")
         models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
-        models.Proposal.objects.create(id="prop1", dao_id="dao1", birth_block_number=10)
-        models.Proposal.objects.create(id="prop2", dao_id="dao1", birth_block_number=10)
-        models.Proposal.objects.create(id="prop3", dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id=1, dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id=2, dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id=3, dao_id="dao2", birth_block_number=10)
         # not changed
-        models.Proposal.objects.create(id="prop4", dao_id="dao1", birth_block_number=10)
-        models.Proposal.objects.create(id="prop5", dao_id="dao2", birth_block_number=10)
+        models.Proposal.objects.create(id=4, dao_id="dao1", birth_block_number=10)
+        models.Proposal.objects.create(id=5, dao_id="dao2", birth_block_number=10)
         block = models.Block.objects.create(
             hash="hash 0",
             number=0,
@@ -1224,25 +1224,25 @@ class EventHandlerTest(IntegrationTestCase):
                 "Votes": {
                     "not": "interesting",
                     "ProposalFaulted": [
-                        {"proposal_id": "prop1", "reason": "reason 1", "not": "interesting"},
-                        {"proposal_id": "prop2", "reason": "reason 2", "not": "interesting"},
-                        {"proposal_id": "prop3", "reason": "reason 3", "not": "interesting"},
+                        {"proposal_id": 1, "reason": "reason 1", "not": "interesting"},
+                        {"proposal_id": 2, "reason": "reason 2", "not": "interesting"},
+                        {"proposal_id": 3, "reason": "reason 3", "not": "interesting"},
                     ],
                 },
             },
         )
         expected_proposals = [
             models.Proposal(
-                id="prop1", dao_id="dao1", fault="reason 1", status=models.ProposalStatus.FAULTED, birth_block_number=10
+                id=1, dao_id="dao1", fault="reason 1", status=models.ProposalStatus.FAULTED, birth_block_number=10
             ),
             models.Proposal(
-                id="prop2", dao_id="dao1", fault="reason 2", status=models.ProposalStatus.FAULTED, birth_block_number=10
+                id=2, dao_id="dao1", fault="reason 2", status=models.ProposalStatus.FAULTED, birth_block_number=10
             ),
             models.Proposal(
-                id="prop3", dao_id="dao2", fault="reason 3", status=models.ProposalStatus.FAULTED, birth_block_number=10
+                id=3, dao_id="dao2", fault="reason 3", status=models.ProposalStatus.FAULTED, birth_block_number=10
             ),
-            models.Proposal(id="prop4", dao_id="dao1", status=models.ProposalStatus.RUNNING, birth_block_number=10),
-            models.Proposal(id="prop5", dao_id="dao2", status=models.ProposalStatus.RUNNING, birth_block_number=10),
+            models.Proposal(id=4, dao_id="dao1", status=models.ProposalStatus.RUNNING, birth_block_number=10),
+            models.Proposal(id=5, dao_id="dao2", status=models.ProposalStatus.RUNNING, birth_block_number=10),
         ]
 
         with self.assertNumQueries(2):
@@ -1252,16 +1252,16 @@ class EventHandlerTest(IntegrationTestCase):
 
     def test__handle_new_transactions(self):
         multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
-        models.Transaction.objects.create(
+        models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1"
         )
         # these shouldn't change
         # different hash
-        txn0 = models.Transaction.objects.create(
+        txn0 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
         # some multisig and hash but executed_at
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
 
@@ -1297,9 +1297,11 @@ class EventHandlerTest(IntegrationTestCase):
         expected_transaction = [
             txn0,
             txn1,
-            models.Transaction(call_hash="hash1", multisig=multisig, approvers=["sig1", "sig2"], call={"some": "data"}),
-            models.Transaction(call_hash="hash2", multisig=multisig, approvers=["sig2"]),
-            models.Transaction(call_hash="hash2", multisig=multisig2, approvers=["sig2"]),
+            models.MultiSigTransaction(
+                call_hash="hash1", multisig=multisig, approvers=["sig1", "sig2"], call={"some": "data"}
+            ),
+            models.MultiSigTransaction(call_hash="hash2", multisig=multisig, approvers=["sig2"]),
+            models.MultiSigTransaction(call_hash="hash2", multisig=multisig2, approvers=["sig2"]),
         ]
 
         with self.assertNumQueries(5):
@@ -1307,23 +1309,23 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multi_sigs)
         self.assertModelsEqual(
-            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            models.MultiSigTransaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
             expected_transaction,
             ignore_fields=("id", "created_at", "updated_at"),
         )
 
     def test__handle_new_transactions_only_existing(self):
         multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
-        models.Transaction.objects.create(
+        models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1"
         )
         # these shouldn't change
         # different hash
-        txn0 = models.Transaction.objects.create(
+        txn0 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
         # some multisig and hash but executed_at
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
 
@@ -1340,7 +1342,9 @@ class EventHandlerTest(IntegrationTestCase):
         expected_transaction = [
             txn0,
             txn1,
-            models.Transaction(call_hash="hash1", multisig=multisig, approvers=["sig1", "sig2"], call={"some": "data"}),
+            models.MultiSigTransaction(
+                call_hash="hash1", multisig=multisig, approvers=["sig1", "sig2"], call={"some": "data"}
+            ),
         ]
 
         with self.assertNumQueries(2):
@@ -1348,7 +1352,7 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multi_sigs)
         self.assertModelsEqual(
-            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            models.MultiSigTransaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
             expected_transaction,
             ignore_fields=("id", "created_at", "updated_at"),
         )
@@ -1357,11 +1361,11 @@ class EventHandlerTest(IntegrationTestCase):
         multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
         # these shouldn't change
         # different hash
-        txn0 = models.Transaction.objects.create(
+        txn0 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
         # some multisig and hash but executed_at
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
 
@@ -1392,8 +1396,8 @@ class EventHandlerTest(IntegrationTestCase):
         expected_transaction = [
             txn0,
             txn1,
-            models.Transaction(call_hash="hash2", multisig=multisig, approvers=["sig2"]),
-            models.Transaction(call_hash="hash2", multisig=multisig2, approvers=["sig2"]),
+            models.MultiSigTransaction(call_hash="hash2", multisig=multisig, approvers=["sig2"]),
+            models.MultiSigTransaction(call_hash="hash2", multisig=multisig2, approvers=["sig2"]),
         ]
 
         with self.assertNumQueries(4):
@@ -1401,7 +1405,7 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multi_sigs)
         self.assertModelsEqual(
-            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            models.MultiSigTransaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
             expected_transaction,
             ignore_fields=("id", "created_at", "updated_at"),
         )
@@ -1411,17 +1415,17 @@ class EventHandlerTest(IntegrationTestCase):
         multisig2 = models.MultiSig.objects.create(
             address="addr2", signatories=["sig1", "sig2", "sig3", "sig4", "sig5"], threshold=4
         )
-        models.Transaction.objects.create(
+        models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1"
         )
-        models.Transaction.objects.create(multisig=multisig2, approvers=["sig1", "sig2"], call_hash="hash2")
+        models.MultiSigTransaction.objects.create(multisig=multisig2, approvers=["sig1", "sig2"], call_hash="hash2")
         # these shouldn't change
         # different hash
-        txn0 = models.Transaction.objects.create(
+        txn0 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
         # some multisig and hash but executed_at
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
 
@@ -1458,8 +1462,12 @@ class EventHandlerTest(IntegrationTestCase):
         expected_transaction = [
             txn0,
             txn1,
-            models.Transaction(call_hash="hash1", multisig=multisig, approvers=["sig1", "sig2"], call={"some": "data"}),
-            models.Transaction(call_hash="hash2", multisig=multisig2, approvers=["sig1", "sig2", "sig3", "sig4"]),
+            models.MultiSigTransaction(
+                call_hash="hash1", multisig=multisig, approvers=["sig1", "sig2"], call={"some": "data"}
+            ),
+            models.MultiSigTransaction(
+                call_hash="hash2", multisig=multisig2, approvers=["sig1", "sig2", "sig3", "sig4"]
+            ),
         ]
 
         with self.assertNumQueries(2):
@@ -1467,7 +1475,7 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), [multisig, multisig2])
         self.assertModelsEqual(
-            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            models.MultiSigTransaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
             expected_transaction,
             ignore_fields=("id", "created_at", "updated_at"),
         )
@@ -1476,11 +1484,11 @@ class EventHandlerTest(IntegrationTestCase):
         multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
         # these shouldn't change
         # different hash
-        txn0 = models.Transaction.objects.create(
+        txn0 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
         # some multisig and hash but executed_at
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
 
@@ -1521,7 +1529,7 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), [multisig])
         self.assertModelsEqual(
-            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            models.MultiSigTransaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
             expected_transaction,
             ignore_fields=("id", "created_at", "updated_at"),
         )
@@ -1531,19 +1539,19 @@ class EventHandlerTest(IntegrationTestCase):
         multisig2 = models.MultiSig.objects.create(
             address="addr2", signatories=["sig1", "sig2", "sig3", "sig4", "sig5"], threshold=4
         )
-        models.Transaction.objects.create(
+        models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1", "sig3"], call_hash="hash1"
         )
-        models.Transaction.objects.create(
+        models.MultiSigTransaction.objects.create(
             multisig=multisig2, approvers=["sig1", "sig2", "sig4", "sig5"], call_hash="hash2"
         )
         # these shouldn't change
         # different hash
-        txn0 = models.Transaction.objects.create(
+        txn0 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
         # some multisig and hash but executed_at
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
 
@@ -1576,7 +1584,7 @@ class EventHandlerTest(IntegrationTestCase):
         expected_transaction = [
             txn0,
             txn1,
-            models.Transaction(
+            models.MultiSigTransaction(
                 call_hash="hash1",
                 multisig=multisig,
                 approvers=["sig1", "sig3", "sig2"],
@@ -1584,7 +1592,7 @@ class EventHandlerTest(IntegrationTestCase):
                 status=models.TransactionStatus.EXECUTED,
                 executed_at=timestamp,
             ),
-            models.Transaction(
+            models.MultiSigTransaction(
                 call_hash="hash2",
                 multisig=multisig2,
                 approvers=["sig1", "sig2", "sig4", "sig5", "sig3"],
@@ -1598,7 +1606,7 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), [multisig, multisig2])
         self.assertModelsEqual(
-            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            models.MultiSigTransaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
             expected_transaction,
             ignore_fields=("id", "created_at", "updated_at"),
         )
@@ -1607,11 +1615,11 @@ class EventHandlerTest(IntegrationTestCase):
         multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
         # these shouldn't change
         # different hash
-        txn0 = models.Transaction.objects.create(
+        txn0 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
         # some multisig and hash but executed_at
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
 
@@ -1646,7 +1654,7 @@ class EventHandlerTest(IntegrationTestCase):
             substrate_event_handler._execute_transactions(block=block)
 
         self.assertModelsEqual(
-            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            models.MultiSigTransaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
             expected_transaction,
             ignore_fields=("id", "created_at", "updated_at"),
         )
@@ -1656,19 +1664,19 @@ class EventHandlerTest(IntegrationTestCase):
         multisig2 = models.MultiSig.objects.create(
             address="addr2", signatories=["sig1", "sig2", "sig3", "sig4", "sig5"], threshold=4
         )
-        models.Transaction.objects.create(
+        models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1", "sig3"], call_hash="hash1"
         )
-        models.Transaction.objects.create(
+        models.MultiSigTransaction.objects.create(
             multisig=multisig2, approvers=["sig1", "sig2", "sig4", "sig5"], call_hash="hash2"
         )
         # these shouldn't change
         # different hash
-        txn0 = models.Transaction.objects.create(
+        txn0 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
         # some multisig and hash but executed_at
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
 
@@ -1700,7 +1708,7 @@ class EventHandlerTest(IntegrationTestCase):
         expected_transaction = [
             txn0,
             txn1,
-            models.Transaction(
+            models.MultiSigTransaction(
                 call_hash="hash1",
                 multisig=multisig,
                 approvers=["sig1", "sig3"],
@@ -1708,7 +1716,7 @@ class EventHandlerTest(IntegrationTestCase):
                 status=models.TransactionStatus.CANCELLED,
                 canceled_by="sig1",
             ),
-            models.Transaction(
+            models.MultiSigTransaction(
                 call_hash="hash2",
                 multisig=multisig2,
                 approvers=["sig1", "sig2", "sig4", "sig5"],
@@ -1722,7 +1730,7 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), [multisig, multisig2])
         self.assertModelsEqual(
-            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            models.MultiSigTransaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
             expected_transaction,
             ignore_fields=("id", "created_at", "updated_at"),
         )
@@ -1731,11 +1739,11 @@ class EventHandlerTest(IntegrationTestCase):
         multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
         # these shouldn't change
         # different hash
-        txn0 = models.Transaction.objects.create(
+        txn0 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
         # some multisig and hash but executed_at
-        txn1 = models.Transaction.objects.create(
+        txn1 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
 
@@ -1771,7 +1779,7 @@ class EventHandlerTest(IntegrationTestCase):
 
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), [multisig])
         self.assertModelsEqual(
-            models.Transaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
+            models.MultiSigTransaction.objects.order_by("call_hash", "multisig__address", "executed_at"),
             expected_transaction,
             ignore_fields=("id", "created_at", "updated_at"),
         )

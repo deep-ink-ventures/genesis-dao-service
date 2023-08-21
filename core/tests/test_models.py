@@ -66,8 +66,10 @@ class ModelTest(IntegrationTestCase):
         )
 
     def test_transaction_str(self):
-        self.assertEqual(str(models.Transaction(call_hash="h", multisig=models.MultiSig(address="a"))), "h | a | None")
+        self.assertEqual(
+            str(models.MultiSigTransaction(call_hash="h", multisig=models.MultiSig(address="a"))), "h | a | None"
+        )
 
     def test_transaction_last_approver(self):
-        self.assertEqual(models.Transaction(approvers=["a"]).last_approver, "a")
-        self.assertIsNone(models.Transaction(approvers=[]).last_approver)
+        self.assertEqual(models.MultiSigTransaction(approvers=["a"]).last_approver, "a")
+        self.assertIsNone(models.MultiSigTransaction(approvers=[]).last_approver)

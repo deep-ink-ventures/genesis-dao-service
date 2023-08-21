@@ -509,7 +509,7 @@ class SubstrateService(object):
         """
         return self.substrate_interface.generate_multisig_account(signatories=signatories, threshold=threshold)
 
-    def create_transaction_call_hash(self, module: str, function: str, args: dict, *_) -> str:
+    def create_multisig_transaction_call_hash(self, module: str, function: str, args: dict, *_) -> str:
         """
         Args:
             module : name of the call module
@@ -602,7 +602,7 @@ class SubstrateService(object):
             all values are optional
 
         parses call_data and returns a dict of affected model ids
-        used to populate corresponding models during Transaction creation
+        used to populate corresponding models during MultiSigTransaction creation
         """
         corresponding_model_ids = {
             "asset_id": None,

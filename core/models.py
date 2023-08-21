@@ -92,7 +92,7 @@ class ProposalStatus(ChoiceEnum):
 
 
 class Proposal(TimestampableMixin):
-    id = models.CharField(max_length=128, primary_key=True)
+    id = models.BigIntegerField(primary_key=True)
     dao = models.ForeignKey(Dao, related_name="proposals", on_delete=models.CASCADE)
     creator = models.ForeignKey(Account, related_name="proposals", on_delete=models.SET_NULL, null=True)
     status = models.CharField(max_length=16, choices=ProposalStatus.as_choices(), default=ProposalStatus.RUNNING)
@@ -107,6 +107,9 @@ class Proposal(TimestampableMixin):
 class ProposalReport(TimestampableMixin):
     reason = models.TextField()
     proposal = models.ForeignKey(Proposal, on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = "core_proposal_report"
 
 
 class Vote(TimestampableMixin):
@@ -202,7 +205,7 @@ class TransactionStatus(ChoiceEnum):
     EXECUTED = "executed"
 
 
-class Transaction(TimestampableMixin):
+class MultiSigTransaction(TimestampableMixin):
     multisig = models.ForeignKey(MultiSig, related_name="transactions", on_delete=models.CASCADE)
     asset = models.ForeignKey(Asset, related_name="transactions", null=True, on_delete=models.SET_NULL)
     dao = models.ForeignKey(Dao, related_name="transactions", null=True, on_delete=models.SET_NULL)
@@ -215,8 +218,9 @@ class Transaction(TimestampableMixin):
     canceled_by = models.CharField(max_length=256, null=True)
 
     class Meta:
-        verbose_name = "Transaction"
-        verbose_name_plural = "Transactions"
+        db_table = "core_multisig_transactions"
+        verbose_name = "MultiSigTransaction"
+        verbose_name_plural = "MultiSigTransactions"
         unique_together = ("call_hash", "multisig", "executed_at")
 
     @property

@@ -10,7 +10,7 @@ router.register(r"assets", views.AssetViewSet, "core-asset")
 router.register(r"asset-holdings", views.AssetHoldingViewSet, "core-asset-holding")
 router.register(r"proposals", views.ProposalViewSet, "core-proposal")
 router.register(r"multisigs", views.MultiSigViewSet, basename="core-multisig")
-router.register(r"transactions", views.TransactionViewSet, basename="core-transaction")
+router.register(r"multisig-transactions", views.MultiSigTransactionViewSet, basename="core-multisig-transaction")
 
 
 urlpatterns = router.urls + [
