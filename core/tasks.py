@@ -56,11 +56,15 @@ def update_proposal_metadata(proposal_ids: list):
 
     proposals = set(models.Proposal.objects.filter(id__in=proposal_ids))
     proposal_to_update = []
+    update_fields = ["metadata"]
     for proposal in proposals:
         try:
             proposal.metadata = file_handler.download_metadata(
                 url=proposal.metadata_url, metadata_hash=proposal.metadata_hash
             )
+            if title := proposal.metadata.get("title"):
+                proposal.title = title
+                update_fields.append("title")
         except HashMismatchException:
             logger.error("Hash mismatch while fetching Proposal metadata from provided url.")
         except Exception:  # noqa E722
@@ -68,4 +72,4 @@ def update_proposal_metadata(proposal_ids: list):
         else:
             proposal_to_update.append(proposal)
     if proposal_to_update:
-        models.Proposal.objects.bulk_update(proposal_to_update, fields=["metadata"])
+        models.Proposal.objects.bulk_update(proposal_to_update, fields=update_fields)

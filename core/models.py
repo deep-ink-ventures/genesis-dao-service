@@ -102,6 +102,8 @@ class Proposal(TimestampableMixin):
     metadata_url = models.CharField(max_length=256, null=True)
     metadata_hash = models.CharField(max_length=256, null=True)
     setup_complete = models.BooleanField(default=False)
+    # denormalizations
+    title = models.CharField(max_length=128, null=True)
 
 
 class ProposalReport(TimestampableMixin):
@@ -207,15 +209,17 @@ class TransactionStatus(ChoiceEnum):
 
 class MultiSigTransaction(TimestampableMixin):
     multisig = models.ForeignKey(MultiSig, related_name="transactions", on_delete=models.CASCADE)
-    asset = models.ForeignKey(Asset, related_name="transactions", null=True, on_delete=models.SET_NULL)
-    dao = models.ForeignKey(Dao, related_name="transactions", null=True, on_delete=models.SET_NULL)
-    proposal = models.ForeignKey(Proposal, related_name="transactions", null=True, on_delete=models.SET_NULL)
     call = models.JSONField(null=True)
-    call_hash = models.CharField(max_length=256)
     approvers = ArrayField(models.CharField(max_length=256), default=list)
     status = models.CharField(max_length=16, choices=TransactionStatus.as_choices(), default=TransactionStatus.PENDING)
     executed_at = models.DateTimeField(null=True, blank=True)
     canceled_by = models.CharField(max_length=256, null=True)
+    # denormalizations
+    call_hash = models.CharField(max_length=256)
+    call_function = models.CharField(max_length=256, null=True)
+    asset = models.ForeignKey(Asset, related_name="transactions", null=True, on_delete=models.SET_NULL)
+    dao = models.ForeignKey(Dao, related_name="transactions", null=True, on_delete=models.SET_NULL)
+    proposal = models.ForeignKey(Proposal, related_name="transactions", null=True, on_delete=models.SET_NULL)
 
     class Meta:
         db_table = "core_multisig_transactions"

@@ -199,9 +199,9 @@ class CoreViewSetTest(IntegrationTestCase):
 
     @data(
         # query_params
-        {"id": "dao2"},
-        {"owner_id": "acc2"},
-        {"name": "dao2 name"},
+        {"search": "dao2"},
+        {"search": "acc2"},
+        {"search": "dao2 name"},
     )
     def test_dao_list_filter(self, query_params):
         expected_res = wrap_in_pagination_res([expected_dao2_res])
@@ -214,7 +214,7 @@ class CoreViewSetTest(IntegrationTestCase):
     @data(
         # query_params, expected_res
         (
-            {"order_by": "id"},
+            {"ordering": "id"},
             [
                 expected_dao1_res,
                 expected_dao2_res,
@@ -238,7 +238,7 @@ class CoreViewSetTest(IntegrationTestCase):
             ],
         ),
         (
-            {"order_by": "name"},
+            {"ordering": "name"},
             [
                 {
                     "id": "dao3",
@@ -262,7 +262,7 @@ class CoreViewSetTest(IntegrationTestCase):
             ],
         ),
         (
-            {"order_by": "owner_id,id"},
+            {"ordering": "owner_id,id"},
             [
                 expected_dao1_res,
                 expected_dao2_res,
@@ -300,7 +300,7 @@ class CoreViewSetTest(IntegrationTestCase):
     @data(
         # query_params, expected_res, expected query count
         (
-            {"prioritise_owner": "acc2", "order_by": "-name"},
+            {"prioritise_owner": "acc2", "ordering": "-name"},
             [
                 {
                     "id": "dao4",
@@ -342,7 +342,7 @@ class CoreViewSetTest(IntegrationTestCase):
             16,
         ),
         (
-            {"prioritise_holder": "acc3", "order_by": "-name"},
+            {"prioritise_holder": "acc3", "ordering": "-name"},
             [
                 {
                     "id": "dao4",
@@ -384,7 +384,7 @@ class CoreViewSetTest(IntegrationTestCase):
             16,
         ),
         (
-            {"prioritise_owner": "acc2", "prioritise_holder": "acc3", "order_by": "name"},
+            {"prioritise_owner": "acc2", "prioritise_holder": "acc3", "ordering": "name"},
             [
                 expected_dao2_res,
                 {
@@ -890,7 +890,7 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_get_multisig(self):
         addr = "some_addr"
         models.MultiSig.objects.create(address=addr, signatories=["sig1", "sig2"], threshold=2)
-        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 2}
+        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 2, "dao_id": None}
 
         res = self.client.get(reverse("core-multisig-detail", kwargs={"address": addr}))
 
@@ -898,11 +898,11 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertDictEqual(res.data, expected_res)
 
     def test_get_list_multisig(self):
-        models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2"], threshold=2)
+        models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2"], threshold=2, dao_id="dao1")
         models.MultiSig.objects.create(address="addr2", signatories=["sig1", "sig2", "sig3"], threshold=3)
         expected_multisigs = [
-            {"address": "addr1", "signatories": ["sig1", "sig2"], "threshold": 2},
-            {"address": "addr2", "signatories": ["sig1", "sig2", "sig3"], "threshold": 3},
+            {"address": "addr1", "signatories": ["sig1", "sig2"], "threshold": 2, "dao_id": "dao1"},
+            {"address": "addr2", "signatories": ["sig1", "sig2", "sig3"], "threshold": 3, "dao_id": None},
         ]
 
         res = self.client.get(reverse("core-multisig-list"), {"order_by": "address"})
@@ -915,7 +915,7 @@ class CoreViewSetTest(IntegrationTestCase):
         addr = "some_addr"
         substrate_mock.create_multisig_account.return_value = Mock(ss58_address=addr)
         payload = {"signatories": ["sig1", "sig2"], "threshold": 2}
-        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 2}
+        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 2, "dao_id": None}
 
         res = self.client.post(reverse("core-multisig-list"), data=payload, content_type="application/json")
 
@@ -927,8 +927,8 @@ class CoreViewSetTest(IntegrationTestCase):
         addr = "some_addr"
         substrate_mock.create_multisig_account.return_value = Mock(ss58_address=addr)
         payload = {"signatories": ["sig1", "sig2"], "threshold": 2}
-        models.MultiSig.objects.create(**payload, address=addr)
-        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 2}
+        models.MultiSig.objects.create(**payload, address=addr, dao_id="dao1")
+        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 2, "dao_id": "dao1"}
 
         res = self.client.post(reverse("core-multisig-list"), data=payload, content_type="application/json")
 
@@ -987,6 +987,7 @@ class CoreViewSetTest(IntegrationTestCase):
                 },
             },
             "status": models.TransactionStatus.PENDING,
+            "threshold": 2,
             "approvers": ["sig1", "sig2"],
             "last_approver": "sig2",
             "executed_at": None,
@@ -1054,6 +1055,7 @@ class CoreViewSetTest(IntegrationTestCase):
                         "proposal": None,
                     },
                     "status": models.TransactionStatus.EXECUTED,
+                    "threshold": 2,
                     "approvers": ["sig1", "sig2"],
                     "last_approver": "sig2",
                     "executed_at": fmt_dt(txn1.executed_at),
@@ -1073,6 +1075,7 @@ class CoreViewSetTest(IntegrationTestCase):
                         "proposal": None,
                     },
                     "status": models.TransactionStatus.PENDING,
+                    "threshold": 3,
                     "approvers": [],
                     "last_approver": None,
                     "executed_at": None,
@@ -1105,7 +1108,13 @@ class CoreViewSetTest(IntegrationTestCase):
             "args": {"a": "1", "b": 2},
         }
         expected_transactions = [
-            models.MultiSigTransaction(multisig=multisig, dao_id="DAO1", call_hash="some_call_hash", call=payload)
+            models.MultiSigTransaction(
+                multisig=multisig,
+                dao_id="DAO1",
+                call_hash="some_call_hash",
+                call_function="some_func",
+                call=payload,
+            )
         ]
 
         res = self.client.post(

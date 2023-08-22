@@ -98,8 +98,8 @@ def config(request, *args, **kwargs):
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Account."), "retrieve")
 class AccountViewSet(ReadOnlyModelViewSet, SearchableMixin):
-    allowed_filter_fields = ("id",)
-    allowed_order_fields = ("id",)
+    search_fields = ["address"]
+    ordering_fields = ["address"]
     queryset = models.Account.objects.all()
 
     def get_serializer_class(self):
@@ -118,8 +118,8 @@ class AccountViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
 class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
     queryset = models.Dao.objects.all()
-    allowed_filter_fields = ("id", "name", "creator_id", "owner_id")
-    allowed_order_fields = ("id", "name", "creator_id", "owner_id")
+    search_fields = ["id", "name", "creator__address", "owner__address"]
+    ordering_fields = ["id", "name", "creator_id", "owner_id"]
     pagination_class = MultiQsLimitOffsetPagination
 
     def get_queryset(self):
@@ -273,6 +273,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
                     "multisig": multisig,
                     "call": call_data,
                     "call_hash": call_hash,
+                    "call_function": call_data["function"],
                     "dao_id": dao.id,
                 }
             )
@@ -282,16 +283,16 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Asset."), "retrieve")
 class AssetViewSet(ReadOnlyModelViewSet, SearchableMixin):
-    allowed_filter_fields = ("id", "owner_id", "dao_id")
-    allowed_order_fields = ("id", "owner_id", "dao_id")
+    search_fields = ["id", "owner__address", "dao__id"]
+    ordering_fields = ["id", "owner_id", "dao_id"]
     queryset = models.Asset.objects.all()
     serializer_class = serializers.AssetSerializer
 
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Asset Holding."), "retrieve")
 class AssetHoldingViewSet(ReadOnlyModelViewSet, SearchableMixin):
-    allowed_filter_fields = ("id", "owner_id", "asset_id")
-    allowed_order_fields = ("id", "owner_id", "asset_id")
+    search_fields = ["id", "owner__address", "asset__id"]
+    ordering_fields = ["id", "owner_id", "asset_id"]
     queryset = models.AssetHolding.objects.all()
     serializer_class = serializers.AssetHoldingSerializer
 
@@ -299,8 +300,8 @@ class AssetHoldingViewSet(ReadOnlyModelViewSet, SearchableMixin):
 class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
     queryset = models.Proposal.objects.all()
     serializer_class = serializers.ProposalSerializer
-    allowed_filter_fields = ("id", "dao_id")
-    allowed_order_fields = ("id", "dao_id")
+    search_fields = ["id", "dao__id", "title"]
+    ordering_fields = ["id", "dao_id", "title"]
 
     def get_queryset(self):
         return self.queryset.prefetch_related("votes")
@@ -412,8 +413,8 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
     queryset = models.MultiSig.objects.all()
     pagination_class = MultiQsLimitOffsetPagination
     serializer_class = serializers.MultiSigSerializer
-    allowed_filter_fields = ("address", "dao_id")
-    allowed_order_fields = ("address", "dao_id")
+    search_fields = ["address", "dao__id"]
+    ordering_fields = ["address", "dao_id"]
     lookup_field = "address"
 
     @swagger_auto_schema(
@@ -447,5 +448,5 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
 class MultiSigTransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
     queryset = models.MultiSigTransaction.objects.all()
     serializer_class = serializers.MultiSigTransactionSerializer
-    allowed_filter_fields = ("dao_id", "status", "call_hash", "executed_at")
-    allowed_order_fields = ("dao_id", "status", "call_hash", "executed_at")
+    search_fields = ["dao__id", "call_hash", "call_function", "status", "executed_at"]
+    ordering_fields = ["dao_id", "call_hash", "call_function", "status", "executed_at"]

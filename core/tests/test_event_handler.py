@@ -741,7 +741,7 @@ class EventHandlerTest(IntegrationTestCase):
         models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
         models.Proposal.objects.create(id=1, dao_id="dao1", birth_block_number=10)
         models.Proposal.objects.create(id=2, dao_id="dao2", birth_block_number=10)
-        metadata_1 = {"a": 1}
+        metadata_1 = {"a": 1, "title": "some_title"}
         file_1 = BytesIO(json.dumps(metadata_1).encode())
         metadata_hash_1 = file_handler._hash(file_1.getvalue())
         metadata_2 = {"a": 2}
@@ -801,6 +801,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata=metadata_1,
                 birth_block_number=10,
                 setup_complete=True,
+                title="some_title",
             ),
             models.Proposal(
                 id=2,
@@ -810,6 +811,7 @@ class EventHandlerTest(IntegrationTestCase):
                 metadata=metadata_2,
                 birth_block_number=10,
                 setup_complete=True,
+                title=None,
             ),
         ]
         with self.assertNumQueries(4):

@@ -236,10 +236,11 @@ class MultiSigSerializer(ModelSerializer):
     address = CharField()
     signatories = ListField(child=CharField())
     threshold = IntegerField()
+    dao_id = CharField(required=False, allow_null=True)
 
     class Meta:
         model = models.MultiSig
-        fields = ("address", "signatories", "threshold")
+        fields = ("address", "dao_id", "signatories", "threshold")
 
 
 class CreateMultiSigSerializer(ModelSerializer):
@@ -273,6 +274,7 @@ class CorrespondingModelsSerializer(ModelSerializer):
 
 class MultiSigTransactionSerializer(ModelSerializer):
     multisig_address = CharField(source="multisig.address")
+    threshold = IntegerField(source="multisig.threshold")
     dao_id = CharField(source="dao.id", required=False, allow_null=True)
     call = CallSerializer(required=False)
     corresponding_models = SerializerMethodField()
@@ -287,6 +289,7 @@ class MultiSigTransactionSerializer(ModelSerializer):
             "call_hash",
             "corresponding_models",
             "status",
+            "threshold",
             "approvers",
             "last_approver",
             "executed_at",
