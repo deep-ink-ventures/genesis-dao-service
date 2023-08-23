@@ -926,14 +926,18 @@ class CoreViewSetTest(IntegrationTestCase):
     def test_create_multisig_existing(self, substrate_mock):
         addr = "some_addr"
         substrate_mock.create_multisig_account.return_value = Mock(ss58_address=addr)
-        payload = {"signatories": ["sig1", "sig2"], "threshold": 2}
-        models.MultiSig.objects.create(**payload, address=addr, dao_id="dao1")
-        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 2, "dao_id": "dao1"}
+        payload = {"signatories": ["sig1", "sig2"], "threshold": 3}
+        models.MultiSig.objects.create(threshold=2, address=addr, dao_id="dao1")
+        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 3, "dao_id": "dao1"}
+        expected_multisigs = [
+            models.MultiSig(signatories=["sig1", "sig2"], threshold=3, account_ptr_id=addr, address=addr, dao_id="dao1")
+        ]
 
         res = self.client.post(reverse("core-multisig-list"), data=payload, content_type="application/json")
 
         self.assertEqual(res.status_code, HTTP_200_OK)
         self.assertDictEqual(res.data, expected_res)
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multisigs)
 
     def test_get_transaction(self):
         call_hash = "some_call_hash"

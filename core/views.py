@@ -418,8 +418,8 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
     lookup_field = "address"
 
     @swagger_auto_schema(
-        operation_id="Create MultiSig Account",
-        operation_description="Creates a MultiSig Account",
+        operation_id="Create / Update MultiSig Account",
+        operation_description="Creates or updates a MultiSig Account",
         request_body=serializers.CreateMultiSigSerializer,
         responses={201: openapi.Response("", serializers.MultiSigSerializer)},
         security=[{"Basic": []}],
@@ -430,12 +430,14 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
         serializer = serializers.CreateMultiSigSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.data
-        multisig_acc, created = models.MultiSig.objects.get_or_create(
+        multisig_acc, created = models.MultiSig.objects.update_or_create(
             address=substrate_service.create_multisig_account(
                 signatories=data["signatories"], threshold=data["threshold"]
             ).ss58_address,
-            signatories=data["signatories"],
-            threshold=data["threshold"],
+            defaults={
+                "signatories": data["signatories"],
+                "threshold": data["threshold"],
+            },
         )
         res_data = self.get_serializer(multisig_acc).data
         return Response(
