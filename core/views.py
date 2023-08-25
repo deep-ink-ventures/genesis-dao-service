@@ -22,6 +22,7 @@ from core.view_utils import (
     IsProposalCreator,
     IsTokenHolder,
     MultiQsLimitOffsetPagination,
+    QuerysetMixin,
     SearchableMixin,
     signed_by_dao_owner,
     signed_by_proposal_creator,
@@ -290,20 +291,21 @@ class AssetViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Asset Holding."), "retrieve")
-class AssetHoldingViewSet(ReadOnlyModelViewSet, SearchableMixin):
-    search_fields = ["id", "owner__address", "asset__id"]
-    ordering_fields = ["id", "owner_id", "asset_id"]
+class AssetHoldingViewSet(ReadOnlyModelViewSet, QuerysetMixin):
+    query_fields = ["owner_id", "asset_id"]
     queryset = models.AssetHolding.objects.all()
     serializer_class = serializers.AssetHoldingSerializer
 
 
-class ProposalViewSet(ReadOnlyModelViewSet, SearchableMixin):
+class ProposalViewSet(ReadOnlyModelViewSet, QuerysetMixin, SearchableMixin):
     queryset = models.Proposal.objects.all()
     serializer_class = serializers.ProposalSerializer
-    search_fields = ["id", "dao__id", "title"]
-    ordering_fields = ["id", "dao_id", "title"]
+    query_fields = ["id", "dao_id"]
+    search_fields = ["title"]
+    ordering_fields = ["title"]
 
     def get_queryset(self):
+        self.queryset = super().get_queryset()
         return self.queryset.prefetch_related("votes")
 
     def get_serializer_class(self):
@@ -447,8 +449,9 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
         )
 
 
-class MultiSigTransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
+class MultiSigTransactionViewSet(ReadOnlyModelViewSet, QuerysetMixin, SearchableMixin):
     queryset = models.MultiSigTransaction.objects.all()
     serializer_class = serializers.MultiSigTransactionSerializer
-    search_fields = ["dao__id", "call_hash", "call_function", "status", "executed_at"]
-    ordering_fields = ["dao_id", "call_hash", "call_function", "status", "executed_at"]
+    query_fields = ["dao_id"]
+    search_fields = ["call_hash", "call_function", "status", "executed_at"]
+    ordering_fields = ["call_hash", "call_function", "status", "executed_at"]

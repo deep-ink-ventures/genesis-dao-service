@@ -122,6 +122,10 @@ class CoreViewSetTest(IntegrationTestCase):
         models.Vote.objects.create(proposal_id=1, voter_id="acc4", voting_power=100)
         models.Vote.objects.create(proposal_id=2, voter_id="acc2", in_favor=False, voting_power=200)
 
+    def test_queryset_filter(self):
+        res = self.client.get(reverse("core-proposal-list") + "?dao_id=dao2")
+        self.assertEqual(res.json()["results"][0]["dao_id"], "dao2")
+
     def test_welcome(self):
         expected_res = {"success": True, "message": "Welcome traveler."}
         with self.assertNumQueries(0):
@@ -167,6 +171,7 @@ class CoreViewSetTest(IntegrationTestCase):
             substrate_service.retrieve_account_balance = Mock(return_value=expected_balance)
 
         expected_res = {"address": "acc1", "balance": expected_balance}
+        self.client.get(reverse("core-account-detail", kwargs={"pk": "acc1"}))
 
         with self.assertNumQueries(1):
             res = self.client.get(reverse("core-account-detail", kwargs={"pk": "acc1"}))

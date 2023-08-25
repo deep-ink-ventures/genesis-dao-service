@@ -4,6 +4,7 @@ from typing import Optional
 
 from django.db.models import QuerySet
 from drf_yasg import openapi
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.pagination import LimitOffsetPagination
@@ -143,6 +144,19 @@ signed_by_token_holder = openapi.Parameter(
     type=openapi.TYPE_STRING,
     format=openapi.FORMAT_BASE64,
 )
+
+
+class QuerysetMixin(GenericViewSet):
+    query_fields = []
+
+    def get_queryset(self):
+        for field in self.query_fields:
+            if self.request.query_params.get(field):
+                try:
+                    self.queryset = self.queryset.filter(**{field: self.request.query_params[field]})
+                except ValueError:
+                    raise ValidationError({field: "Invalid value for field."})
+        return self.queryset
 
 
 class SearchableMixin(GenericViewSet):

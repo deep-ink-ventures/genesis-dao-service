@@ -2,9 +2,10 @@ from unittest.mock import Mock
 
 from ddt import data, ddt
 from django.db import connection, models
+from rest_framework.exceptions import ValidationError
 
 from core.tests.testcases import IntegrationTestCase, UnitTestCase
-from core.view_utils import MultiQsLimitOffsetPagination, SearchableMixin
+from core.view_utils import MultiQsLimitOffsetPagination, QuerysetMixin, SearchableMixin
 
 
 class TestModel(models.Model):
@@ -74,3 +75,22 @@ class SearchableMixinTest(UnitTestCase):
 
         # shouldn't raise
         _SearchableMixin(nice_kwarg="idd")
+
+
+class QuerysetMixinTest(IntegrationTestCase):
+    def test_query_fields(self):
+        with connection.cursor() as cursor:
+            cursor.execute("create table if not exists core_testmodel (id serial not null primary key);")
+            TestModel.objects.bulk_create([TestModel(id=i) for i in range(1, 11)])
+
+            mixin = QuerysetMixin()
+            mixin.query_fields = ["id"]
+            mixin.queryset = TestModel.objects.all()
+            mixin.request = Mock(query_params={"id": "foo"})
+            with self.assertRaises(ValidationError):
+                mixin.get_queryset().__str__()
+
+            mixin.request = Mock(query_params={"id": "1"})
+            self.assertEqual(mixin.get_queryset().query.__str__(), TestModel.objects.filter(id=1).query.__str__())
+
+            cursor.execute("drop table if exists core_testmodel;")
