@@ -103,6 +103,7 @@ class CoreViewSetTest(IntegrationTestCase):
             metadata_hash="hash1",
             metadata={"a": 1},
             birth_block_number=10,
+            title="t1",
         )
         models.Proposal.objects.create(
             id=2,
@@ -619,6 +620,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "metadata_hash": "hash1",
             "fault": None,
             "status": models.ProposalStatus.RUNNING,
+            "title": "t1",
             "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
             "birth_block_number": 10,
             "setup_complete": False,
@@ -641,6 +643,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata_hash": "hash1",
                     "fault": None,
                     "status": models.ProposalStatus.RUNNING,
+                    "title": "t1",
                     "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
                     "birth_block_number": 10,
                     "setup_complete": False,
@@ -654,6 +657,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "metadata_hash": "hash2",
                     "fault": "some reason",
                     "status": models.ProposalStatus.FAULTED,
+                    "title": None,
                     "votes": {"pro": 0, "contra": 200, "abstained": 0, "total": 200},
                     "birth_block_number": 15,
                     "setup_complete": True,
@@ -910,7 +914,7 @@ class CoreViewSetTest(IntegrationTestCase):
             {"address": "addr2", "signatories": ["sig1", "sig2", "sig3"], "threshold": 3, "dao_id": None},
         ]
 
-        res = self.client.get(reverse("core-multisig-list"), {"order_by": "address"})
+        res = self.client.get(reverse("core-multisig-list"), {"ordering": "address"})
 
         self.assertEqual(res.status_code, HTTP_200_OK)
         self.assertDictEqual(res.data, wrap_in_pagination_res(expected_multisigs))
@@ -986,6 +990,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "dao_id": "dao1",
                     "creator_id": "acc1",
                     "status": models.ProposalStatus.RUNNING,
+                    "title": "t1",
                     "fault": None,
                     "votes": {"pro": 800, "contra": 100, "abstained": 100, "total": 1000},
                     "metadata": {"a": 1},

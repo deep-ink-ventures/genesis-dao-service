@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from itertools import chain
 from types import FunctionType
 from typing import Optional
 
@@ -146,23 +147,34 @@ signed_by_token_holder = openapi.Parameter(
 )
 
 
-class QuerysetMixin(GenericViewSet):
-    query_fields = []
+class QueryFilter:
+    always_accept = ["id"]
+    ignored_filter_fields = ["limit", "offset", "ordering", "search"]
 
-    def get_queryset(self):
-        for field in self.query_fields:
-            if self.request.query_params.get(field):
-                try:
-                    self.queryset = self.queryset.filter(**{field: self.request.query_params[field]})
-                except ValueError:
-                    raise ValidationError({field: "Invalid value for field."})
-        return self.queryset
+    def filter_queryset(self, request, queryset, view):
+        filters = {}
+        filter_fields = getattr(view, "filter_fields", ())
+        for field, value in request.query_params.items():
+            if field in self.ignored_filter_fields:
+                continue
+            if field in self.always_accept:
+                filters[field] = value
+                continue
+            if field not in filter_fields:
+                raise ValidationError(
+                    f"'{field}' is an invalid filter field. Choices are:"
+                    f" {', '.join(chain(self.always_accept, filter_fields))}"
+                )
+            filters[field] = value
+
+        return queryset.filter(**filters)
 
 
 class SearchableMixin(GenericViewSet):
+    filter_fields = []
     search_fields = []
     ordering_fields = []
-    filter_backends = [SearchFilter, OrderingFilter]
+    filter_backends = [SearchFilter, OrderingFilter, QueryFilter]
 
     @staticmethod
     def _copy_func(f):
@@ -226,6 +238,22 @@ class SearchableMixin(GenericViewSet):
                             "example": "some_value",
                         }
                     )
+                )
+
+            if self.filter_fields:
+                manual_parameters.extend(
+                    [
+                        swagger_query_param(
+                            **{
+                                "name": f"{filter_field}",
+                                "description": f"Filter results by {filter_field}.",
+                                "type": openapi.TYPE_STRING,
+                                "required": False,
+                                "example": "some_value",
+                            }
+                        )
+                        for filter_field in self.filter_fields
+                    ]
                 )
 
             name = self.queryset.model._meta.verbose_name_plural  # noqa

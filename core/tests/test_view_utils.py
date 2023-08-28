@@ -5,11 +5,48 @@ from django.db import connection, models
 from rest_framework.exceptions import ValidationError
 
 from core.tests.testcases import IntegrationTestCase, UnitTestCase
-from core.view_utils import MultiQsLimitOffsetPagination, QuerysetMixin, SearchableMixin
+from core.view_utils import MultiQsLimitOffsetPagination, QueryFilter, SearchableMixin
 
 
 class TestModel(models.Model):
     pass
+
+
+@ddt
+class QueryFilterTest(UnitTestCase):
+    def setUp(self) -> None:
+        self.filter_backend = QueryFilter()
+
+    @data(
+        # query_params, filter_fields, expected err msg
+        # no allowed filter fields
+        ({"a": 1}, (), "'a' is an invalid filter field. Choices are: id"),
+        # not in allowed filter fields
+        ({"a": 1, "b": 1}, ("a",), "'b' is an invalid filter field. Choices are: id, a"),
+        # happy paths
+        ({}, (), None),
+        ({"id": 1}, (), None),
+        ({"id": 1}, (), None),
+        ({"a": 1}, ("a",), None),
+        ({"a": 1}, ("a", "b"), None),
+        ({"a": 1, "b": 2}, ("a", "b"), None),
+    )
+    def test_filter_queryset(self, case):
+        query_params, filter_fields, expected_err_msg = case
+        request = Mock(query_params=query_params)
+        qs = Mock()
+        view = Mock(filter_fields=filter_fields)
+
+        if expected_err_msg:
+            with self.assertRaisesMessage(ValidationError, expected_err_msg):
+                self.assertIsNone(self.filter_backend.filter_queryset(request=request, queryset=qs, view=view))
+        else:
+            self.filter_backend.filter_queryset(request=request, queryset=qs, view=view)
+
+            if query_params:
+                qs.filter.assert_called_once_with(**query_params)
+            else:
+                qs.filter.assert_called_once_with()
 
 
 @ddt
@@ -75,22 +112,3 @@ class SearchableMixinTest(UnitTestCase):
 
         # shouldn't raise
         _SearchableMixin(nice_kwarg="idd")
-
-
-class QuerysetMixinTest(IntegrationTestCase):
-    def test_query_fields(self):
-        with connection.cursor() as cursor:
-            cursor.execute("create table if not exists core_testmodel (id serial not null primary key);")
-            TestModel.objects.bulk_create([TestModel(id=i) for i in range(1, 11)])
-
-            mixin = QuerysetMixin()
-            mixin.query_fields = ["id"]
-            mixin.queryset = TestModel.objects.all()
-            mixin.request = Mock(query_params={"id": "foo"})
-            with self.assertRaises(ValidationError):
-                mixin.get_queryset().__str__()
-
-            mixin.request = Mock(query_params={"id": "1"})
-            self.assertEqual(mixin.get_queryset().query.__str__(), TestModel.objects.filter(id=1).query.__str__())
-
-            cursor.execute("drop table if exists core_testmodel;")

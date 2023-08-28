@@ -187,6 +187,7 @@ class ProposalSerializer(ModelSerializer):
             "dao_id",
             "creator_id",
             "status",
+            "title",
             "fault",
             "votes",
             "metadata",
