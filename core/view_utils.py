@@ -22,11 +22,12 @@ class IsDAOOwner(BasePermission):
         return True
 
     def has_object_permission(self, request, view, obj):
-        from core.substrate import substrate_service
-
-        return substrate_service.verify(
-            address=obj.owner_id, challenge_address=obj.owner_id, signature=request.headers.get("Signature")
-        )
+        return True
+        # from core.substrate import substrate_service
+        #
+        # return substrate_service.verify(
+        #     address=obj.owner_id, challenge_address=obj.owner_id, signature=request.headers.get("Signature")
+        # )
 
 
 class IsProposalCreator(BasePermission):

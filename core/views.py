@@ -205,7 +205,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         methods=["POST"],
         detail=True,
         url_path="metadata",
-        permission_classes=[],
+        permission_classes=[IsDAOOwner],
         authentication_classes=[],
     )
     def add_metadata(self, request, *args, **kwargs):
