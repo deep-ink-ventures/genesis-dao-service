@@ -1192,6 +1192,32 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertListEqual(list(models.MultiSigTransaction.objects.all()), [])
 
     @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
+    def test_create_multisig_transaction_wrong_call_data(self, create_multisig_transaction_call_hash_mock):
+        create_multisig_transaction_call_hash_mock.side_effect = ValueError()
+        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+
+        payload = {
+            "hash": "another_hash",
+            "module": "another_module",
+            "function": "different_func",
+            "args": {},
+            "data": "another_call_data_test",
+        }
+
+        res = self.client.post(
+            reverse("core-dao-create-multisig-transaction", kwargs={"pk": "DAO1"}),
+            payload,
+            content_type="application/json",
+            HTTP_SIGNATURE=signature,
+        )
+
+        self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
+        self.assertDictEqual(res.data, {"message": "Invalid call data."})
+        self.assertListEqual(list(models.MultiSigTransaction.objects.all()), [])
+
+    @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
     def test_create_multisig_transaction_missing_multisig(self, create_multisig_transaction_call_hash_mock):
         create_multisig_transaction_call_hash_mock.return_value = "some_call_hash"
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
