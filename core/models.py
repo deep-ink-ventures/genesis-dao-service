@@ -215,6 +215,7 @@ class MultiSigTransaction(TimestampableMixin):
     executed_at = models.DateTimeField(null=True, blank=True)
     canceled_by = models.CharField(max_length=256, null=True)
     # denormalizations
+    call_data = models.CharField(max_length=1024)
     call_hash = models.CharField(max_length=256)
     call_function = models.CharField(max_length=256, null=True)
     asset = models.ForeignKey(Asset, related_name="transactions", null=True, on_delete=models.SET_NULL)

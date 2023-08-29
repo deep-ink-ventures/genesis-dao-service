@@ -254,8 +254,8 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        call_data = serializer.data
-        if (call_hash := call_data["hash"]) != substrate_service.create_multisig_transaction_call_hash(**call_data):
+        raw_call = serializer.data
+        if (call_hash := raw_call["hash"]) != substrate_service.create_multisig_transaction_call_hash(**raw_call):
             return Response(data={"message": "Invalid call hash."}, status=HTTP_400_BAD_REQUEST)
 
         dao = self.get_object()
@@ -269,11 +269,12 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         res_data = serializers.MultiSigTransactionSerializer(
             models.MultiSigTransaction.objects.create(
                 **{
-                    **substrate_service.parse_call_data(call_data=call_data),
+                    **substrate_service.parse_call_data(call_data=raw_call),
                     "multisig": multisig,
-                    "call": call_data,
+                    "call": raw_call,
                     "call_hash": call_hash,
-                    "call_function": call_data["function"],
+                    "call_function": raw_call["function"],
+                    "call_data": raw_call["data"],
                     "dao_id": dao.id,
                 }
             )

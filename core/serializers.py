@@ -258,9 +258,10 @@ class CallSerializer(Serializer):
     module = CharField()
     function = CharField()
     args = JSONField()
+    data = CharField()
 
     class Meta:
-        fields = ("hash", "module", "function", "args")
+        fields = ("hash", "module", "function", "args", "data")
 
 
 class CorrespondingModelsSerializer(ModelSerializer):
@@ -288,6 +289,7 @@ class MultiSigTransactionSerializer(ModelSerializer):
             "dao_id",
             "call",
             "call_hash",
+            "call_data",
             "corresponding_models",
             "status",
             "threshold",

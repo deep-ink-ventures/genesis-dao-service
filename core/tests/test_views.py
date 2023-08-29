@@ -950,12 +950,20 @@ class CoreViewSetTest(IntegrationTestCase):
 
     def test_get_transaction(self):
         call_hash = "some_call_hash"
-        call = {"hash": call_hash, "module": "some_module", "function": "some_function", "args": {"some": "args"}}
+        call_data = "call_data_test"
+        call = {
+            "hash": call_hash,
+            "data": call_data,
+            "module": "some_module",
+            "function": "some_function",
+            "args": {"some": "args"},
+        }
         txn1 = models.MultiSigTransaction.objects.create(
             multisig=models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2"], threshold=2),
             dao_id="dao1",
             asset_id=1,
             proposal_id=1,
+            call_data=call_data,
             call_hash=call_hash,
             call=call,
             approvers=["sig1", "sig2"],
@@ -965,6 +973,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "multisig_address": "addr1",
             "dao_id": "dao1",
             "call": call,
+            "call_data": call_data,
             "call_hash": call_hash,
             "corresponding_models": {
                 "asset": {"id": 1, "dao_id": "dao1", "owner_id": "acc1", "total_supply": 1000},
@@ -1019,12 +1028,14 @@ class CoreViewSetTest(IntegrationTestCase):
         txn1 = models.MultiSigTransaction.objects.create(
             multisig=models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2"], threshold=2),
             dao_id="dao1",
+            call_data="call_data1",
             call_hash="call_hash1",
             call={
                 "hash": "call_hash1",
                 "module": "some_module1",
                 "function": "some_function1",
                 "args": {"some1": "args1"},
+                "data": "call_data1",
             },
             approvers=["sig1", "sig2"],
             executed_at=now(),
@@ -1033,6 +1044,7 @@ class CoreViewSetTest(IntegrationTestCase):
         txn2 = models.MultiSigTransaction.objects.create(
             multisig=models.MultiSig.objects.create(address="addr2", signatories=["sig3", "sig4"], threshold=3),
             call_hash="call_hash2",
+            call_data="call_data2",
         )
         expected_res = wrap_in_pagination_res(
             [
@@ -1045,7 +1057,9 @@ class CoreViewSetTest(IntegrationTestCase):
                         "module": "some_module1",
                         "function": "some_function1",
                         "args": {"some1": "args1"},
+                        "data": "call_data1",
                     },
+                    "call_data": "call_data1",
                     "call_hash": "call_hash1",
                     "corresponding_models": {
                         "asset": None,
@@ -1083,6 +1097,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "dao_id": None,
                     "call": None,
                     "call_hash": "call_hash2",
+                    "call_data": "call_data2",
                     "corresponding_models": {
                         "asset": None,
                         "dao": None,
@@ -1101,9 +1116,8 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         res = self.client.get(reverse("core-multisig-transaction-list"))
-
         self.assertEqual(res.status_code, HTTP_200_OK)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
     def test_create_multisig_transaction(self, create_multisig_transaction_call_hash_mock):
@@ -1119,12 +1133,14 @@ class CoreViewSetTest(IntegrationTestCase):
             "hash": "some_call_hash",
             "module": "some_module",
             "function": "some_func",
+            "data": "call_data_test",
             "args": {"a": "1", "b": 2},
         }
         expected_transactions = [
             models.MultiSigTransaction(
                 multisig=multisig,
                 dao_id="DAO1",
+                call_data="call_data_test",
                 call_hash="some_call_hash",
                 call_function="some_func",
                 call=payload,
@@ -1161,6 +1177,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "module": "some_module",
             "function": "some_func",
             "args": {"a": "1", "b": 2},
+            "data": "call_data_test",
         }
 
         res = self.client.post(
@@ -1190,6 +1207,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "module": "some_module",
             "function": "some_func",
             "args": {"a": "1", "b": 2},
+            "data": "call_data_test",
         }
 
         res = self.client.post(
