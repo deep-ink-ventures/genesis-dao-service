@@ -509,7 +509,7 @@ class SubstrateService(object):
         """
         return self.substrate_interface.generate_multisig_account(signatories=signatories, threshold=threshold)
 
-    def create_multisig_transaction_call_hash(self, module: str, function: str, args: dict, *_) -> str:
+    def create_multisig_transaction_call_hash(self, module: str, function: str, args: dict, *_, **__) -> str:
         """
         Args:
             module : name of the call module
