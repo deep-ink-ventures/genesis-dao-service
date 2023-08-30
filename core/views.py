@@ -418,6 +418,7 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
     queryset = models.MultiSig.objects.all()
     pagination_class = MultiQsLimitOffsetPagination
     serializer_class = serializers.MultiSigSerializer
+    filter_fields = ["dao_id"]
     search_fields = ["address", "dao__id"]
     ordering_fields = ["address", "dao_id"]
     lookup_field = "address"
