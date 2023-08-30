@@ -12,6 +12,8 @@ from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import BasePermission
 from rest_framework.viewsets import GenericViewSet
 
+from core import models as core_models
+
 
 class IsDAOOwner(BasePermission):
     message = {
@@ -22,12 +24,20 @@ class IsDAOOwner(BasePermission):
         return True
 
     def has_object_permission(self, request, view, obj):
-        return True
-        # from core.substrate import substrate_service
-        #
-        # return substrate_service.verify(
-        #     address=obj.owner_id, challenge_address=obj.owner_id, signature=request.headers.get("Signature")
-        # )
+        from core.substrate import substrate_service
+
+        signature = request.headers.get("Signature")
+        owner_addr = obj.owner_id
+        try:
+            multisig = core_models.MultiSig.objects.get(address=owner_addr)
+        except core_models.MultiSig.DoesNotExist:
+            return substrate_service.verify(address=owner_addr, challenge_address=owner_addr, signature=signature)
+
+        # in case the owner addr is a multisig acc we accept any of the signatories
+        return any(
+            substrate_service.verify(address=signatory, challenge_address=owner_addr, signature=signature)
+            for signatory in [owner_addr, *multisig.signatories]
+        )
 
 
 class IsProposalCreator(BasePermission):

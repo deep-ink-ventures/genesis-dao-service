@@ -505,6 +505,93 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertEqual(res.status_code, HTTP_201_CREATED)
         self.assertDictEqual(res.data, expected_res)
 
+    def test_dao_add_metadata_multisig_signatory(self):
+        multisig_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        signatory_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=multisig_kp.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(signatory_kp.sign(data=self.challenge_key)).decode()
+        acc = models.MultiSig.objects.create(
+            address=multisig_kp.ss58_address, signatories=[signatory_kp.ss58_address, "sig2"]
+        )
+        models.Dao.objects.create(id="DAO1", name="dao1 name", owner=acc)
+
+        with open("core/tests/test_file.jpeg", "rb") as f:
+            post_data = {
+                "email": "some@email.com",
+                "description_short": "short description",
+                "description_long": "long description",
+                "logo": base64.b64encode(f.read()).decode(),
+            }
+        expected_res = {
+            "metadata": {
+                "description_short": "short description",
+                "description_long": "long description",
+                "email": "some@email.com",
+                "images": {
+                    "logo": {
+                        "content_type": "image/jpeg",
+                        "large": {"url": "https://some_storage.some_region.com/DAO1/logo_large.jpeg"},
+                        "medium": {"url": "https://some_storage.some_region.com/DAO1/logo_medium.jpeg"},
+                        "small": {"url": "https://some_storage.some_region.com/DAO1/logo_small.jpeg"},
+                    }
+                },
+            },
+            "metadata_hash": "a1a0591662255e72aba330746eee9a50815d4580efaf3e60aa687c7ac12d473d",
+            "metadata_url": "https://some_storage.some_region.com/DAO1/metadata.json",
+        }
+
+        res = self.client.post(
+            reverse("core-dao-add-metadata", kwargs={"pk": "DAO1"}),
+            post_data,
+            content_type="application/json",
+            HTTP_SIGNATURE=signature,
+        )
+
+        self.assertEqual(res.status_code, HTTP_201_CREATED)
+        self.assertDictEqual(res.data, expected_res)
+
+    def test_dao_add_metadata_multisig_addr(self):
+        multisig_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=multisig_kp.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(multisig_kp.sign(data=self.challenge_key)).decode()
+        acc = models.MultiSig.objects.create(address=multisig_kp.ss58_address, signatories=["sig1", "sig2"])
+        models.Dao.objects.create(id="DAO1", name="dao1 name", owner=acc)
+
+        with open("core/tests/test_file.jpeg", "rb") as f:
+            post_data = {
+                "email": "some@email.com",
+                "description_short": "short description",
+                "description_long": "long description",
+                "logo": base64.b64encode(f.read()).decode(),
+            }
+        expected_res = {
+            "metadata": {
+                "description_short": "short description",
+                "description_long": "long description",
+                "email": "some@email.com",
+                "images": {
+                    "logo": {
+                        "content_type": "image/jpeg",
+                        "large": {"url": "https://some_storage.some_region.com/DAO1/logo_large.jpeg"},
+                        "medium": {"url": "https://some_storage.some_region.com/DAO1/logo_medium.jpeg"},
+                        "small": {"url": "https://some_storage.some_region.com/DAO1/logo_small.jpeg"},
+                    }
+                },
+            },
+            "metadata_hash": "a1a0591662255e72aba330746eee9a50815d4580efaf3e60aa687c7ac12d473d",
+            "metadata_url": "https://some_storage.some_region.com/DAO1/metadata.json",
+        }
+
+        res = self.client.post(
+            reverse("core-dao-add-metadata", kwargs={"pk": "DAO1"}),
+            post_data,
+            content_type="application/json",
+            HTTP_SIGNATURE=signature,
+        )
+
+        self.assertEqual(res.status_code, HTTP_201_CREATED)
+        self.assertDictEqual(res.data, expected_res)
+
     def test_dao_add_metadata_invalid_image_file(self):
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
         cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
@@ -576,6 +663,40 @@ class CoreViewSetTest(IntegrationTestCase):
             post_data,
             content_type="application/json",
             HTTP_SIGNATURE="wrong signature",
+        )
+
+        self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            res.data,
+            {
+                "error": ErrorDetail(
+                    code="permission_denied",
+                    string="Only the DAO owner has access to this action. "
+                    "Header needs to contain signature=*signed-challenge*.",
+                )
+            },
+        )
+
+    def test_dao_add_metadata_403_not_a_signatory(self):
+        multisig_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        other_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=multisig_kp.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(other_kp.sign(data=self.challenge_key)).decode()
+        acc = models.MultiSig.objects.create(address=multisig_kp.ss58_address, signatories=["sig1", "sig2"])
+        models.Dao.objects.create(id="DAO1", name="dao1 name", owner=acc)
+
+        with open("core/tests/test_file.jpeg", "rb") as f:
+            post_data = {
+                "email": "some@email.com",
+                "description": "some description",
+                "logo": base64.b64encode(f.read()).decode(),
+            }
+
+        res = self.client.post(
+            reverse("core-dao-add-metadata", kwargs={"pk": "DAO1"}),
+            post_data,
+            content_type="application/json",
+            HTTP_SIGNATURE=signature,
         )
 
         self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
@@ -948,7 +1069,7 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertDictEqual(res.data, expected_res)
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multisigs)
 
-    def test_get_transaction(self):
+    def test_get_multisig_transaction(self):
         call_hash = "some_call_hash"
         call_data = "call_data_test"
         call = {
@@ -1024,7 +1145,7 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertEqual(res.status_code, HTTP_200_OK)
         self.assertDictEqual(res.data, expected_res)
 
-    def test_list_transactions(self):
+    def test_list_multisig_transactions(self):
         txn1 = models.MultiSigTransaction.objects.create(
             multisig=models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2"], threshold=2),
             dao_id="dao1",
@@ -1116,17 +1237,19 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         res = self.client.get(reverse("core-multisig-transaction-list"))
+
         self.assertEqual(res.status_code, HTTP_200_OK)
-        self.assertDictEqual(res.json(), expected_res)
+        self.assertDictEqual(res.data, expected_res)
 
     @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
     def test_create_multisig_transaction(self, create_multisig_transaction_call_hash_mock):
         create_multisig_transaction_call_hash_mock.return_value = "some_call_hash"
-        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
-        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        multisig_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        signatory_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=multisig_kp.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(signatory_kp.sign(data=self.challenge_key)).decode()
         multisig = models.MultiSig.objects.create(
-            address=keypair.ss58_address, signatories=["sig1", "sig2"], threshold=2
+            address=multisig_kp.ss58_address, signatories=[signatory_kp.ss58_address, "sig2"], threshold=2
         )
         models.Dao.objects.create(id="DAO1", name="dao1 name", owner=multisig)
         payload = {
@@ -1165,11 +1288,12 @@ class CoreViewSetTest(IntegrationTestCase):
     @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
     def test_create_multisig_transaction_wrong_hash(self, create_multisig_transaction_call_hash_mock):
         create_multisig_transaction_call_hash_mock.return_value = "different_hash"
-        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
-        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        multisig_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        signatory_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=multisig_kp.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(signatory_kp.sign(data=self.challenge_key)).decode()
         multisig = models.MultiSig.objects.create(
-            address=keypair.ss58_address, signatories=["sig1", "sig2"], threshold=2
+            address=multisig_kp.ss58_address, signatories=[signatory_kp.ss58_address, "sig2"], threshold=2
         )
         models.Dao.objects.create(id="DAO1", name="dao1 name", owner=multisig)
         payload = {
@@ -1194,9 +1318,10 @@ class CoreViewSetTest(IntegrationTestCase):
     @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
     def test_create_multisig_transaction_wrong_call_data(self, create_multisig_transaction_call_hash_mock):
         create_multisig_transaction_call_hash_mock.side_effect = ValueError()
-        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
-        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        multisig_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        signatory_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=multisig_kp.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(signatory_kp.sign(data=self.challenge_key)).decode()
 
         payload = {
             "hash": "another_hash",
@@ -1220,13 +1345,13 @@ class CoreViewSetTest(IntegrationTestCase):
     @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
     def test_create_multisig_transaction_missing_multisig(self, create_multisig_transaction_call_hash_mock):
         create_multisig_transaction_call_hash_mock.return_value = "some_call_hash"
-        keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
-        cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)
-        signature = base64.b64encode(keypair.sign(data=self.challenge_key)).decode()
+        signatory_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=signatory_kp.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(signatory_kp.sign(data=self.challenge_key)).decode()
         models.Dao.objects.create(
             id="DAO1",
             name="dao1 name",
-            owner=models.Account.objects.create(address=keypair.ss58_address),
+            owner=models.Account.objects.create(address=signatory_kp.ss58_address),
         )
         payload = {
             "hash": "some_call_hash",
