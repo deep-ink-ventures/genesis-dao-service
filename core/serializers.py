@@ -259,9 +259,10 @@ class CallSerializer(Serializer):
     function = CharField()
     args = JSONField()
     data = CharField()
+    timepoint = JSONField()
 
     class Meta:
-        fields = ("hash", "module", "function", "args", "data")
+        fields = ("hash", "module", "function", "args", "data", "timepoint")
 
 
 class CorrespondingModelsSerializer(ModelSerializer):
@@ -290,6 +291,7 @@ class MultiSigTransactionSerializer(ModelSerializer):
             "call",
             "call_hash",
             "call_data",
+            "timepoint",
             "corresponding_models",
             "status",
             "threshold",

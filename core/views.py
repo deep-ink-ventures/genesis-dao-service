@@ -279,6 +279,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
                     "call_function": raw_call["function"],
                     "call_data": raw_call["data"],
                     "dao_id": dao.id,
+                    "timepoint": raw_call["timepoint"],
                 }
             )
         ).data
