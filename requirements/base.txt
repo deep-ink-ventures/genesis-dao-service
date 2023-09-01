@@ -8,7 +8,7 @@ drf-extra-fields==3.4.1
 psycopg2==2.9.5
 channels==4.0.0
 daphne==4.0.0
-substrate-interface==1.4.2
+substrate-interface==1.7.4
 pillow==9.4.0
 boto3==1.26.75
 drf-yasg==1.21.5

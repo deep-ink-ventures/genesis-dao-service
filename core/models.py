@@ -214,7 +214,7 @@ class MultiSigTransaction(TimestampableMixin):
     status = models.CharField(max_length=16, choices=TransactionStatus.as_choices(), default=TransactionStatus.PENDING)
     executed_at = models.DateTimeField(null=True, blank=True)
     canceled_by = models.CharField(max_length=256, null=True)
-    timepoint = models.JSONField(default=dict)
+    timepoint = models.JSONField(null=True)
 
     # denormalizations
     call_data = models.CharField(max_length=1024)

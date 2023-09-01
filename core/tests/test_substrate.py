@@ -6,7 +6,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db import connection
 from django.test import override_settings
-from substrateinterface import Keypair
+from substrateinterface.keypair import Keypair
 from websocket import WebSocketConnectionClosedException
 
 from core import models
@@ -36,6 +36,14 @@ class SubstrateServiceTest(IntegrationTestCase):
             extrinsic=self.si.create_signed_extrinsic(),
             wait_for_inclusion=False,
         )
+
+    def assert_blocks_equal(self, block_one: models.Block, block_two: models.Block):
+        self.assertEqual(block_one.number, block_two.number)
+        self.assertEqual(block_one.hash, block_two.hash)
+        self.assertEqual(block_one.parent_hash, block_two.parent_hash)
+        self.assertDictEqual(block_one.extrinsic_data, block_two.extrinsic_data)
+        self.assertDictEqual(block_one.event_data, block_two.event_data)
+        self.assertEqual(block_one.executed, block_two.executed)
 
     def test___exit__(self):
         self.substrate_service.__exit__(None, None, None)
@@ -80,13 +88,36 @@ class SubstrateServiceTest(IntegrationTestCase):
 
         logger_mock.error.assert_called_once_with("Error during extrinsic submission: {'name': 'some error'}")
 
-    def assert_blocks_equal(self, block_one: models.Block, block_two: models.Block):
-        self.assertEqual(block_one.number, block_two.number)
-        self.assertEqual(block_one.hash, block_two.hash)
-        self.assertEqual(block_one.parent_hash, block_two.parent_hash)
-        self.assertDictEqual(block_one.extrinsic_data, block_two.extrinsic_data)
-        self.assertDictEqual(block_one.event_data, block_two.event_data)
-        self.assertEqual(block_one.executed, block_two.executed)
+    def test_batch(self):
+        calls = Mock()
+
+        self.substrate_service.batch(calls=calls, keypair=self.keypair)
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Utility",
+            call_function="batch_all",
+            call_params={"calls": calls},
+        )
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
+
+    def test_batch_as_multisig(self):
+        calls = Mock()
+        multisig_acc = Mock()
+
+        self.substrate_service.batch_as_multisig(calls=calls, multisig_account=multisig_acc, keypair=self.keypair)
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Utility",
+            call_function="batch_all",
+            call_params={"calls": calls},
+        )
+        self.si.create_multisig_extrinsic.assert_called_once_with(
+            call=self.si.compose_call(), multisig_account=multisig_acc, keypair=self.keypair
+        )
+        self.si.submit_extrinsic.assert_called_once_with(
+            extrinsic=self.si.create_multisig_extrinsic(),
+            wait_for_inclusion=False,
+        )
 
     def test_retrieve_account_balance(self):
         account_address = "some_address"

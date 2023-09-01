@@ -255,11 +255,11 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         raw_call = serializer.data
-        # try:
-        #     if (call_hash := raw_call["hash"]) != substrate_service.create_multisig_transaction_call_hash(**raw_call):
-        #         return Response(data={"message": "Invalid call hash."}, status=HTTP_400_BAD_REQUEST)
-        # except ValueError:
-        #     return Response(data={"message": "Invalid call data."}, status=HTTP_400_BAD_REQUEST)
+        try:
+            if (call_hash := raw_call["hash"]) != substrate_service.create_multisig_transaction_call_hash(**raw_call):
+                return Response(data={"message": "Invalid call hash."}, status=HTTP_400_BAD_REQUEST)
+        except ValueError:
+            return Response(data={"message": "Invalid call data."}, status=HTTP_400_BAD_REQUEST)
 
         dao = self.get_object()
         try:
@@ -268,22 +268,25 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
             return Response(
                 data={"message": "No MultiSig Account exists for the given Dao."}, status=HTTP_400_BAD_REQUEST
             )
+        txn, created = models.MultiSigTransaction.objects.update_or_create(
+            **{
+                **substrate_service.parse_call_data(call_data=raw_call),
+                "multisig": multisig,
+                "call": raw_call,
+                "call_hash": call_hash,
+                "call_function": raw_call["function"],
+                "call_data": raw_call["data"],
+                "dao_id": dao.id,
+                "timepoint": raw_call["timepoint"],
+            }
+        )
 
-        res_data = serializers.MultiSigTransactionSerializer(
-            models.MultiSigTransaction.objects.create(
-                **{
-                    **substrate_service.parse_call_data(call_data=raw_call),
-                    "multisig": multisig,
-                    "call": raw_call,
-                    "call_hash": raw_call["hash"],
-                    "call_function": raw_call["function"],
-                    "call_data": raw_call["data"],
-                    "dao_id": dao.id,
-                    "timepoint": raw_call["timepoint"],
-                }
-            )
-        ).data
-        return Response(data=res_data, status=HTTP_201_CREATED, headers=self.get_success_headers(data=res_data))
+        res_data = serializers.MultiSigTransactionSerializer(txn).data
+        return Response(
+            data=res_data,
+            status=HTTP_201_CREATED if created else HTTP_200_OK,
+            headers=self.get_success_headers(data=res_data),
+        )
 
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Asset."), "retrieve")
@@ -457,6 +460,5 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
 class MultiSigTransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
     queryset = models.MultiSigTransaction.objects.all()
     serializer_class = serializers.MultiSigTransactionSerializer
-    filter_fields = ["dao_id"]
-    search_fields = ["call_hash", "call_function", "status", "executed_at"]
+    filter_fields = ["dao_id", "call_hash"]
     ordering_fields = ["call_hash", "call_function", "status", "executed_at"]

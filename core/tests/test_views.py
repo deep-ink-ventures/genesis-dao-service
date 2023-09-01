@@ -18,7 +18,7 @@ from rest_framework.status import (
     HTTP_403_FORBIDDEN,
     HTTP_429_TOO_MANY_REQUESTS,
 )
-from substrateinterface import Keypair
+from substrateinterface.keypair import Keypair
 
 from core import models
 from core.serializers import MultiSigTransactionSerializer
@@ -1078,6 +1078,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "module": "some_module",
             "function": "some_function",
             "args": {"some": "args"},
+            "timepoint": {"some": "timepoint"},
         }
         txn1 = models.MultiSigTransaction.objects.create(
             multisig=models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2"], threshold=2),
@@ -1088,6 +1089,7 @@ class CoreViewSetTest(IntegrationTestCase):
             call_hash=call_hash,
             call=call,
             approvers=["sig1", "sig2"],
+            timepoint={"some": "timepoint"},
         )
         expected_res = {
             "id": txn1.id,
@@ -1096,6 +1098,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "call": call,
             "call_data": call_data,
             "call_hash": call_hash,
+            "timepoint": {"some": "timepoint"},
             "corresponding_models": {
                 "asset": {"id": 1, "dao_id": "dao1", "owner_id": "acc1", "total_supply": 1000},
                 "dao": {
@@ -1157,8 +1160,10 @@ class CoreViewSetTest(IntegrationTestCase):
                 "function": "some_function1",
                 "args": {"some1": "args1"},
                 "data": "call_data1",
+                "timepoint": {"some": "timepoint"},
             },
             approvers=["sig1", "sig2"],
+            timepoint={"some": "timepoint"},
             executed_at=now(),
             status=models.TransactionStatus.EXECUTED,
         )
@@ -1179,9 +1184,11 @@ class CoreViewSetTest(IntegrationTestCase):
                         "function": "some_function1",
                         "args": {"some1": "args1"},
                         "data": "call_data1",
+                        "timepoint": {"some": "timepoint"},
                     },
                     "call_data": "call_data1",
                     "call_hash": "call_hash1",
+                    "timepoint": {"some": "timepoint"},
                     "corresponding_models": {
                         "asset": None,
                         "dao": {
@@ -1219,6 +1226,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "call": None,
                     "call_hash": "call_hash2",
                     "call_data": "call_data2",
+                    "timepoint": None,
                     "corresponding_models": {
                         "asset": None,
                         "dao": None,
@@ -1258,6 +1266,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "function": "some_func",
             "data": "call_data_test",
             "args": {"a": "1", "b": 2},
+            "timepoint": {"some": "timepoint"},
         }
         expected_transactions = [
             models.MultiSigTransaction(
@@ -1267,6 +1276,7 @@ class CoreViewSetTest(IntegrationTestCase):
                 call_hash="some_call_hash",
                 call_function="some_func",
                 call=payload,
+                timepoint={"some": "timepoint"},
             )
         ]
 
@@ -1278,6 +1288,64 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(res.status_code, HTTP_201_CREATED)
+        self.assertDictEqual(res.data, MultiSigTransactionSerializer(models.MultiSigTransaction.objects.get()).data)
+        self.assertModelsEqual(
+            models.MultiSigTransaction.objects.all(),
+            expected_transactions,
+            ignore_fields=("created_at", "updated_at", "id"),
+        )
+
+    @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
+    def test_create_multisig_transaction_existing(self, create_multisig_transaction_call_hash_mock):
+        create_multisig_transaction_call_hash_mock.return_value = "some_call_hash"
+        multisig_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        signatory_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
+        cache.set(key=multisig_kp.ss58_address, value=self.challenge_key, timeout=5)
+        signature = base64.b64encode(signatory_kp.sign(data=self.challenge_key)).decode()
+        multisig = models.MultiSig.objects.create(
+            address=multisig_kp.ss58_address, signatories=[signatory_kp.ss58_address, "sig2"], threshold=2
+        )
+        models.Dao.objects.create(id="DAO1", name="dao1 name", owner=multisig)
+        payload = {
+            "hash": "some_call_hash",
+            "module": "some_module",
+            "function": "some_func",
+            "data": "call_data_test",
+            "args": {"a": "1", "b": 2},
+            "timepoint": {"some": "timepoint"},
+        }
+        models.MultiSigTransaction.objects.create(
+            multisig=multisig,
+            dao_id="DAO1",
+            call_data="call_data_test",
+            call_hash="some_call_hash",
+            call_function="some_func",
+            call=payload,
+            timepoint={"some": "timepoint"},
+            approvers=["sig2"],
+        )
+
+        expected_transactions = [
+            models.MultiSigTransaction(
+                multisig=multisig,
+                dao_id="DAO1",
+                call_data="call_data_test",
+                call_hash="some_call_hash",
+                call_function="some_func",
+                call=payload,
+                timepoint={"some": "timepoint"},
+                approvers=["sig2"],
+            )
+        ]
+
+        res = self.client.post(
+            reverse("core-dao-create-multisig-transaction", kwargs={"pk": "DAO1"}),
+            payload,
+            content_type="application/json",
+            HTTP_SIGNATURE=signature,
+        )
+
+        self.assertEqual(res.status_code, HTTP_200_OK)
         self.assertDictEqual(res.data, MultiSigTransactionSerializer(models.MultiSigTransaction.objects.get()).data)
         self.assertModelsEqual(
             models.MultiSigTransaction.objects.all(),
@@ -1302,6 +1370,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "function": "some_func",
             "args": {"a": "1", "b": 2},
             "data": "call_data_test",
+            "timepoint": {"some": "timepoint"},
         }
 
         res = self.client.post(
@@ -1329,6 +1398,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "function": "different_func",
             "args": {},
             "data": "another_call_data_test",
+            "timepoint": {"some": "timepoint"},
         }
 
         res = self.client.post(
@@ -1359,6 +1429,7 @@ class CoreViewSetTest(IntegrationTestCase):
             "function": "some_func",
             "args": {"a": "1", "b": 2},
             "data": "call_data_test",
+            "timepoint": {"some": "timepoint"},
         }
 
         res = self.client.post(

@@ -3,13 +3,13 @@ import logging
 import time
 from collections import defaultdict
 from functools import partial, wraps
-from typing import List, Optional
+from typing import Collection, List, Optional
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, connection
 from scalecodec import GenericCall, GenericExtrinsic, MultiAccountId
-from substrateinterface import Keypair
+from substrateinterface.keypair import Keypair
 from websocket import WebSocketConnectionClosedException
 
 from core import models
@@ -124,6 +124,47 @@ class SubstrateService(object):
         receipt = self.substrate_interface.submit_extrinsic(extrinsic=extrinsic, wait_for_inclusion=wait_for_inclusion)
         if wait_for_inclusion and not receipt.is_success:
             logger.error(f"Error during extrinsic submission: {receipt.error_message}")
+
+    def batch(self, calls: Collection[GenericCall], keypair: Keypair, wait_for_inclusion=False):
+        """
+        Args:
+            calls: calls to batch
+            keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+        submits a signed extrinsic to batch a sequence of calls
+        """
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Utility", call_function="batch_all", call_params={"calls": calls}
+                ),
+                keypair=keypair,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
+
+    def batch_as_multisig(self, calls, multisig_account, keypair: Keypair, wait_for_inclusion=False):
+        """
+        Args:
+            calls: calls to batch
+            multisig_account: corresponding multisig account
+            keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+        submits a signed extrinsic to batch a sequence of multisig calls
+        """
+
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_multisig_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Utility", call_function="batch_all", call_params={"calls": calls}
+                ),
+                keypair=keypair,
+                multisig_account=multisig_account,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
 
     def sync_initial_accs(self):
         """
