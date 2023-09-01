@@ -118,7 +118,8 @@ class AccountViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
 class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
     queryset = models.Dao.objects.all()
-    search_fields = ["id", "name", "creator__address", "owner__address"]
+    search_fields = ["id", "name"]
+    filter_fields = ["id", "name", "creator", "owner"]
     ordering_fields = ["id", "name", "creator_id", "owner_id"]
     pagination_class = MultiQsLimitOffsetPagination
 
@@ -255,11 +256,12 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         raw_call = serializer.data
-        try:
-            if (call_hash := raw_call["hash"]) != substrate_service.create_multisig_transaction_call_hash(**raw_call):
-                return Response(data={"message": "Invalid call hash."}, status=HTTP_400_BAD_REQUEST)
-        except ValueError:
-            return Response(data={"message": "Invalid call data."}, status=HTTP_400_BAD_REQUEST)
+        # todo
+        # try:
+        #     if (call_hash := raw_call["hash"]) != substrate_service.create_multisig_transaction_call_hash(**raw_call):
+        #         return Response(data={"message": "Invalid call hash."}, status=HTTP_400_BAD_REQUEST)
+        # except ValueError:
+        #     return Response(data={"message": "Invalid call data."}, status=HTTP_400_BAD_REQUEST)
 
         dao = self.get_object()
         try:
@@ -273,7 +275,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
                 **substrate_service.parse_call_data(call_data=raw_call),
                 "multisig": multisig,
                 "call": raw_call,
-                "call_hash": call_hash,
+                "call_hash": raw_call["hash"],
                 "call_function": raw_call["function"],
                 "call_data": raw_call["data"],
                 "dao_id": dao.id,
@@ -291,7 +293,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
 
 @method_decorator(swagger_auto_schema(operation_description="Retrieves an Asset."), "retrieve")
 class AssetViewSet(ReadOnlyModelViewSet, SearchableMixin):
-    search_fields = ["id", "owner__address", "dao__id"]
+    filter_fields = ["owner__address", "dao__id"]
     ordering_fields = ["id", "owner_id", "dao_id"]
     queryset = models.Asset.objects.all()
     serializer_class = serializers.AssetSerializer
@@ -440,15 +442,24 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
         serializer = serializers.CreateMultiSigSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.data
-        multisig_acc, created = models.MultiSig.objects.update_or_create(
-            address=substrate_service.create_multisig_account(
-                signatories=data["signatories"], threshold=data["threshold"]
-            ).ss58_address,
-            defaults={
-                "signatories": data["signatories"],
-                "threshold": data["threshold"],
-            },
-        )
+        address = substrate_service.create_multisig_account(
+            signatories=data["signatories"], threshold=data["threshold"]
+        ).ss58_address
+        # update_or_create is buggy for this kind of inheritance
+        try:
+            multisig_acc = models.MultiSig.objects.get(address=address)
+            created = False
+            multisig_acc.signatories = data["signatories"] or multisig_acc.signatories
+            multisig_acc.threshold = data["threshold"] or multisig_acc.threshold
+            multisig_acc.save()
+        except models.MultiSig.DoesNotExist:
+            created = True
+            from django.utils.timezone import now
+
+            multisig_acc = models.MultiSig.objects.create(
+                address=address, signatories=data["signatories"], threshold=data["threshold"], created_at=now()
+            )
+
         res_data = self.get_serializer(multisig_acc).data
         return Response(
             data=res_data,
@@ -460,5 +471,5 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
 class MultiSigTransactionViewSet(ReadOnlyModelViewSet, SearchableMixin):
     queryset = models.MultiSigTransaction.objects.all()
     serializer_class = serializers.MultiSigTransactionSerializer
-    filter_fields = ["dao_id", "call_hash"]
+    filter_fields = ["asset_id", "dao_id", "proposal_id", "call_hash"]
     ordering_fields = ["call_hash", "call_function", "status", "executed_at"]

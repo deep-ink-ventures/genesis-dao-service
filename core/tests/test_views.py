@@ -205,9 +205,10 @@ class CoreViewSetTest(IntegrationTestCase):
 
     @data(
         # query_params
-        {"search": "dao2"},
-        {"search": "acc2"},
-        {"search": "dao2 name"},
+        {"id": "dao2"},
+        {"creator": "acc2"},
+        {"owner": "acc2"},
+        {"name": "dao2 name"},
     )
     def test_dao_list_filter(self, query_params):
         expected_res = wrap_in_pagination_res([expected_dao2_res])
@@ -215,6 +216,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(5):
             res = self.client.get(reverse("core-dao-list"), query_params)
 
+        self.assertEqual(res.status_code, HTTP_200_OK)
         self.assertDictEqual(res.data, expected_res)
 
     @data(
@@ -1053,11 +1055,28 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertDictEqual(res.data, expected_res)
 
     @patch("core.substrate.substrate_service")
-    def test_create_multisig_existing(self, substrate_mock):
+    def test_create_multisig_existing_multisig(self, substrate_mock):
         addr = "some_addr"
         substrate_mock.create_multisig_account.return_value = Mock(ss58_address=addr)
         payload = {"signatories": ["sig1", "sig2"], "threshold": 3}
         models.MultiSig.objects.create(threshold=2, address=addr, dao_id="dao1")
+        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 3, "dao_id": "dao1"}
+        expected_multisigs = [
+            models.MultiSig(signatories=["sig1", "sig2"], threshold=3, account_ptr_id=addr, address=addr, dao_id="dao1")
+        ]
+
+        res = self.client.post(reverse("core-multisig-list"), data=payload, content_type="application/json")
+
+        self.assertEqual(res.status_code, HTTP_200_OK)
+        self.assertDictEqual(res.data, expected_res)
+        self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multisigs)
+
+    @patch("core.substrate.substrate_service")
+    def test_create_multisig_existing_acc(self, substrate_mock):
+        addr = "some_addr"
+        substrate_mock.create_multisig_account.return_value = Mock(ss58_address=addr)
+        payload = {"signatories": ["sig1", "sig2"], "threshold": 3}
+        models.Account.objects.create(address=addr)
         expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 3, "dao_id": "dao1"}
         expected_multisigs = [
             models.MultiSig(signatories=["sig1", "sig2"], threshold=3, account_ptr_id=addr, address=addr, dao_id="dao1")
