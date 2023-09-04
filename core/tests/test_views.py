@@ -1203,7 +1203,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
         txn4 = models.MultiSigTransaction.objects.create(
             multisig=models.MultiSig.objects.create(address="addr4", signatories=["sig5", "sig7"], threshold=2),
-            call={},
+            call={"hash": "call_hash4"},
             call_hash="call_hash4",
         )
         expected_res = wrap_in_pagination_res(
@@ -1309,7 +1309,7 @@ class CoreViewSetTest(IntegrationTestCase):
                     "multisig_address": "addr4",
                     "dao_id": None,
                     "call": {
-                        "hash": None,
+                        "hash": "call_hash4",
                         "module": None,
                         "function": None,
                         "args": None,
@@ -1408,12 +1408,12 @@ class CoreViewSetTest(IntegrationTestCase):
         }
         models.MultiSigTransaction.objects.create(
             multisig=multisig,
-            dao_id="DAO1",
-            call_data="call_data_test",
             call_hash="some_call_hash",
-            call_function="some_func",
+            dao_id="DAO1",
+            call_data="old data",
+            call_function="old data",
             call=payload,
-            timepoint={"some": "timepoint"},
+            timepoint={"old": "data"},
             approvers=["sig2"],
         )
 

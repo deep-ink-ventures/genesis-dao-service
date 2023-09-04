@@ -272,7 +272,9 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
                 data={"message": "No MultiSig Account exists for the given Dao."}, status=HTTP_400_BAD_REQUEST
             )
         txn, created = models.MultiSigTransaction.objects.update_or_create(
-            **{
+            multisig=multisig,
+            call_hash=raw_call["hash"],
+            defaults={
                 **substrate_service.parse_call_data(call_data=raw_call),
                 "multisig": multisig,
                 "call": raw_call,
@@ -281,7 +283,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
                 "call_data": raw_call["data"],
                 "dao_id": dao.id,
                 "timepoint": raw_call["timepoint"],
-            }
+            },
         )
 
         res_data = serializers.MultiSigTransactionSerializer(txn).data
