@@ -29,7 +29,9 @@ schema_view = get_schema_view(
         title="Genesis Dao Service",
         default_version="v1",
         contact=openapi.Contact(email="admin@deep-ink.ventures"),
-        license=openapi.License(name="BSD License"),
+        license=openapi.License(
+            name="APACHE-2", url="https://github.com/deep-ink-ventures/genesis-dao-service/blob/main/LICENCE"
+        ),
     ),
     public=True,
     permission_classes=[permissions.AllowAny],

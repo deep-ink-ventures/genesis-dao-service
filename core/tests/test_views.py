@@ -1077,14 +1077,14 @@ class CoreViewSetTest(IntegrationTestCase):
         substrate_mock.create_multisig_account.return_value = Mock(ss58_address=addr)
         payload = {"signatories": ["sig1", "sig2"], "threshold": 3}
         models.Account.objects.create(address=addr)
-        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 3, "dao_id": "dao1"}
+        expected_res = {"address": addr, "signatories": ["sig1", "sig2"], "threshold": 3, "dao_id": None}
         expected_multisigs = [
-            models.MultiSig(signatories=["sig1", "sig2"], threshold=3, account_ptr_id=addr, address=addr, dao_id="dao1")
+            models.MultiSig(signatories=["sig1", "sig2"], threshold=3, account_ptr_id=addr, address=addr)
         ]
 
         res = self.client.post(reverse("core-multisig-list"), data=payload, content_type="application/json")
 
-        self.assertEqual(res.status_code, HTTP_200_OK)
+        self.assertEqual(res.status_code, HTTP_201_CREATED)
         self.assertDictEqual(res.data, expected_res)
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multisigs)
 

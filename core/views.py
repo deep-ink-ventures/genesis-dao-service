@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Q
 from django.utils.decorators import method_decorator
+from django.utils.timezone import now
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.decorators import action, api_view
@@ -445,21 +446,14 @@ class MultiSigViewSet(ReadOnlyModelViewSet, CreateModelMixin, SearchableMixin):
         address = substrate_service.create_multisig_account(
             signatories=data["signatories"], threshold=data["threshold"]
         ).ss58_address
-        # update_or_create is buggy for this kind of inheritance
-        try:
-            multisig_acc = models.MultiSig.objects.get(address=address)
-            created = False
-            multisig_acc.signatories = data["signatories"] or multisig_acc.signatories
-            multisig_acc.threshold = data["threshold"] or multisig_acc.threshold
-            multisig_acc.save()
-        except models.MultiSig.DoesNotExist:
-            created = True
-            from django.utils.timezone import now
-
-            multisig_acc = models.MultiSig.objects.create(
-                address=address, signatories=data["signatories"], threshold=data["threshold"], created_at=now()
-            )
-
+        multisig_acc, created = models.MultiSig.objects.update_or_create(
+            address=address,
+            defaults={
+                "signatories": data["signatories"],
+                "threshold": data["threshold"],
+                "created_at": now(),  # needed cause of some bug for the kind of inheritance the model uses
+            },
+        )
         res_data = self.get_serializer(multisig_acc).data
         return Response(
             data=res_data,
