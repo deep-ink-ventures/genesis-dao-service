@@ -1,3 +1,8 @@
+from datetime import datetime, timezone
+
+from django.db import IntegrityError
+from django.utils.timezone import now
+
 from core import models
 from core.tests.testcases import IntegrationTestCase
 
@@ -73,3 +78,36 @@ class ModelTest(IntegrationTestCase):
     def test_transaction_last_approver(self):
         self.assertEqual(models.MultiSigTransaction(approvers=["a"]).last_approver, "a")
         self.assertIsNone(models.MultiSigTransaction(approvers=[]).last_approver)
+
+    def test_multisig_transaction_idx_unique_with_optional(self):
+        multisig1 = models.MultiSig.objects.create(address="addr1")
+        timestamp = datetime(2000, 1, 1, 1, 1, 1, 1, tzinfo=timezone.utc)
+        models.MultiSigTransaction.objects.create(multisig=multisig1, call_hash="hash1")
+        models.MultiSigTransaction.objects.create(multisig=multisig1, call_hash="hash2")
+        models.MultiSigTransaction.objects.create(
+            multisig=models.MultiSig.objects.create(address="addr2"), call_hash="hash1"
+        )
+        models.MultiSigTransaction.objects.create(multisig=multisig1, call_hash="hash1", executed_at=now())
+        models.MultiSigTransaction.objects.create(multisig=multisig1, call_hash="hash1", executed_at=timestamp)
+        with self.assertRaisesMessage(
+            IntegrityError,
+            'duplicate key value violates unique constraint "unique_with_optional"\n'
+            "DETAIL:  Key (call_hash, multisig_id, executed_at)=(hash1, addr1, 2000-01-01 01:01:01.000001+00)"
+            " already exists.\n",
+        ):
+            models.MultiSigTransaction.objects.create(multisig=multisig1, call_hash="hash1", executed_at=timestamp)
+
+    def test_multisig_transaction_idx_unique_without_optional(self):
+        multisig1 = models.MultiSig.objects.create(address="addr1")
+        models.MultiSigTransaction.objects.create(multisig=multisig1, call_hash="hash1")
+        models.MultiSigTransaction.objects.create(multisig=multisig1, call_hash="hash2")
+        models.MultiSigTransaction.objects.create(
+            multisig=models.MultiSig.objects.create(address="addr2"), call_hash="hash1"
+        )
+        models.MultiSigTransaction.objects.create(multisig=multisig1, call_hash="hash1", executed_at=now())
+        with self.assertRaisesMessage(
+            IntegrityError,
+            'duplicate key value violates unique constraint "unique_without_optional"\n'
+            "DETAIL:  Key (call_hash, multisig_id)=(hash1, addr1) already exists.\n",
+        ):
+            models.MultiSigTransaction.objects.create(multisig=multisig1, call_hash="hash1")

@@ -956,7 +956,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
     @patch("core.substrate.substrate_service")
     def test_proposal_report_faulted_throttle(self, substrate_mock):
-        substrate_mock.create_multisig_transaction_call_hash.return_value = "some_hash"
+        substrate_mock.create_multisig_transaction_call_hash.side_effect = "hash1", "hash2", "hash3"
         cache.clear()
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
         cache.set(key=keypair.ss58_address, value=self.challenge_key, timeout=5)

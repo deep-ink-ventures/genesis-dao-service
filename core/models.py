@@ -1,5 +1,6 @@
 from django.contrib.postgres.fields import ArrayField
 from django.db import models, transaction
+from django.db.models import Q, UniqueConstraint
 
 from core import utils
 from core.utils import ChoiceEnum
@@ -227,7 +228,12 @@ class MultiSigTransaction(TimestampableMixin):
         db_table = "core_multisig_transactions"
         verbose_name = "MultiSigTransaction"
         verbose_name_plural = "MultiSigTransactions"
-        unique_together = ("call_hash", "multisig", "executed_at")
+        constraints = [
+            UniqueConstraint(name="unique_with_optional", fields=["call_hash", "multisig", "executed_at"]),
+            UniqueConstraint(
+                name="unique_without_optional", fields=["call_hash", "multisig"], condition=Q(executed_at=None)
+            ),
+        ]
 
     @property
     def last_approver(self):
