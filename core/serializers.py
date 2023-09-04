@@ -6,6 +6,7 @@ from rest_framework.fields import (
     CharField,
     EmailField,
     IntegerField,
+    JSONField,
     ListField,
     SerializerMethodField,
     URLField,
@@ -253,33 +254,15 @@ class CreateMultiSigSerializer(ModelSerializer):
 
 
 class CallSerializer(Serializer):
-    hash = SerializerMethodField()
-    module = SerializerMethodField()
-    function = SerializerMethodField()
-    args = SerializerMethodField()
-    data = SerializerMethodField()
-    timepoint = SerializerMethodField()
+    hash = CharField()
+    module = CharField(required=False, allow_null=True)
+    function = CharField(required=False, allow_null=True)
+    args = JSONField(required=False, allow_null=True)
+    data = CharField(required=False, allow_null=True)
+    timepoint = JSONField(required=False, allow_null=True)
 
     class Meta:
         fields = ("hash", "module", "function", "args", "data", "timepoint")
-
-    def get_hash(self, obj):
-        return obj.get("hash", "")
-
-    def get_module(self, obj):
-        return obj.get("module", "")
-
-    def get_function(self, obj):
-        return obj.get("function", "")
-
-    def get_args(self, obj):
-        return obj.get("args", {})
-
-    def get_data(self, obj):
-        return obj.get("data", "")
-
-    def get_timepoint(self, obj):
-        return obj.get("timepoint", {})
 
 
 class CorrespondingModelsSerializer(ModelSerializer):

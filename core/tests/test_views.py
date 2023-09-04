@@ -132,7 +132,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(0):
             res = self.client.get(reverse("core-welcome"))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_block_metadata_header(self):
         cache.set(key="current_block", value=(1, "some hash"))
@@ -149,7 +149,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(4):
             res = self.client.get(reverse("core-stats"))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_config(self):
         expected_res = {
@@ -161,7 +161,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(0):
             res = self.client.get(reverse("core-config"))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_account_get(self):
         expected_balance = {"free": 1, "reserved": 2, "frozen": 3, "flags": 4}
@@ -177,7 +177,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(1):
             res = self.client.get(reverse("core-account-detail", kwargs={"pk": "acc1"}))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_account_get_list(self):
         expected_res = wrap_in_pagination_res(
@@ -187,13 +187,13 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-account-list"))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_dao_get(self):
         with self.assertNumQueries(4):
             res = self.client.get(reverse("core-dao-detail", kwargs={"pk": "dao1"}))
 
-        self.assertDictEqual(res.data, expected_dao1_res)
+        self.assertDictEqual(res.json(), expected_dao1_res)
 
     def test_dao_get_list(self):
         expected_res = wrap_in_pagination_res([expected_dao1_res, expected_dao2_res])
@@ -201,7 +201,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(8):
             res = self.client.get(reverse("core-dao-list"))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     @data(
         # query_params
@@ -217,7 +217,7 @@ class CoreViewSetTest(IntegrationTestCase):
             res = self.client.get(reverse("core-dao-list"), query_params)
 
         self.assertEqual(res.status_code, HTTP_200_OK)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     @data(
         # query_params, expected_res
@@ -303,7 +303,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(10):
             res = self.client.get(reverse("core-dao-list"), query_params)
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     @data(
         # query_params, expected_res, expected query count
@@ -448,7 +448,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(expected_query_count):
             res = self.client.get(reverse("core-dao-list"), query_params)
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     @patch("core.view_utils.MultiQsLimitOffsetPagination.default_limit", PropertyMock(return_value=None))
     def test_dao_list_no_limit(self):
@@ -457,13 +457,13 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(8):
             res = self.client.get(reverse("core-dao-list"), {"prioritise_owner": "acc2"})
 
-        self.assertCountEqual(res.data, expected_res)
+        self.assertCountEqual(res.json(), expected_res)
 
     def test_dao_challenge(self):
         with self.assertNumQueries(1):
             res = self.client.get(reverse("core-dao-challenge", kwargs={"pk": "dao1"}))
 
-        self.assertEqual(res.data["challenge"], cache.get("acc1"))
+        self.assertEqual(res.json()["challenge"], cache.get("acc1"))
 
     def test_dao_add_metadata(self):
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
@@ -505,7 +505,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(res.status_code, HTTP_201_CREATED)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_dao_add_metadata_multisig_signatory(self):
         multisig_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
@@ -550,7 +550,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(res.status_code, HTTP_201_CREATED)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_dao_add_metadata_multisig_addr(self):
         multisig_kp = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
@@ -592,7 +592,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(res.status_code, HTTP_201_CREATED)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_dao_add_metadata_invalid_image_file(self):
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
@@ -616,7 +616,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
         self.assertDictEqual(
-            res.data,
+            res.json(),
             {
                 "logo": [
                     ErrorDetail(
@@ -649,7 +649,8 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
         self.assertDictEqual(
-            res.data, {"logo": [ErrorDetail(string="The uploaded file is too big. Max size: 2.0 mb.", code="invalid")]}
+            res.json(),
+            {"logo": [ErrorDetail(string="The uploaded file is too big. Max size: 2.0 mb.", code="invalid")]},
         )
 
     def test_dao_add_metadata_403(self):
@@ -669,7 +670,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
         self.assertEqual(
-            res.data,
+            res.json(),
             {
                 "error": ErrorDetail(
                     code="permission_denied",
@@ -703,7 +704,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
         self.assertEqual(
-            res.data,
+            res.json(),
             {
                 "error": ErrorDetail(
                     code="permission_denied",
@@ -719,7 +720,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(1):
             res = self.client.get(reverse("core-asset-detail", kwargs={"pk": 1}))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_asset_get_list(self):
         expected_res = wrap_in_pagination_res(
@@ -731,7 +732,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-asset-list"))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_proposal_get(self):
         expected_res = {
@@ -752,7 +753,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(2):
             res = self.client.get(reverse("core-proposal-detail", kwargs={"pk": 1}))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_proposal_list(self):
         expected_res = wrap_in_pagination_res(
@@ -791,7 +792,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(3):
             res = self.client.get(reverse("core-proposal-list"))
 
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_proposal_add_metadata(self):
         keypair = Keypair.create_from_mnemonic(Keypair.generate_mnemonic())
@@ -819,8 +820,8 @@ class CoreViewSetTest(IntegrationTestCase):
                 HTTP_SIGNATURE=signature,
             )
 
-        self.assertEqual(res.status_code, HTTP_201_CREATED, res.data)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertEqual(res.status_code, HTTP_201_CREATED)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_proposal_add_metadata_403(self):
         post_data = {
@@ -839,7 +840,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
         self.assertEqual(
-            res.data,
+            res.json(),
             {
                 "error": ErrorDetail(
                     code="permission_denied",
@@ -886,7 +887,7 @@ class CoreViewSetTest(IntegrationTestCase):
             )
 
         self.assertEqual(res.status_code, HTTP_201_CREATED)
-        self.assertEqual(res.data, {**post_data, "proposal_id": prop.id})
+        self.assertEqual(res.json(), {**post_data, "proposal_id": prop.id})
         self.assertModelsEqual(
             models.MultiSigTransaction.objects.all(),
             expected_transactions,
@@ -918,7 +919,7 @@ class CoreViewSetTest(IntegrationTestCase):
             )
 
         self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
-        self.assertEqual(res.data, {"detail": "The corresponding DAO is not managed by a MultiSig Account."})
+        self.assertEqual(res.json(), {"detail": "The corresponding DAO is not managed by a MultiSig Account."})
         self.assertListEqual(list(models.MultiSigTransaction.objects.all()), [])
         substrate_mock.create_multisig_transaction_call_hash.assert_not_called()
 
@@ -943,7 +944,7 @@ class CoreViewSetTest(IntegrationTestCase):
 
         self.assertEqual(res.status_code, HTTP_403_FORBIDDEN)
         self.assertEqual(
-            res.data,
+            res.json(),
             {
                 "error": ErrorDetail(
                     string="This request's header needs to contain signature=*signed-challenge*.",
@@ -980,7 +981,7 @@ class CoreViewSetTest(IntegrationTestCase):
                 with self.assertNumQueries(7):
                     res = call_view()
                 self.assertEqual(res.status_code, HTTP_201_CREATED)
-                self.assertEqual(res.data, {**post_data, "proposal_id": prop.id})
+                self.assertEqual(res.json(), {**post_data, "proposal_id": prop.id})
                 substrate_mock.create_multisig_transaction_call_hash.assert_called_once_with(
                     module="Votes",
                     function="fault_proposal",
@@ -990,14 +991,14 @@ class CoreViewSetTest(IntegrationTestCase):
                 with self.assertNumQueries(4):
                     res = call_view()
                 self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
-                self.assertEqual(res.data, {"detail": "The proposal report maximum has already been reached."})
+                self.assertEqual(res.json(), {"detail": "The proposal report maximum has already been reached."})
                 substrate_mock.create_multisig_transaction_call_hash.assert_not_called()
             else:
                 with self.assertNumQueries(2):
                     res = call_view()
                 self.assertEqual(res.status_code, HTTP_429_TOO_MANY_REQUESTS)
                 self.assertEqual(
-                    res.data,
+                    res.json(),
                     {
                         "detail": ErrorDetail(
                             "Request was throttled. Expected available in 3600 seconds.", code="throttled"
@@ -1017,7 +1018,7 @@ class CoreViewSetTest(IntegrationTestCase):
         with self.assertNumQueries(1):
             res = self.client.get(reverse("core-proposal-reports", kwargs={"pk": 1}))
 
-        self.assertCountEqual(res.data, expected_res)
+        self.assertCountEqual(res.json(), expected_res)
 
     def test_get_multisig(self):
         addr = "some_addr"
@@ -1027,7 +1028,7 @@ class CoreViewSetTest(IntegrationTestCase):
         res = self.client.get(reverse("core-multisig-detail", kwargs={"address": addr}))
 
         self.assertEqual(res.status_code, HTTP_200_OK)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_get_list_multisig(self):
         models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2"], threshold=2, dao_id="dao1")
@@ -1040,7 +1041,7 @@ class CoreViewSetTest(IntegrationTestCase):
         res = self.client.get(reverse("core-multisig-list"), {"ordering": "address"})
 
         self.assertEqual(res.status_code, HTTP_200_OK)
-        self.assertDictEqual(res.data, wrap_in_pagination_res(expected_multisigs))
+        self.assertDictEqual(res.json(), wrap_in_pagination_res(expected_multisigs))
 
     @patch("core.substrate.substrate_service")
     def test_create_multisig(self, substrate_mock):
@@ -1052,7 +1053,7 @@ class CoreViewSetTest(IntegrationTestCase):
         res = self.client.post(reverse("core-multisig-list"), data=payload, content_type="application/json")
 
         self.assertEqual(res.status_code, HTTP_201_CREATED)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     @patch("core.substrate.substrate_service")
     def test_create_multisig_existing_multisig(self, substrate_mock):
@@ -1068,7 +1069,7 @@ class CoreViewSetTest(IntegrationTestCase):
         res = self.client.post(reverse("core-multisig-list"), data=payload, content_type="application/json")
 
         self.assertEqual(res.status_code, HTTP_200_OK)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multisigs)
 
     @patch("core.substrate.substrate_service")
@@ -1085,7 +1086,7 @@ class CoreViewSetTest(IntegrationTestCase):
         res = self.client.post(reverse("core-multisig-list"), data=payload, content_type="application/json")
 
         self.assertEqual(res.status_code, HTTP_201_CREATED)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
         self.assertModelsEqual(models.MultiSig.objects.order_by("address"), expected_multisigs)
 
     def test_get_multisig_transaction(self):
@@ -1165,7 +1166,7 @@ class CoreViewSetTest(IntegrationTestCase):
         res = self.client.get(reverse("core-multisig-transaction-detail", kwargs={"pk": txn1.id}))
 
         self.assertEqual(res.status_code, HTTP_200_OK)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     def test_list_multisig_transactions(self):
         txn1 = models.MultiSigTransaction.objects.create(
@@ -1190,6 +1191,20 @@ class CoreViewSetTest(IntegrationTestCase):
             multisig=models.MultiSig.objects.create(address="addr2", signatories=["sig3", "sig4"], threshold=3),
             call_hash="call_hash2",
             call_data="call_data2",
+        )
+        txn3 = models.MultiSigTransaction.objects.create(
+            multisig=models.MultiSig.objects.create(address="addr3", signatories=["sig5"], threshold=1),
+            call={
+                "hash": "call_hash3",
+                "module": "some_module3",
+                "args": {"some3": "args3"},
+            },
+            call_hash="call_hash3",
+        )
+        txn4 = models.MultiSigTransaction.objects.create(
+            multisig=models.MultiSig.objects.create(address="addr4", signatories=["sig5", "sig7"], threshold=2),
+            call={},
+            call_hash="call_hash4",
         )
         expected_res = wrap_in_pagination_res(
             [
@@ -1260,13 +1275,71 @@ class CoreViewSetTest(IntegrationTestCase):
                     "created_at": fmt_dt(txn2.created_at),
                     "updated_at": fmt_dt(txn2.updated_at),
                 },
+                {
+                    "id": txn3.id,
+                    "multisig_address": "addr3",
+                    "dao_id": None,
+                    "call": {
+                        "hash": "call_hash3",
+                        "module": "some_module3",
+                        "function": None,
+                        "args": {"some3": "args3"},
+                        "data": None,
+                        "timepoint": None,
+                    },
+                    "call_hash": "call_hash3",
+                    "call_data": None,
+                    "timepoint": None,
+                    "corresponding_models": {
+                        "asset": None,
+                        "dao": None,
+                        "proposal": None,
+                    },
+                    "status": models.TransactionStatus.PENDING,
+                    "threshold": 1,
+                    "approvers": [],
+                    "last_approver": None,
+                    "executed_at": None,
+                    "canceled_by": None,
+                    "created_at": fmt_dt(txn3.created_at),
+                    "updated_at": fmt_dt(txn3.updated_at),
+                },
+                {
+                    "id": txn4.id,
+                    "multisig_address": "addr4",
+                    "dao_id": None,
+                    "call": {
+                        "hash": None,
+                        "module": None,
+                        "function": None,
+                        "args": None,
+                        "data": None,
+                        "timepoint": None,
+                    },
+                    "call_hash": "call_hash4",
+                    "call_data": None,
+                    "timepoint": None,
+                    "corresponding_models": {
+                        "asset": None,
+                        "dao": None,
+                        "proposal": None,
+                    },
+                    "status": models.TransactionStatus.PENDING,
+                    "threshold": 2,
+                    "approvers": [],
+                    "last_approver": None,
+                    "executed_at": None,
+                    "canceled_by": None,
+                    "created_at": fmt_dt(txn4.created_at),
+                    "updated_at": fmt_dt(txn4.updated_at),
+                },
             ]
         )
 
         res = self.client.get(reverse("core-multisig-transaction-list"))
 
         self.assertEqual(res.status_code, HTTP_200_OK)
-        self.assertDictEqual(res.data, expected_res)
+        self.assertDictEqual(res.json(), expected_res)
 
     @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
     def test_create_multisig_transaction(self, create_multisig_transaction_call_hash_mock):
@@ -1307,7 +1380,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(res.status_code, HTTP_201_CREATED)
-        self.assertDictEqual(res.data, MultiSigTransactionSerializer(models.MultiSigTransaction.objects.get()).data)
+        self.assertDictEqual(res.json(), MultiSigTransactionSerializer(models.MultiSigTransaction.objects.get()).data)
         self.assertModelsEqual(
             models.MultiSigTransaction.objects.all(),
             expected_transactions,
@@ -1365,7 +1438,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(res.status_code, HTTP_200_OK)
-        self.assertDictEqual(res.data, MultiSigTransactionSerializer(models.MultiSigTransaction.objects.get()).data)
+        self.assertDictEqual(res.json(), MultiSigTransactionSerializer(models.MultiSigTransaction.objects.get()).data)
         self.assertModelsEqual(
             models.MultiSigTransaction.objects.all(),
             expected_transactions,
@@ -1400,7 +1473,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
-        self.assertDictEqual(res.data, {"message": "Invalid call hash."})
+        self.assertDictEqual(res.json(), {"message": "Invalid call hash."})
         self.assertListEqual(list(models.MultiSigTransaction.objects.all()), [])
 
     @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
@@ -1428,7 +1501,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
-        self.assertDictEqual(res.data, {"message": "Invalid call data."})
+        self.assertDictEqual(res.json(), {"message": "Invalid call data."})
         self.assertListEqual(list(models.MultiSigTransaction.objects.all()), [])
 
     @patch("core.substrate.substrate_service.create_multisig_transaction_call_hash")
@@ -1459,5 +1532,5 @@ class CoreViewSetTest(IntegrationTestCase):
         )
 
         self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
-        self.assertDictEqual(res.data, {"message": "No MultiSig Account exists for the given Dao."})
+        self.assertDictEqual(res.json(), {"message": "No MultiSig Account exists for the given Dao."})
         self.assertListEqual(list(models.MultiSigTransaction.objects.all()), [])
