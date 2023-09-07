@@ -482,10 +482,23 @@ class SubstrateEventHandler:
 
         executes Transactions based on the Block's events
         """
+        from core.substrate import substrate_service
+
         if data_by_call_hash := {
             (multisig_event["call_hash"], multisig_event["multisig"]): multisig_event["approving"]
             for multisig_event in block.event_data.get("Multisig", {}).get("MultisigExecuted", [])
         }:
+            extrinsic_data_by_call_hash = {}
+            for multisig_extrinsic in block.extrinsic_data.get("Multisig", {}).get("as_multi", []):
+                call = multisig_extrinsic["call"]
+                call_data = {
+                    "module": call["call_module"],
+                    "function": call["call_function"],
+                    "args": {call_arg["name"]: call_arg["value"] for call_arg in call.get("call_args", [])},
+                    "timepoint": multisig_extrinsic["maybe_timepoint"],
+                }
+                call_data["hash"] = substrate_service.create_multisig_transaction_call_hash(**call_data)
+                extrinsic_data_by_call_hash[call_data["hash"]] = call_data
             for transaction in (
                 transaction_to_update := models.MultiSigTransaction.objects.filter(
                     # WHERE (
@@ -504,12 +517,33 @@ class SubstrateEventHandler:
                     executed_at__isnull=True,
                 )
             ):
+                if call_data := extrinsic_data_by_call_hash.get(transaction.call_hash):
+                    corresponding_model_ids = substrate_service.parse_call_data(call_data=call_data)
+                    transaction.call = call_data
+                    transaction.call_function = call_data["function"]
+                    transaction.timepoint = call_data["timepoint"]
+                    transaction.asset_id = corresponding_model_ids["asset_id"]
+                    transaction.dao_id = corresponding_model_ids["dao_id"]
+                    transaction.proposal_id = corresponding_model_ids["proposal_id"]
+
                 transaction.approvers.append(data_by_call_hash[(transaction.call_hash, transaction.multisig_id)])
                 transaction.status = models.TransactionStatus.EXECUTED
                 transaction.executed_at = timezone.now()
+
             if transaction_to_update:
                 models.MultiSigTransaction.objects.bulk_update(
-                    transaction_to_update, ("approvers", "status", "executed_at")
+                    transaction_to_update,
+                    (
+                        "approvers",
+                        "call",
+                        "call_function",
+                        "timepoint",
+                        "status",
+                        "executed_at",
+                        "asset_id",
+                        "dao_id",
+                        "proposal_id",
+                    ),
                 )
 
     @staticmethod

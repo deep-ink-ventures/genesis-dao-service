@@ -1536,7 +1536,9 @@ class EventHandlerTest(IntegrationTestCase):
             ignore_fields=("id", "created_at", "updated_at"),
         )
 
-    def test__execute_transactions(self):
+    @patch("core.substrate.SubstrateService.create_multisig_transaction_call_hash")
+    def test__execute_transactions(self, create_multisig_transaction_call_hash_mock):
+        create_multisig_transaction_call_hash_mock.return_value = "hash1"
         multisig = models.MultiSig.objects.create(address="addr1", signatories=["sig1", "sig2", "sig3"], threshold=3)
         multisig2 = models.MultiSig.objects.create(
             address="addr2", signatories=["sig1", "sig2", "sig3", "sig4", "sig5"], threshold=4
@@ -1552,10 +1554,12 @@ class EventHandlerTest(IntegrationTestCase):
         txn0 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash0"
         )
-        # some multisig and hash but executed_at
+        # same multisig and hash but executed_at
         txn1 = models.MultiSigTransaction.objects.create(
             multisig=multisig, call={"some": "data"}, approvers=["sig1"], call_hash="hash1", executed_at=now()
         )
+        dao = models.Dao.objects.create(id="DAO1", owner=multisig, creator=multisig)
+        models.Asset.objects.create(id=1, dao=dao, owner=multisig, total_supply=10)
 
         block = models.Block.objects.create(
             hash="hash 0",
@@ -1581,6 +1585,41 @@ class EventHandlerTest(IntegrationTestCase):
                     ],
                 },
             },
+            extrinsic_data={
+                "Multisig": {
+                    "as_multi": [
+                        {
+                            "call": {
+                                "call_args": [
+                                    {
+                                        "name": "dao_id",
+                                        "type": "SomeType",
+                                        "value": "DAO1",
+                                    },
+                                    {
+                                        "name": "asset_id",
+                                        "type": "SomeType",
+                                        "value": 1,
+                                    },
+                                    {
+                                        "name": "some_arg",
+                                        "type": "SomeOtherType",
+                                        "value": "some_val",
+                                    },
+                                ],
+                                "call_hash": "wrong_call_hash",
+                                "call_index": "0x0a05",
+                                "call_module": "SomeCallModule",
+                                "call_function": "some_call_func",
+                            },
+                            "threshold": 13,  # shouldn't be used
+                            "max_weight": {"ref_time": 286000000, "proof_size": 0},
+                            "maybe_timepoint": {"index": 1, "height": 14},
+                            "other_signatories": ["sig11", "sig12"],  # shouldn't be used
+                        }
+                    ],
+                }
+            },
         )
         timestamp = now()
         expected_transaction = [
@@ -1590,7 +1629,19 @@ class EventHandlerTest(IntegrationTestCase):
                 call_hash="hash1",
                 multisig=multisig,
                 approvers=["sig1", "sig3", "sig2"],
-                call={"some": "data"},
+                call={
+                    "hash": "hash1",
+                    "module": "SomeCallModule",
+                    "function": "some_call_func",
+                    "args": {
+                        "dao_id": "DAO1",
+                        "asset_id": 1,
+                        "some_arg": "some_val",
+                    },
+                    "timepoint": {"index": 1, "height": 14},
+                },
+                call_function="some_call_func",
+                timepoint={"index": 1, "height": 14},
                 status=models.TransactionStatus.EXECUTED,
                 executed_at=timestamp,
             ),

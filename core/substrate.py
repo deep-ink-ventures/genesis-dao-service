@@ -87,7 +87,7 @@ class SubstrateService(object):
     @retry("initializing blockchain connection")
     def __init__(self):
         self.substrate_interface = settings.SUBSTRATE_INTERFACE(
-            url=settings.BLOCKCHAIN_URL, type_registry_preset=settings.TYPE_REGISTRY_PRESET, ss58_format=42
+            url=settings.BLOCKCHAIN_URL, type_registry_preset=settings.TYPE_REGISTRY_PRESET
         )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -561,9 +561,10 @@ class SubstrateService(object):
             The transaction call hash as a hexadecimal string.
 
         """
-        return self.substrate_interface.compose_call(
+        call_hex = self.substrate_interface.compose_call(
             call_module=module, call_function=function, call_params=args
         ).call_hash.hex()
+        return f"0x{call_hex}"
 
     def approve_multisig(
         self,

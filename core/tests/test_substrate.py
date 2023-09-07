@@ -1163,7 +1163,7 @@ class SubstrateServiceTest(IntegrationTestCase):
             self.substrate_service.create_multisig_transaction_call_hash(
                 module="module1", function="func1", args={"some": "args"}
             ),
-            "some_hash",
+            "0xsome_hash",
         )
 
         self.si.compose_call.assert_called_once_with(

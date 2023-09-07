@@ -44,6 +44,8 @@ class IntegrationTestCase(TestCaseBase, test.TestCase):
                 continue
             val_1 = getattr(obj_1, name)
             val_2 = getattr(obj_2, name)
+            if isinstance(val_1, dict) and isinstance(val_2, dict):
+                return self.assertDictEqual(val_1, val_2)
             if val_1 != val_2:
                 self.fail(f"{obj_1} != {obj_2}:\n\t{name}: {val_1} != {val_2}")
 
