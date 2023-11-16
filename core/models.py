@@ -73,6 +73,7 @@ class AssetHolding(TimestampableMixin):
     asset = models.ForeignKey(Asset, related_name="holdings", on_delete=models.CASCADE)
     owner = models.ForeignKey(Account, related_name="holdings", on_delete=models.CASCADE)
     balance = utils.BiggerIntField()
+    delegated_to = models.ForeignKey(Account, related_name="delegated_holdings", on_delete=models.CASCADE, null=True)
 
     class Meta:
         db_table = "core_asset_holding"

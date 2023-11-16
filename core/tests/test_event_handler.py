@@ -319,6 +319,92 @@ class EventHandlerTest(IntegrationTestCase):
             ignore_fields=("id", "created_at", "updated_at"),
         )
 
+    def test__delegate_assets(self):
+        models.Account.objects.create(address="acc1")
+        models.Account.objects.create(address="acc2")
+        models.Account.objects.create(address="acc3")
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
+        models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
+        models.Asset.objects.create(id=1, total_supply=150, owner_id="acc1", dao_id="dao1"),
+        models.Asset.objects.create(id=2, total_supply=250, owner_id="acc2", dao_id="dao2"),
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100, delegated_to_id="acc2"),
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc3", balance=50),
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=200),
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc3", balance=50),
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            event_data={
+                "not": "interesting",
+                "Assets": {
+                    "Delegated": [
+                        {"to": "acc3", "from": "acc1", "asset_id": 1},
+                        {"to": "acc2", "from": "acc3", "asset_id": 1},
+                        {"to": "acc1", "from": "acc2", "asset_id": 2},
+                    ]
+                },
+            },
+        )
+
+        with self.assertNumQueries(2):
+            substrate_event_handler._delegate_assets(block)
+
+        expected_asset_holdings = [
+            models.AssetHolding(asset_id=1, owner_id="acc1", balance=100, delegated_to_id="acc3"),
+            models.AssetHolding(asset_id=1, owner_id="acc3", balance=50, delegated_to_id="acc2"),
+            models.AssetHolding(asset_id=2, owner_id="acc2", balance=200, delegated_to_id="acc1"),
+            models.AssetHolding(asset_id=2, owner_id="acc3", balance=50),
+        ]
+        self.assertModelsEqual(
+            models.AssetHolding.objects.order_by("asset_id", "owner_id"),
+            expected_asset_holdings,
+            ignore_fields=("id", "created_at", "updated_at"),
+        )
+
+    def test__revoke_asset_delegations(self):
+        models.Account.objects.create(address="acc1")
+        models.Account.objects.create(address="acc2")
+        models.Account.objects.create(address="acc3")
+        models.Dao.objects.create(id="dao1", name="dao1 name", owner_id="acc1")
+        models.Dao.objects.create(id="dao2", name="dao2 name", owner_id="acc2")
+        models.Asset.objects.create(id=1, total_supply=170, owner_id="acc1", dao_id="dao1"),
+        models.Asset.objects.create(id=2, total_supply=250, owner_id="acc2", dao_id="dao2"),
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=100, delegated_to_id="acc2"),
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc2", balance=20, delegated_to_id="acc1"),
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc3", balance=50, delegated_to_id="acc1"),
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=200, delegated_to_id="acc1"),
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc3", balance=50),
+        block = models.Block.objects.create(
+            hash="hash 0",
+            number=0,
+            event_data={
+                "not": "interesting",
+                "Assets": {
+                    "DelegationRevoked": [
+                        {"delegated_by": "acc1", "revoked_from": "acc2", "asset_id": 1},
+                        {"delegated_by": "acc2", "revoked_from": "acc1", "asset_id": 1},
+                        {"delegated_by": "acc2", "revoked_from": "acc1", "asset_id": 2},
+                    ]
+                },
+            },
+        )
+
+        with self.assertNumQueries(1):
+            substrate_event_handler._revoke_asset_delegations(block)
+
+        expected_asset_holdings = [
+            models.AssetHolding(asset_id=1, owner_id="acc1", balance=100),
+            models.AssetHolding(asset_id=1, owner_id="acc2", balance=20),
+            models.AssetHolding(asset_id=1, owner_id="acc3", balance=50, delegated_to_id="acc1"),
+            models.AssetHolding(asset_id=2, owner_id="acc2", balance=200),
+            models.AssetHolding(asset_id=2, owner_id="acc3", balance=50),
+        ]
+        self.assertModelsEqual(
+            models.AssetHolding.objects.order_by("asset_id", "owner_id"),
+            expected_asset_holdings,
+            ignore_fields=("id", "created_at", "updated_at"),
+        )
+
     @patch("core.file_handling.file_handler.urlopen")
     def test__set_dao_metadata(self, urlopen_mock):
         models.Account.objects.create(address="acc1")
@@ -675,7 +761,7 @@ class EventHandlerTest(IntegrationTestCase):
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc2", balance=30)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc3", balance=20)
         models.Asset.objects.create(id=2, dao_id="dao2", owner_id="acc2", total_supply=100)
-        models.AssetHolding.objects.create(asset_id=2, owner_id="acc3", balance=50)
+        models.AssetHolding.objects.create(asset_id=2, owner_id="acc3", balance=50, delegated_to_id="acc1")
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc2", balance=30)
         models.AssetHolding.objects.create(asset_id=2, owner_id="acc1", balance=20)
         models.Asset.objects.create(id=3, dao_id="dao3", owner_id="acc3", total_supply=100)
@@ -718,9 +804,8 @@ class EventHandlerTest(IntegrationTestCase):
             models.Vote(proposal_id=1, voter_id="acc1", voting_power=50, in_favor=None),
             models.Vote(proposal_id=1, voter_id="acc2", voting_power=30, in_favor=None),
             models.Vote(proposal_id=1, voter_id="acc3", voting_power=20, in_favor=None),
-            models.Vote(proposal_id=2, voter_id="acc3", voting_power=50, in_favor=None),
+            models.Vote(proposal_id=2, voter_id="acc1", voting_power=70, in_favor=None),
             models.Vote(proposal_id=2, voter_id="acc2", voting_power=30, in_favor=None),
-            models.Vote(proposal_id=2, voter_id="acc1", voting_power=20, in_favor=None),
         ]
 
         with self.assertNumQueries(3), freeze_time(time):
@@ -1843,6 +1928,8 @@ class EventHandlerTest(IntegrationTestCase):
     @patch("core.event_handler.SubstrateEventHandler._delete_daos")
     @patch("core.event_handler.SubstrateEventHandler._create_assets")
     @patch("core.event_handler.SubstrateEventHandler._transfer_assets")
+    @patch("core.event_handler.SubstrateEventHandler._delegate_assets")
+    @patch("core.event_handler.SubstrateEventHandler._revoke_asset_delegations")
     @patch("core.event_handler.SubstrateEventHandler._set_dao_metadata")
     @patch("core.event_handler.SubstrateEventHandler._dao_set_governances")
     @patch("core.event_handler.SubstrateEventHandler._create_proposals")

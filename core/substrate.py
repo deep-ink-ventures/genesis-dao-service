@@ -9,6 +9,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, connection
 from scalecodec import GenericCall, GenericExtrinsic, MultiAccountId
+from substrateinterface import ContractCode, ContractInstance
 from substrateinterface.keypair import Keypair
 from websocket import WebSocketConnectionClosedException
 
@@ -166,6 +167,37 @@ class SubstrateService(object):
             wait_for_inclusion=wait_for_inclusion,
         )
 
+    def deploy_contract(
+        self,
+        contract_base_path: str,
+        contract_name: str,
+        keypair: Keypair,
+        constructor_name: str = "new",
+        contract_constructor_args: dict = None,
+    ) -> ContractInstance:
+        """
+        Args:
+            contract_base_path: absolute path to .../target/ink/
+            contract_name: name of the contract
+            keypair: Keypair used to sign the txn to deploy the contract
+            constructor_name: defaults to "new"
+            contract_constructor_args:  args for the contract constructor
+        Returns:
+            the contract instance
+        """
+        path = contract_base_path + f"{contract_name}/{contract_name}"
+        return ContractCode.create_from_contract_files(
+            wasm_file=path + ".wasm",
+            metadata_file=path + ".json",
+            substrate=self.substrate_interface,
+        ).deploy(
+            constructor=constructor_name,
+            args=contract_constructor_args,
+            keypair=keypair,
+            upload_code=True,
+            gas_limit={"ref_time": 2599000000, "proof_size": 1199038364791120855},  # defaults / 10
+        )
+
     def sync_initial_accs(self):
         """
         fetches accounts from blockchain and creates an Account table entry for each
@@ -209,7 +241,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits a singed extrinsic to change a dao's ownership on the blockchain
+        submits a signed extrinsic to change a dao's ownership on the blockchain
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(
@@ -230,7 +262,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits a singed extrinsic to destroy a dao on the blockchain
+        submits a signed extrinsic to destroy a dao on the blockchain
         """
 
         self.submit_extrinsic(
@@ -245,7 +277,7 @@ class SubstrateService(object):
             wait_for_inclusion=wait_for_inclusion,
         )
 
-    def issue_tokens(self, dao_id: str, amount: int, keypair: Keypair, wait_for_inclusion=False):
+    def issue_token(self, dao_id: str, amount: int, keypair: Keypair, wait_for_inclusion=False):
         """
         Args:
             dao_id: dao id to issue tokens for
@@ -253,7 +285,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits a singed extrinsic to issue tokens for a dao on the blockchain
+        submits a signed extrinsic to issue tokens for a dao on the blockchain
         (creates a new asset and links it to the dao)
         """
 
@@ -275,10 +307,10 @@ class SubstrateService(object):
             asset_id: asset to transfer balance from
             target: target address / account to transfer balance to
             amount: amount of balance to transfer
-            keypair: Keypair used to sign the
+            keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits a singed extrinsic to transfer balance from an asset to an address / account on the blockchain
+        submits a signed extrinsic to transfer balance from an asset to an address / account on the blockchain
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(
@@ -286,6 +318,50 @@ class SubstrateService(object):
                     call_module="Assets",
                     call_function="transfer",
                     call_params={"id": asset_id, "target": target, "amount": amount},
+                ),
+                keypair=keypair,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
+
+    def delegate_asset(self, asset_id: str, target_id: str, keypair: Keypair, wait_for_inclusion=False):
+        """
+        Args:
+            asset_id: asset to delegate
+            target_id: target
+            keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+        submits a signed extrinsic to delegate tokens from an asset to an address / account on the blockchain
+        """
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Assets",
+                    call_function="delegate",
+                    call_params={"id": asset_id, "target": target_id},
+                ),
+                keypair=keypair,
+            ),
+            wait_for_inclusion=wait_for_inclusion,
+        )
+
+    def revoke_asset_delegation(self, asset_id: str, target_id: str, keypair: Keypair, wait_for_inclusion=False):
+        """
+        Args:
+            asset_id: asset to delegate
+            target_id: target
+            keypair: Keypair used to sign the extrinsic
+            wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
+
+        submits a signed extrinsic to revoke delegation of tokens on the blockchain
+        """
+        self.submit_extrinsic(
+            extrinsic=self.substrate_interface.create_signed_extrinsic(
+                call=self.substrate_interface.compose_call(
+                    call_module="Assets",
+                    call_function="revoke_delegation",
+                    call_params={"id": asset_id, "source": target_id},
                 ),
                 keypair=keypair,
             ),
@@ -301,7 +377,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits a singed extrinsic to transfer balance to a target address on the blockchain
+        submits a signed extrinsic to transfer balance to a target address on the blockchain
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(
@@ -326,7 +402,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits a singed extrinsic to set new values for the balance (free and reserved)
+        submits a signed extrinsic to set new values for the balance (free and reserved)
         of the target address / account on the blockchain
         """
         self.submit_extrinsic(
@@ -358,7 +434,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits a singed extrinsic to set metadata on a given dao
+        submits a signed extrinsic to set metadata on a given dao
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(
@@ -392,7 +468,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits a singed extrinsic to set governance type to majority vote for a given dao
+        submits a signed extrinsic to set governance type to majority vote for a given dao
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(
@@ -423,7 +499,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits a singed extrinsic to create a proposal for a given dao
+        submits a signed extrinsic to create a proposal for a given dao
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(
@@ -453,7 +529,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits a singed extrinsic to set metadata for a given proposal
+        submits a signed extrinsic to set metadata for a given proposal
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(
@@ -479,7 +555,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the extrinsic
             wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits singed extrinsic to vote on a given proposal
+        submits signed extrinsic to vote on a given proposal
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(
@@ -503,7 +579,7 @@ class SubstrateService(object):
              keypair: Keypair used to sign the extrinsic
              wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-             submits singed extrinsic to finalize a given proposal
+             submits signed extrinsic to finalize a given proposal
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(
@@ -526,7 +602,7 @@ class SubstrateService(object):
              wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
 
-             submits singed extrinsic to fault a given proposal
+             submits signed extrinsic to fault a given proposal
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(
@@ -605,7 +681,7 @@ class SubstrateService(object):
              keypair: Keypair used to sign the extrinsic
              wait_for_inclusion: wait for inclusion of extrinsic in block, required for error msg
 
-        submits singed extrinsic to cancel a multisig transaction
+        submits signed extrinsic to cancel a multisig transaction
         """
         self.submit_extrinsic(
             extrinsic=self.substrate_interface.create_signed_extrinsic(

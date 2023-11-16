@@ -1,6 +1,6 @@
 import logging
 from collections import defaultdict
-from functools import reduce
+from functools import partial, reduce
 from typing import DefaultDict
 
 from django.core.cache import cache
@@ -29,6 +29,8 @@ class SubstrateEventHandler:
             self._delete_daos,
             self._create_assets,
             self._transfer_assets,
+            self._delegate_assets,
+            self._revoke_asset_delegations,
             self._set_dao_metadata,
             self._dao_set_governances,
             self._create_proposals,
@@ -46,7 +48,7 @@ class SubstrateEventHandler:
     def _create_accounts(block: models.Block):
         """
         Args:
-            block: Block to create Accounts from
+            block: Block containing extrinsics and events
 
         creates Accounts based on the Block's extrinsics and events
         """
@@ -60,7 +62,7 @@ class SubstrateEventHandler:
     def _create_daos(block: models.Block):
         """
         Args:
-            block: Block to create Accounts from
+            block: Block containing extrinsics and events
 
         creates Daos based on the Block's extrinsics and events
         """
@@ -84,7 +86,7 @@ class SubstrateEventHandler:
     def _transfer_dao_ownerships(block: models.Block):
         """
         Args:
-            block: Block to change Dao owners from
+            block: Block containing extrinsics and events
 
         transfers ownerships of a Daos to new Accounts based on the Block's events
         """
@@ -114,7 +116,7 @@ class SubstrateEventHandler:
     def _delete_daos(block: models.Block):
         """
         Args:
-            block: Block to create Accounts from
+            block: Block containing extrinsics and events
 
         deletes Daos based on the Block's extrinsics and events
         """
@@ -127,7 +129,7 @@ class SubstrateEventHandler:
     def _create_assets(block: models.Block):
         """
         Args:
-            block: Block to create Accounts from
+            block: Block containing extrinsics and events
 
         creates Assets based on the Block's extrinsics and events
         """
@@ -167,7 +169,7 @@ class SubstrateEventHandler:
     def _transfer_assets(block: models.Block):
         """
         Args:
-            block: Block to create Accounts from
+            block: Block containing extrinsics and events
 
         transfers Assets based on the Block's extrinsics and events
         rephrase: transfers ownership of an amount of tokens (models.AssetHolding) from one Account to another
@@ -221,10 +223,69 @@ class SubstrateEventHandler:
             models.AssetHolding.objects.bulk_create(asset_holdings_to_create.values())
 
     @staticmethod
+    def _delegate_assets(block: models.Block):
+        """
+        Args:
+            block: Block containing extrinsics and events
+
+        delegates votes to another account based on the Block's extrinsics and events
+        """
+        if data := {
+            (event["asset_id"], event["from"]): event["to"]
+            for event in block.event_data.get("Assets", {}).get("Delegated", [])
+        }:
+            for asset_holding in (
+                asset_holdings := list(
+                    models.AssetHolding.objects.filter(
+                        # WHERE (
+                        #     (asset_holding.asset_id = 1 AND asset_holding.owner_id = 2)
+                        #     OR (asset_holding.asset_id =3 AND asset_holding.owner_id = 4)
+                        #     OR ...
+                        # )
+                        reduce(
+                            Q.__or__,
+                            [Q(asset_id=asset_id, owner_id=owner_id) for asset_id, owner_id in data.keys()],
+                        )
+                    )
+                )
+            ):
+                asset_holding.delegated_to_id = data[(asset_holding.asset_id, asset_holding.owner_id)]
+
+            models.AssetHolding.objects.bulk_update(asset_holdings, ["delegated_to_id"])
+
+    @staticmethod
+    def _revoke_asset_delegations(block: models.Block):
+        """
+        Args:
+            block: Block containing extrinsics and events
+
+        revokes delegation of votes to another account based on the Block's extrinsics and events
+        """
+
+        if data := [
+            (event["asset_id"], event["delegated_by"], event["revoked_from"])
+            for event in block.event_data.get("Assets", {}).get("DelegationRevoked", [])
+        ]:
+            models.AssetHolding.objects.filter(
+                # WHERE (
+                #     (holding.asset_id = 1 AND holding.owner_id = 2 AND holding.delegated_to_id = 3)
+                #     OR (holding.asset_id = 4 AND holding.owner_id = 5 AND holding.delegated_to_id = 6)
+                #     OR ...
+                # )
+                reduce(
+                    Q.__or__,
+                    [
+                        Q(asset_id=asset_id, owner_id=owner_id, delegated_to_id=delegated_to_id)
+                        for asset_id, owner_id, delegated_to_id in data
+                    ],
+                )
+            ).update(delegated_to_id=None)
+
+    @staticmethod
     def _set_dao_metadata(block: models.Block):
         """
         Args:
-            block: Block to create Accounts from
+            block: Block containing extrinsics and events
 
         updates Daos' metadata_url and metadata_hash based on the Block's extrinsics and events
         """
@@ -243,7 +304,7 @@ class SubstrateEventHandler:
     def _dao_set_governances(block: models.Block):
         """
         Args:
-            block: Block to set DAO's governance model from
+            block: Block containing extrinsics and events
 
         updates Daos' governance based on the Block's extrinsics and events
         """
@@ -269,7 +330,7 @@ class SubstrateEventHandler:
     def _create_proposals(block: models.Block):
         """
         Args:
-            block: Block to create Proposals from
+            block: Block containing extrinsics and events
 
         create Proposals based on the Block's extrinsics and events
         """
@@ -288,11 +349,11 @@ class SubstrateEventHandler:
                 )
             )
         if proposals:
-            dao_id_to_holding_data: DefaultDict = defaultdict(list)
-            for dao_id, owner_id, balance in models.AssetHolding.objects.filter(asset__dao__id__in=dao_ids).values_list(
-                "asset__dao_id", "owner_id", "balance"
-            ):
-                dao_id_to_holding_data[dao_id].append((owner_id, balance))
+            dao_id_to_voter_id_to_balance: DefaultDict = defaultdict(partial(defaultdict, int))
+            for dao_id, owner_id, delegated_to_id, balance in models.AssetHolding.objects.filter(
+                asset__dao__id__in=dao_ids
+            ).values_list("asset__dao_id", "owner_id", "delegated_to_id", "balance"):
+                dao_id_to_voter_id_to_balance[dao_id][delegated_to_id or owner_id] += balance
 
             models.Proposal.objects.bulk_create(proposals)
             # for all proposals: create a Vote placeholder for each Account holding tokens (AssetHoldings) of the
@@ -301,7 +362,7 @@ class SubstrateEventHandler:
                 [
                     models.Vote(proposal_id=proposal.id, voter_id=voter_id, voting_power=balance)
                     for proposal in proposals
-                    for voter_id, balance in dao_id_to_holding_data[proposal.dao_id]
+                    for voter_id, balance in dao_id_to_voter_id_to_balance[proposal.dao_id].items()
                 ]
             )
 
@@ -309,7 +370,7 @@ class SubstrateEventHandler:
     def _set_proposal_metadata(block: models.Block):
         """
         Args:
-            block: Block to set Proposal's metadata from
+            block: Block containing extrinsics and events
 
         set Proposals' metadata based on the Block's extrinsics and events
         """
@@ -332,7 +393,7 @@ class SubstrateEventHandler:
     def _register_votes(block: models.Block):
         """
         Args:
-            block: Block to register votes from
+            block: Block containing extrinsics and events
 
         registers Votes based on the Block's events
         """
@@ -363,7 +424,7 @@ class SubstrateEventHandler:
     def _finalize_proposals(block: models.Block):
         """
         Args:
-            block: Block to finalize proposals from
+            block: Block containing extrinsics and events
 
         finalizes Proposals based on the Block's events
         """
@@ -377,7 +438,7 @@ class SubstrateEventHandler:
     def _fault_proposals(block: models.Block):
         """
         Args:
-            block: Block to fault proposals from
+            block: Block containing extrinsics and events
 
         faults Proposals based on the Block's events
         """
@@ -394,7 +455,7 @@ class SubstrateEventHandler:
     def _handle_new_transactions(block: models.Block):
         """
         Args:
-            block: Block to create / update Transactions from
+            block: Block containing extrinsics and events
 
         creates / updates Transactions based on the Block's events
         """
@@ -441,7 +502,7 @@ class SubstrateEventHandler:
     def _approve_transactions(block: models.Block):
         """
         Args:
-            block: Block to approve Transactions from
+            block: Block containing extrinsics and events
 
         approves Transactions based on the Block's events
         """
@@ -478,7 +539,7 @@ class SubstrateEventHandler:
     def _execute_transactions(block: models.Block):
         """
         Args:
-            block: Block to execute Transactions from
+            block: Block containing extrinsics and events
 
         executes Transactions based on the Block's events
         """
@@ -550,7 +611,7 @@ class SubstrateEventHandler:
     def _cancel_transactions(block: models.Block):
         """
         Args:
-            block: Block to cancels Transactions from
+            block: Block containing extrinsics and events
 
         cancels Transactions based on the Block's events
         """
@@ -586,7 +647,6 @@ class SubstrateEventHandler:
         """
         Args:
              block: Block to execute
-
 
          alters db's blockchain representation based on the Block's extrinsics and events
         """

@@ -119,6 +119,34 @@ class SubstrateServiceTest(IntegrationTestCase):
             wait_for_inclusion=False,
         )
 
+    @patch("core.substrate.ContractCode")
+    def test_deploy_contract(self, contract_code_mock):
+        contract_base_path = "some_path/"
+        contract_name = "some_name"
+        constructor_name = "some_constructor_name"
+        contract_constructor_args = "some_constructor_args"
+
+        self.substrate_service.deploy_contract(
+            contract_base_path=contract_base_path,
+            contract_name=contract_name,
+            keypair=self.keypair,
+            constructor_name=constructor_name,
+            contract_constructor_args=contract_constructor_args,
+        )
+
+        contract_code_mock.create_from_contract_files.assert_called_once_with(
+            wasm_file="some_path/some_name/some_name.wasm",
+            metadata_file="some_path/some_name/some_name.json",
+            substrate=self.si,
+        )
+        contract_code_mock.create_from_contract_files.return_value.deploy.assert_called_once_with(
+            constructor=constructor_name,
+            args=contract_constructor_args,
+            keypair=self.keypair,
+            upload_code=True,
+            gas_limit={"ref_time": 2599000000, "proof_size": 1199038364791120855},
+        )
+
     def test_retrieve_account_balance(self):
         account_address = "some_address"
         expected_balance = {"free": 1, "reserved": 2, "misc_frozen": 3, "fee_frozen": 4}
@@ -186,11 +214,11 @@ class SubstrateServiceTest(IntegrationTestCase):
         )
         self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
-    def test_issue_tokens(self):
+    def test_issue_token(self):
         dao_id = "some id"
         amount = 123
 
-        self.substrate_service.issue_tokens(dao_id=dao_id, amount=amount, keypair=self.keypair)
+        self.substrate_service.issue_token(dao_id=dao_id, amount=amount, keypair=self.keypair)
 
         self.si.compose_call.assert_called_once_with(
             call_module="DaoCore",
@@ -210,6 +238,32 @@ class SubstrateServiceTest(IntegrationTestCase):
             call_module="Assets",
             call_function="transfer",
             call_params={"id": asset_id, "target": target, "amount": amount},
+        )
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
+
+    def test_delegate_asset(self):
+        asset_id = "123"
+        target_id = "some acc addr"
+
+        self.substrate_service.delegate_asset(asset_id=asset_id, target_id=target_id, keypair=self.keypair)
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Assets",
+            call_function="delegate",
+            call_params={"id": asset_id, "target": target_id},
+        )
+        self.assert_signed_extrinsic_submitted(keypair=self.keypair)
+
+    def test_revoke_asset_delegation(self):
+        asset_id = "123"
+        target_id = "some acc addr"
+
+        self.substrate_service.revoke_asset_delegation(asset_id=asset_id, target_id=target_id, keypair=self.keypair)
+
+        self.si.compose_call.assert_called_once_with(
+            call_module="Assets",
+            call_function="revoke_delegation",
+            call_params={"id": asset_id, "source": target_id},
         )
         self.assert_signed_extrinsic_submitted(keypair=self.keypair)
 
