@@ -75,7 +75,7 @@ class CoreViewSetTest(IntegrationTestCase):
         self.challenge_key = secrets.token_hex(64)
         cache.set(key="acc1", value=self.challenge_key, timeout=60)
         self.acc1 = models.Account.objects.create(address="acc1")
-        models.Account.objects.create(address="acc2")
+        self.acc2 = models.Account.objects.create(address="acc2")
         models.Account.objects.create(address="acc3")
         models.Account.objects.create(address="acc4")
         models.Dao.objects.create(
@@ -90,7 +90,7 @@ class CoreViewSetTest(IntegrationTestCase):
         )
         models.Asset.objects.create(id=1, owner_id="acc1", dao_id="dao1", total_supply=1000)
         models.Asset.objects.create(id=2, owner_id="acc2", dao_id="dao2", total_supply=200)
-        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=500)
+        models.AssetHolding.objects.create(asset_id=1, owner_id="acc1", balance=500, delegated_to=self.acc2)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc2", balance=300)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc3", balance=100)
         models.AssetHolding.objects.create(asset_id=1, owner_id="acc4", balance=100)
@@ -1534,3 +1534,10 @@ class CoreViewSetTest(IntegrationTestCase):
         self.assertEqual(res.status_code, HTTP_400_BAD_REQUEST)
         self.assertDictEqual(res.json(), {"message": "No MultiSig Account exists for the given Dao."})
         self.assertListEqual(list(models.MultiSigTransaction.objects.all()), [])
+
+    def test_asset_holdings_reflect_delegation(self):
+        res = self.client.get(reverse("core-asset-holding-list") + "?asset_id=1&owner_id=acc1").json()
+        self.assertEqual(res["results"][0]["delegated_to"], "acc2")
+
+        res = self.client.get(reverse("core-asset-holding-list") + "?asset_id=1&owner_id=acc2").json()
+        self.assertIsNone(res["results"][0]["delegated_to"])

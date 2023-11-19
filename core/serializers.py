@@ -154,7 +154,7 @@ class AssetHoldingSerializer(ModelSerializer):
 
     class Meta:
         model = models.AssetHolding
-        fields = ("id", "asset_id", "owner_id", "balance")
+        fields = ("id", "asset_id", "owner_id", "balance", "delegated_to")
 
 
 class VotesSerializer(Serializer):  # noqa
