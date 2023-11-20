@@ -23,6 +23,7 @@ class SubstrateEventHandler:
 
     def __init__(self):
         self.block_actions = (
+            self._instantiate_contracts,
             self._create_accounts,
             self._create_daos,
             self._transfer_dao_ownerships,
@@ -43,6 +44,43 @@ class SubstrateEventHandler:
             self._execute_transactions,
             self._cancel_transactions,
         )
+
+    @staticmethod
+    def _instantiate_contracts(block: models.Block):
+        """
+        Args:
+            block: Block containing extrinsics and events
+
+        todo @chp
+        """
+        # start listener
+        # run samples.deploy_contracts()
+        # check core_blocks table
+        # event should look smth like this:
+        #
+        # "Contracts": {
+        #     "CodeStored": [
+        #       {
+        #         "code_hash": "0x7161a8edc15b019d8432acaa1ab704c3a23f278457e86fadb4ad4a0a72c98eff"
+        #       }
+        #     ],
+        #     "Instantiated": [
+        #       {
+        #         "contract": "5DQmg2Gf7xzWwxAR43c4dUibfqv3ZW5nMH3wLYmNP9M1srXv",
+        #         "deployer": "5GYTUY1vZFZJwyRrxsDecxjNxSM1eZ9bZaqBpojgCA2p6aCa"
+        #       }
+        #     ]
+        #   },
+        #
+        # there are also ("System", "NewAccount") events emitted for this which are already handled. doesn't really make
+        # sense to store these as accounts imo, maybe there needs to be a check for that
+
+        # actually not sure what should happen here
+        if ctr_event := block.event_data.get("Contracts", {}):
+            for code_stored_event in ctr_event.get("CodeStored", []):
+                pass  # do things
+            for instantiated_event in ctr_event.get("Instantiated", []):
+                pass  # do things
 
     @staticmethod
     def _create_accounts(block: models.Block):
