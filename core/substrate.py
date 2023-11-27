@@ -4,17 +4,20 @@ import time
 from collections import defaultdict
 from functools import partial, wraps
 from typing import Collection, List, Optional
+from uuid import uuid4
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, connection
 from scalecodec import GenericCall, GenericExtrinsic, MultiAccountId
-from substrateinterface import ContractCode, ContractInstance
+from scalecodec.base import ScaleBytes
+from substrateinterface import ContractCode, ContractEvent, ContractInstance
 from substrateinterface.keypair import Keypair
 from websocket import WebSocketConnectionClosedException
 
 from core import models
 from core.event_handler import substrate_event_handler
+from core.models import Dao
 
 logger = logging.getLogger("alerts")
 slack_logger = logging.getLogger("alerts.slack")
@@ -166,6 +169,43 @@ class SubstrateService(object):
             ),
             wait_for_inclusion=wait_for_inclusion,
         )
+
+    def initiate_dao_on_ink(self, dao: Dao):
+        kp = Keypair.create_from_uri(settings.SUBSTRATE_FUNDING_KEYPAIR_URI)
+        base_extensions = {
+            # "genesis_dao_contract": {"owner": kp.ss58_address, "asset_id": dao.asset.id},
+            "dao_asset_contract": {"asset_id": dao.asset.id},
+        }
+
+        calls = []
+
+        for contract in base_extensions.keys():
+            wasm_path = f"{settings.BASE_DIR}/wasm/{contract}.wasm"
+            json_path = f"{settings.BASE_DIR}/wasm/{contract}.json"
+
+            contract_code = ContractCode.create_from_contract_files(
+                wasm_file=wasm_path,
+                metadata_file=json_path,
+                substrate=substrate_service.substrate_interface,
+            )
+
+            data = contract_code.metadata.generate_constructor_data(name="new", args=base_extensions[contract])
+
+            call = substrate_service.substrate_interface.compose_call(
+                call_module="Contracts",
+                call_function="instantiate_with_code",
+                call_params={
+                    "value": 0,
+                    "gas_limit": {"ref_time": 2599000000, "proof_size": 1199038364791120855},
+                    "storage_deposit_limit": None,
+                    "code": "0x{}".format(contract_code.wasm_bytes.hex()),
+                    "data": data.to_hex(),
+                    "salt": uuid4().hex,
+                },
+            )
+            calls.append(call)
+
+        self.batch(calls, kp)
 
     def deploy_contract(
         self,
@@ -830,8 +870,18 @@ class SubstrateService(object):
             "event_data": event_data,
             "extrinsic_data": extrinsic_data,
         }
+
+        # require contract event parsing
+        if "Contracts" in event_data:
+            for contract in get_supported_contracts():
+                for event in event_data["Contracts"].get("ContractEmitted", []):
+                    data = ScaleBytes(bytes(event["data"], "utf-8"))
+                    decoded_event = ContractEvent(data=data, contract_metadata=contract.metadata).process()
+
+                    print(decoded_event)
+
         try:
-            return models.Block.objects.get(**block_attrs)
+            return models.Block.objects.get(hash=block_data["header"]["hash"])
         except models.Block.DoesNotExist:
             try:
                 return models.Block.objects.create(**block_attrs)
@@ -934,3 +984,23 @@ class SubstrateService(object):
 
 
 substrate_service = SubstrateService()
+
+SUPPORTED_CONTRACTS = [
+    # "genesis_dao_contract",
+    "dao_asset_contract",
+    # "vesting_wallet_contract",
+    # "vote_escrow_contract",
+]
+
+
+def get_supported_contracts() -> List[ContractCode]:
+    contracts = []
+
+    for contract_str in SUPPORTED_CONTRACTS:
+        contract_code = ContractCode.create_from_contract_files(
+            wasm_file=f"{settings.BASE_DIR}/wasm/{contract_str}.wasm",
+            metadata_file=f"{settings.BASE_DIR}/wasm/{contract_str}.json",
+            substrate=substrate_service.substrate_interface,
+        )
+        contracts.append(contract_code)
+    return contracts

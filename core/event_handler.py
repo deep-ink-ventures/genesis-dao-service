@@ -77,10 +77,9 @@ class SubstrateEventHandler:
 
         # actually not sure what should happen here
         if ctr_event := block.event_data.get("Contracts", {}):
-            for code_stored_event in ctr_event.get("CodeStored", []):
-                pass  # do things
-            for instantiated_event in ctr_event.get("Instantiated", []):
-                pass  # do things
+            for event in ctr_event.get("ContractEmitted", []):
+                x = 1
+                pass
 
     @staticmethod
     def _create_accounts(block: models.Block):

@@ -20,31 +20,6 @@ from core.tests.testcases import IntegrationTestCase
 
 
 class EventHandlerTest(IntegrationTestCase):
-    def test__instantiate_contracts(self):
-        # todo @chp
-        block = models.Block.objects.create(
-            hash="hash 0",
-            number=0,
-            event_data={
-                "not": "interesting",
-                "Contracts": {
-                    "not": "interesting",
-                    "CodeStored": [
-                        {"contract": "acc1", "deployer": "acc2", "not": "interesting"},
-                        {"contract": "acc3", "deployer": "acc4", "not": "interesting"},
-                    ],
-                    "Instantiated": [
-                        {"contract": "acc1", "deployer": "acc2"},
-                        {"contract": "acc3", "deployer": "acc4"},
-                    ],
-                },
-            },
-        )
-
-        with self.assertNumQueries(0):
-            substrate_event_handler._instantiate_contracts(block)
-            self.fail("add meaningful test")
-
     def test__create_accounts(self):
         block = models.Block.objects.create(
             hash="hash 0",
