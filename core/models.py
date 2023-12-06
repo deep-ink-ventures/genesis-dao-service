@@ -32,6 +32,11 @@ class Dao(TimestampableMixin):
     metadata_hash = models.CharField(max_length=256, null=True)
     setup_complete = models.BooleanField(default=False)
 
+    ink_asset_contract = models.CharField(max_length=128, null=True, blank=True)
+    ink_registry_contract = models.CharField(max_length=128, null=True, blank=True)
+    ink_vesting_wallet_contract = models.CharField(max_length=128, null=True, blank=True)
+    ink_vote_escrow_contract = models.CharField(max_length=128, null=True, blank=True)
+
     class Meta:
         verbose_name = "DAO"
         verbose_name_plural = "DAOs"

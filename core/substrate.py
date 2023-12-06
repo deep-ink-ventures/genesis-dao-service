@@ -1,7 +1,8 @@
 import base64
+import hashlib
 import logging
 import time
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from functools import partial, wraps
 from typing import Collection, List, Optional
 from uuid import uuid4
@@ -18,6 +19,7 @@ from websocket import WebSocketConnectionClosedException
 from core import models
 from core.event_handler import substrate_event_handler
 from core.models import Dao
+from scalecodec.utils.ss58 import ss58_encode
 
 logger = logging.getLogger("alerts")
 slack_logger = logging.getLogger("alerts.slack")
@@ -172,14 +174,29 @@ class SubstrateService(object):
 
     def initiate_dao_on_ink(self, dao: Dao):
         kp = Keypair.create_from_uri(settings.SUBSTRATE_FUNDING_KEYPAIR_URI)
-        base_extensions = {
-            # "genesis_dao_contract": {"owner": kp.ss58_address, "asset_id": dao.asset.id},
-            "dao_asset_contract": {"asset_id": dao.asset.id},
-        }
+
+        one_year_in_seconds = 365 * 24 * 60 * 60
+        blocks_per_year = one_year_in_seconds / settings.BLOCK_CREATION_INTERVAL
+
+        predicted_contract_addresses = OrderedDict()
+        predicted_contract_addresses["dao_asset_contract"] = None
+        predicted_contract_addresses["genesis_dao_contract"] = None
+        predicted_contract_addresses["vesting_wallet_contract"] = None
+        predicted_contract_addresses["vote_escrow_contract"] = None
 
         calls = []
 
-        for contract in base_extensions.keys():
+        for contract in predicted_contract_addresses.keys():
+
+            base_extensions = {
+                "dao_asset_contract": {"asset_id": dao.asset.id},
+                "genesis_dao_contract": {"owner": kp.ss58_address, "asset_id": dao.asset.id},
+                "vesting_wallet_contract": {"token": predicted_contract_addresses["dao_asset_contract"]},
+                "vote_escrow_contract": {
+                    "token": predicted_contract_addresses["dao_asset_contract"], "max_time": blocks_per_year, "boost": 4
+                }
+            }
+
             wasm_path = f"{settings.BASE_DIR}/wasm/{contract}.wasm"
             json_path = f"{settings.BASE_DIR}/wasm/{contract}.json"
 
@@ -190,6 +207,14 @@ class SubstrateService(object):
             )
 
             data = contract_code.metadata.generate_constructor_data(name="new", args=base_extensions[contract])
+            salt = uuid4()
+
+            predicted_contract_addresses[contract] = ss58_encode(contract_address(
+                kp.public_key,
+                contract_code.code_hash,
+                data.data,
+                salt.bytes
+            ), ss58_format=self.substrate_interface.ss58_format)
 
             call = substrate_service.substrate_interface.compose_call(
                 call_module="Contracts",
@@ -204,6 +229,12 @@ class SubstrateService(object):
                 },
             )
             calls.append(call)
+
+        dao.ink_asset_contract = predicted_contract_addresses["dao_asset_contract"]
+        dao.ink_registry_contract = predicted_contract_addresses["genesis_dao_contract"]
+        dao.ink_vesting_wallet_contract = predicted_contract_addresses["vesting_wallet_contract"]
+        dao.ink_vote_escrow_contract = predicted_contract_addresses["vote_escrow_contract"]
+        dao.save()
 
         self.batch(calls, kp)
 
@@ -861,7 +892,29 @@ class SubstrateService(object):
             block_hash=block_data["header"]["hash"]
         )
         for event in events:
-            event_data[event.value["module_id"]][event.value["event_id"]].append(event.value["attributes"])
+            attributes = event.value["attributes"] or {}
+            try:
+                attributes["raw_data"] = event.value_object['event'][1][1]["data"].value_object
+            except (KeyError, TypeError):
+                attributes["raw_data"] = None
+            event_data[event.value["module_id"]][event.value["event_id"]].append(attributes)
+
+        # require contract event parsing
+        if "Contracts" in event_data:
+            for ix, event in enumerate(event_data["Contracts"].get("ContractEmitted", [])):
+                for contract in get_supported_contracts():
+                    data = ScaleBytes(event["raw_data"])
+                    try:
+                        decoded_event = ContractEvent(
+                            data=data,
+                            contract_metadata=contract.metadata,
+                            runtime_config=self.substrate_interface.runtime_config,
+                        ).decode()
+                    except Exception:  # noqa E722
+                        continue
+                    contract = event_data["Contracts"]["ContractEmitted"][ix]["contract"]
+                    event_data["Contracts"]["ContractEmitted"][ix] = decoded_event
+                    event_data["Contracts"]["ContractEmitted"][ix]["contract"] = contract
 
         block_attrs = {
             "number": block_data["header"]["number"],
@@ -870,15 +923,6 @@ class SubstrateService(object):
             "event_data": event_data,
             "extrinsic_data": extrinsic_data,
         }
-
-        # require contract event parsing
-        if "Contracts" in event_data:
-            for contract in get_supported_contracts():
-                for event in event_data["Contracts"].get("ContractEmitted", []):
-                    data = ScaleBytes(bytes(event["data"], "utf-8"))
-                    decoded_event = ContractEvent(data=data, contract_metadata=contract.metadata).process()
-
-                    print(decoded_event)
 
         try:
             return models.Block.objects.get(hash=block_data["header"]["hash"])
@@ -986,10 +1030,10 @@ class SubstrateService(object):
 substrate_service = SubstrateService()
 
 SUPPORTED_CONTRACTS = [
-    # "genesis_dao_contract",
+    "genesis_dao_contract",
     "dao_asset_contract",
-    # "vesting_wallet_contract",
-    # "vote_escrow_contract",
+    "vesting_wallet_contract",
+    "vote_escrow_contract",
 ]
 
 
@@ -1004,3 +1048,26 @@ def get_supported_contracts() -> List[ContractCode]:
         )
         contracts.append(contract_code)
     return contracts
+
+
+def contract_address(deploying_address, code_hash, input_data, salt):
+    """
+    Computes the address of the contract.
+
+    :param deploying_address: The address of the deploying account.
+    :param code_hash: The hash of the contract's code.
+    :param input_data: The input data for the contract creation.
+    :param salt: A salt value for the contract creation.
+    :return: The account address.
+    """
+    concatenated_inputs = (
+        b"contract_addr_v1" +
+        deploying_address +
+        code_hash +
+        input_data +
+        salt
+    )
+
+    # Compute the H256 hash using keccak
+    return hashlib.blake2b(concatenated_inputs, digest_size=32).hexdigest()
+

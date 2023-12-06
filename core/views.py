@@ -222,6 +222,27 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         return Response(metadata, status=HTTP_201_CREATED)
 
     @swagger_auto_schema(
+        operation_id="Initiate Contracts",
+        operation_description="Initiates the contracts for a DAO.",
+        manual_parameters=[signed_by_dao_owner],
+        security=[{"Signature": []}],
+        responses={200: openapi.Response("", serializers.DaoSerializer)},
+    )
+    @action(
+        methods=["POST"],
+        detail=True,
+        url_path="initiate-contracts",
+        permission_classes=[IsDAOOwner],
+        authentication_classes=[],
+    )
+    def initiate_contracts(self, request, *args, **kwargs):
+        from core.substrate import substrate_service
+
+        dao = self.get_object()
+        substrate_service.initiate_dao_on_ink(dao)
+        return Response(status=HTTP_200_OK, data=self.get_serializer(dao).data)
+
+    @swagger_auto_schema(
         method="GET",
         operation_id="Challenge",
         operation_description="Retrieves current challenge.",

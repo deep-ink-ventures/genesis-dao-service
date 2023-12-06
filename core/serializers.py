@@ -87,6 +87,10 @@ class DaoSerializer(ModelSerializer):
             "number_of_token_holders",
             "number_of_open_proposals",
             "most_recent_proposals",
+            "ink_asset_contract",
+            "ink_registry_contract",
+            "ink_vesting_wallet_contract",
+            "ink_vote_escrow_contract",
         )
 
 

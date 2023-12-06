@@ -78,7 +78,7 @@ class SubstrateEventHandler:
         # actually not sure what should happen here
         if ctr_event := block.event_data.get("Contracts", {}):
             for event in ctr_event.get("ContractEmitted", []):
-                x = 1
+                print(event)
                 pass
 
     @staticmethod
