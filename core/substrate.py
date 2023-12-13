@@ -2,7 +2,7 @@ import base64
 import hashlib
 import logging
 import time
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from functools import partial, wraps
 from typing import Collection, List, Optional
 from uuid import uuid4
@@ -19,10 +19,11 @@ from websocket import WebSocketConnectionClosedException
 from core import models
 from core.event_handler import substrate_event_handler
 from core.models import Dao
-from scalecodec.utils.ss58 import ss58_encode
 
 logger = logging.getLogger("alerts")
 slack_logger = logging.getLogger("alerts.slack")
+
+INK_DEFAULT_GAS_LIMIT = {"ref_time": 2599000000, "proof_size": 1199038364791120855}
 
 
 def retry(description: str):
@@ -177,14 +178,7 @@ class SubstrateService(object):
 
         one_year_in_seconds = 365 * 24 * 60 * 60
         blocks_per_year = one_year_in_seconds / settings.BLOCK_CREATION_INTERVAL
-
-        contracts = [
-            "genesis_dao_contract",
-            "vesting_wallet_contract",
-            "vote_escrow_contract",
-        ]
-
-        calls = []
+        print("create dao asset contract")
         dao_asset_contract = self.deploy_contract(
             contract_base_path=f"{settings.BASE_DIR}/wasm/",
             contract_name="dao_asset_contract",
@@ -192,50 +186,86 @@ class SubstrateService(object):
             constructor_name="new",
             contract_constructor_args={"asset_id": dao.asset.id},
         )
+        print("create genesis dao contract")
+        genesis_dao_contract = self.deploy_contract(
+            contract_base_path=f"{settings.BASE_DIR}/wasm/",
+            contract_name="genesis_dao_contract",
+            keypair=kp,
+            constructor_name="new",
+            contract_constructor_args={"owner": kp.ss58_address, "asset_id": dao.asset.id},
+        )
 
-        print(dao_asset_contract.contract_address)
+        print("create vesting wallet contract")
+        vesting_wallet_contract = self.deploy_contract(
+            contract_base_path=f"{settings.BASE_DIR}/wasm/",
+            contract_name="vesting_wallet_contract",
+            keypair=kp,
+            constructor_name="new",
+            contract_constructor_args={"token": dao_asset_contract.contract_address},
+        )
 
-        for contract in contracts:
+        vote_escrow_contract = self.deploy_contract(
+            contract_base_path=f"{settings.BASE_DIR}/wasm/",
+            contract_name="vote_escrow_contract",
+            keypair=kp,
+            constructor_name="new",
+            contract_constructor_args={
+                "token": dao_asset_contract.contract_address, "max_time": blocks_per_year, "boost": 4
+            },
+        )
 
-            base_extensions = {
-                "dao_asset_contract": {"asset_id": dao.asset.id},
-                "genesis_dao_contract": {"owner": kp.ss58_address, "asset_id": dao.asset.id},
-                "vesting_wallet_contract": {"token": dao_asset_contract.contract_address},
-                "vote_escrow_contract": {
-                    "token": dao_asset_contract.contract_address, "max_time": blocks_per_year, "boost": 4
-                }
-            }
-
-            wasm_path = f"{settings.BASE_DIR}/wasm/{contract}.wasm"
-            json_path = f"{settings.BASE_DIR}/wasm/{contract}.json"
-
-            contract_code = ContractCode.create_from_contract_files(
-                wasm_file=wasm_path,
-                metadata_file=json_path,
-                substrate=substrate_service.substrate_interface,
-            )
-
-            data = contract_code.metadata.generate_constructor_data(name="new", args=base_extensions[contract])
-            salt = uuid4()
-
-            call = substrate_service.substrate_interface.compose_call(
-                call_module="Contracts",
-                call_function="instantiate_with_code",
+        print("register vote plugins")
+        calls = [
+            self.substrate_interface.compose_call(
+                call_module='Contracts',
+                call_function='call',
                 call_params={
-                    "value": 0,
-                    "gas_limit": {"ref_time": 2599000000, "proof_size": 1199038364791120855},
-                    "storage_deposit_limit": None,
-                    "code": "0x{}".format(contract_code.wasm_bytes.hex()),
-                    "data": data.to_hex(),
-                    "salt": salt.hex,
+                    'dest': genesis_dao_contract.contract_address,
+                    'value': 0,
+                    'gas_limit': INK_DEFAULT_GAS_LIMIT,
+                    'storage_deposit_limit': None,
+                    'data': genesis_dao_contract.metadata.generate_message_data(
+                        name="register_vote_plugin",
+                        args={"vote_plugin": vesting_wallet_contract.contract_address}
+                    ).to_hex()
                 },
-            )
-            calls.append(call)
-
+            ),
+            self.substrate_interface.compose_call(
+                call_module='Contracts',
+                call_function='call',
+                call_params={
+                    'dest': genesis_dao_contract.contract_address,
+                    'value': 0,
+                    'gas_limit': INK_DEFAULT_GAS_LIMIT,
+                    'storage_deposit_limit': None,
+                    'data': genesis_dao_contract.metadata.generate_message_data(
+                        name="register_vote_plugin",
+                        args={"vote_plugin": vote_escrow_contract.contract_address}
+                    ).to_hex()
+                },
+            ),
+            self.substrate_interface.compose_call(
+                call_module='Contracts',
+                call_function='call',
+                call_params={
+                    'dest': genesis_dao_contract.contract_address,
+                    'value': 0,
+                    'gas_limit': INK_DEFAULT_GAS_LIMIT,
+                    'storage_deposit_limit': None,
+                    'data': genesis_dao_contract.metadata.generate_message_data(
+                        name="transfer_ownership",
+                        args={"new_owner": dao.owner.address}
+                    ).to_hex()
+                },
+            ),
+        ]
+        self.batch(calls, kp, wait_for_inclusion=False)
         dao.ink_asset_contract = dao_asset_contract.contract_address
+        dao.ink_registry_contract = genesis_dao_contract.contract_address
+        dao.ink_vesting_wallet_contract = vesting_wallet_contract.contract_address
+        dao.ink_vote_escrow_contract = vote_escrow_contract.contract_address
         dao.save()
-
-        self.batch(calls, kp)
+        print("done")
 
     def deploy_contract(
         self,
@@ -265,7 +295,7 @@ class SubstrateService(object):
             args=contract_constructor_args,
             keypair=keypair,
             upload_code=True,
-            gas_limit={"ref_time": 2599000000, "proof_size": 1199038364791120855},  # defaults / 10
+            gas_limit=INK_DEFAULT_GAS_LIMIT,
             deployment_salt=uuid4().hex
         )
 

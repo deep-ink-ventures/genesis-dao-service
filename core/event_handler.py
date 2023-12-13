@@ -54,26 +54,8 @@ class SubstrateEventHandler:
         """
         if ctr_event := block.event_data.get("Contracts", {}):
             for event in ctr_event.get("ContractEmitted", []):
-                if event["name"] == 'AssetCreated':
-                    asset_id = event['args'][0]['value']
-                    dao = Dao.objects.get(asset__id=asset_id)
-                    dao.ink_asset_contract = event['contract']
-                    dao.save()
-                elif event["name"] == 'GenesisDaoContractInitialized':
-                    asset_id = event['args'][1]['value']
-                    dao = Dao.objects.get(asset__id=asset_id)
-                    dao.ink_registry_contract = event['contract']
-                    dao.save()
-                elif event["name"] == 'VestingWalletInitialized':
-                    asset_contract = event['args'][0]['value']
-                    dao = Dao.objects.get(ink_asset_contract=asset_contract)
-                    dao.ink_vesting_wallet_contract = event['contract']
-                    dao.save()
-                elif event["name"] == 'VoteEscrowInitialized':
-                    asset_contract = event['args'][0]['value']
-                    dao = Dao.objects.get(ink_asset_contract=asset_contract)
-                    dao.ink_vote_escrow_contract = event['contract']
-                    dao.save()
+                print(event["name"])
+                print(event['args'])
 
     @staticmethod
     def _create_accounts(block: models.Block):
