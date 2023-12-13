@@ -173,7 +173,7 @@ class SubstrateService(object):
             wait_for_inclusion=wait_for_inclusion,
         )
 
-    def initiate_dao_on_ink(self, dao: Dao):
+    def initiate_dao_on_ink(self, dao: Dao, release_to_owner=True):
         kp = Keypair.create_from_uri(settings.SUBSTRATE_FUNDING_KEYPAIR_URI)
 
         one_year_in_seconds = 365 * 24 * 60 * 60
@@ -244,28 +244,32 @@ class SubstrateService(object):
                     ).to_hex()
                 },
             ),
-            self.substrate_interface.compose_call(
-                call_module='Contracts',
-                call_function='call',
-                call_params={
-                    'dest': genesis_dao_contract.contract_address,
-                    'value': 0,
-                    'gas_limit': INK_DEFAULT_GAS_LIMIT,
-                    'storage_deposit_limit': None,
-                    'data': genesis_dao_contract.metadata.generate_message_data(
-                        name="transfer_ownership",
-                        args={"new_owner": dao.owner.address}
-                    ).to_hex()
-                },
-            ),
         ]
+
+        if release_to_owner:
+            calls.append(
+                self.substrate_interface.compose_call(
+                    call_module='Contracts',
+                    call_function='call',
+                    call_params={
+                        'dest': genesis_dao_contract.contract_address,
+                        'value': 0,
+                        'gas_limit': INK_DEFAULT_GAS_LIMIT,
+                        'storage_deposit_limit': None,
+                        'data': genesis_dao_contract.metadata.generate_message_data(
+                            name="transfer_ownership",
+                            args={"new_owner": dao.owner.address}
+                        ).to_hex()
+                    },
+                )
+            )
         self.batch(calls, kp, wait_for_inclusion=False)
         dao.ink_asset_contract = dao_asset_contract.contract_address
         dao.ink_registry_contract = genesis_dao_contract.contract_address
         dao.ink_vesting_wallet_contract = vesting_wallet_contract.contract_address
         dao.ink_vote_escrow_contract = vote_escrow_contract.contract_address
         dao.save()
-        print("done")
+        return genesis_dao_contract, dao_asset_contract, vesting_wallet_contract, vote_escrow_contract
 
     def deploy_contract(
         self,
@@ -274,6 +278,7 @@ class SubstrateService(object):
         keypair: Keypair,
         constructor_name: str = "new",
         contract_constructor_args: dict = None,
+        salt: str = None,
     ) -> ContractInstance:
         """
         Args:
@@ -282,6 +287,7 @@ class SubstrateService(object):
             keypair: Keypair used to sign the txn to deploy the contract
             constructor_name: defaults to "new"
             contract_constructor_args:  args for the contract constructor
+            salt: salt for the contract deployment
         Returns:
             the contract instance
         """
@@ -296,7 +302,7 @@ class SubstrateService(object):
             keypair=keypair,
             upload_code=True,
             gas_limit=INK_DEFAULT_GAS_LIMIT,
-            deployment_salt=uuid4().hex
+            deployment_salt=salt or uuid4().hex
         )
 
     def sync_initial_accs(self):

@@ -79,6 +79,8 @@ class AssetHolding(TimestampableMixin):
     owner = models.ForeignKey(Account, related_name="holdings", on_delete=models.CASCADE)
     balance = utils.BiggerIntField()
     delegated_to = models.ForeignKey(Account, related_name="delegated_holdings", on_delete=models.CASCADE, null=True)
+    vesting_wallet = models.CharField(max_length=128, null=True, blank=True)
+    vote_escrow = models.CharField(max_length=128, null=True, blank=True)
 
     class Meta:
         db_table = "core_asset_holding"

@@ -125,6 +125,7 @@ class SubstrateServiceTest(IntegrationTestCase):
         contract_name = "some_name"
         constructor_name = "some_constructor_name"
         contract_constructor_args = "some_constructor_args"
+        salt = "some_salt"
 
         self.substrate_service.deploy_contract(
             contract_base_path=contract_base_path,
@@ -132,11 +133,12 @@ class SubstrateServiceTest(IntegrationTestCase):
             keypair=self.keypair,
             constructor_name=constructor_name,
             contract_constructor_args=contract_constructor_args,
+            salt=salt,
         )
 
         contract_code_mock.create_from_contract_files.assert_called_once_with(
-            wasm_file="some_path/some_name/some_name.wasm",
-            metadata_file="some_path/some_name/some_name.json",
+            wasm_file="some_path/some_name.wasm",
+            metadata_file="some_path/some_name.json",
             substrate=self.si,
         )
         contract_code_mock.create_from_contract_files.return_value.deploy.assert_called_once_with(
@@ -145,6 +147,7 @@ class SubstrateServiceTest(IntegrationTestCase):
             keypair=self.keypair,
             upload_code=True,
             gas_limit={"ref_time": 2599000000, "proof_size": 1199038364791120855},
+            deployment_salt=salt,
         )
 
     def test_retrieve_account_balance(self):

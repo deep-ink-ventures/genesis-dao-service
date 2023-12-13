@@ -54,8 +54,23 @@ class SubstrateEventHandler:
         """
         if ctr_event := block.event_data.get("Contracts", {}):
             for event in ctr_event.get("ContractEmitted", []):
-                print(event["name"])
-                print(event['args'])
+                if event["name"] == 'Locked':
+                    account = event['args'][0]['value']
+                    token = event['args'][1]['value']
+                    holding = models.AssetHolding.objects.get(
+                        asset__dao__dao_contract_address=token, owner__address=account
+                    )
+                    holding.vesting_wallet = event['contract']
+                    holding.save()
+                elif event["name"] == 'VestingWalletCreated':
+                    account = event['args'][0]['value']
+                    token = event['args'][1]['value']
+                    holding = models.AssetHolding.objects.get(
+                        asset__dao__dao_contract_address=token, owner__address=account
+                    )
+                    holding.vote_escrow = event['contract']
+                    holding.save()
+
 
     @staticmethod
     def _create_accounts(block: models.Block):
