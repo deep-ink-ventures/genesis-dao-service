@@ -178,22 +178,31 @@ class SubstrateService(object):
         one_year_in_seconds = 365 * 24 * 60 * 60
         blocks_per_year = one_year_in_seconds / settings.BLOCK_CREATION_INTERVAL
 
-        predicted_contract_addresses = OrderedDict()
-        predicted_contract_addresses["dao_asset_contract"] = None
-        predicted_contract_addresses["genesis_dao_contract"] = None
-        predicted_contract_addresses["vesting_wallet_contract"] = None
-        predicted_contract_addresses["vote_escrow_contract"] = None
+        contracts = [
+            "genesis_dao_contract",
+            "vesting_wallet_contract",
+            "vote_escrow_contract",
+        ]
 
         calls = []
+        dao_asset_contract = self.deploy_contract(
+            contract_base_path=f"{settings.BASE_DIR}/wasm/",
+            contract_name="dao_asset_contract",
+            keypair=kp,
+            constructor_name="new",
+            contract_constructor_args={"asset_id": dao.asset.id},
+        )
 
-        for contract in predicted_contract_addresses.keys():
+        print(dao_asset_contract.contract_address)
+
+        for contract in contracts:
 
             base_extensions = {
                 "dao_asset_contract": {"asset_id": dao.asset.id},
                 "genesis_dao_contract": {"owner": kp.ss58_address, "asset_id": dao.asset.id},
-                "vesting_wallet_contract": {"token": predicted_contract_addresses["dao_asset_contract"]},
+                "vesting_wallet_contract": {"token": dao_asset_contract.contract_address},
                 "vote_escrow_contract": {
-                    "token": predicted_contract_addresses["dao_asset_contract"], "max_time": blocks_per_year, "boost": 4
+                    "token": dao_asset_contract.contract_address, "max_time": blocks_per_year, "boost": 4
                 }
             }
 
@@ -209,13 +218,6 @@ class SubstrateService(object):
             data = contract_code.metadata.generate_constructor_data(name="new", args=base_extensions[contract])
             salt = uuid4()
 
-            predicted_contract_addresses[contract] = ss58_encode(contract_address(
-                kp.public_key,
-                contract_code.code_hash,
-                data.data,
-                salt.bytes
-            ), ss58_format=self.substrate_interface.ss58_format)
-
             call = substrate_service.substrate_interface.compose_call(
                 call_module="Contracts",
                 call_function="instantiate_with_code",
@@ -225,15 +227,12 @@ class SubstrateService(object):
                     "storage_deposit_limit": None,
                     "code": "0x{}".format(contract_code.wasm_bytes.hex()),
                     "data": data.to_hex(),
-                    "salt": uuid4().hex,
+                    "salt": salt.hex,
                 },
             )
             calls.append(call)
 
-        dao.ink_asset_contract = predicted_contract_addresses["dao_asset_contract"]
-        dao.ink_registry_contract = predicted_contract_addresses["genesis_dao_contract"]
-        dao.ink_vesting_wallet_contract = predicted_contract_addresses["vesting_wallet_contract"]
-        dao.ink_vote_escrow_contract = predicted_contract_addresses["vote_escrow_contract"]
+        dao.ink_asset_contract = dao_asset_contract.contract_address
         dao.save()
 
         self.batch(calls, kp)
@@ -256,7 +255,7 @@ class SubstrateService(object):
         Returns:
             the contract instance
         """
-        path = contract_base_path + f"{contract_name}/{contract_name}"
+        path = contract_base_path + contract_name
         return ContractCode.create_from_contract_files(
             wasm_file=path + ".wasm",
             metadata_file=path + ".json",
@@ -267,6 +266,7 @@ class SubstrateService(object):
             keypair=keypair,
             upload_code=True,
             gas_limit={"ref_time": 2599000000, "proof_size": 1199038364791120855},  # defaults / 10
+            deployment_salt=uuid4().hex
         )
 
     def sync_initial_accs(self):

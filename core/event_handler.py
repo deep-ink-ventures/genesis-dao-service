@@ -10,6 +10,7 @@ from django.db.transaction import atomic
 from django.utils import timezone
 
 from core import models, tasks
+from core.models import Dao
 
 logger = logging.getLogger("alerts")
 
@@ -50,36 +51,29 @@ class SubstrateEventHandler:
         """
         Args:
             block: Block containing extrinsics and events
-
-        todo @chp
         """
-        # start listener
-        # run samples.deploy_contracts()
-        # check core_blocks table
-        # event should look smth like this:
-        #
-        # "Contracts": {
-        #     "CodeStored": [
-        #       {
-        #         "code_hash": "0x7161a8edc15b019d8432acaa1ab704c3a23f278457e86fadb4ad4a0a72c98eff"
-        #       }
-        #     ],
-        #     "Instantiated": [
-        #       {
-        #         "contract": "5DQmg2Gf7xzWwxAR43c4dUibfqv3ZW5nMH3wLYmNP9M1srXv",
-        #         "deployer": "5GYTUY1vZFZJwyRrxsDecxjNxSM1eZ9bZaqBpojgCA2p6aCa"
-        #       }
-        #     ]
-        #   },
-        #
-        # there are also ("System", "NewAccount") events emitted for this which are already handled. doesn't really make
-        # sense to store these as accounts imo, maybe there needs to be a check for that
-
-        # actually not sure what should happen here
         if ctr_event := block.event_data.get("Contracts", {}):
             for event in ctr_event.get("ContractEmitted", []):
-                print(event)
-                pass
+                if event["name"] == 'AssetCreated':
+                    asset_id = event['args'][0]['value']
+                    dao = Dao.objects.get(asset__id=asset_id)
+                    dao.ink_asset_contract = event['contract']
+                    dao.save()
+                elif event["name"] == 'GenesisDaoContractInitialized':
+                    asset_id = event['args'][1]['value']
+                    dao = Dao.objects.get(asset__id=asset_id)
+                    dao.ink_registry_contract = event['contract']
+                    dao.save()
+                elif event["name"] == 'VestingWalletInitialized':
+                    asset_contract = event['args'][0]['value']
+                    dao = Dao.objects.get(ink_asset_contract=asset_contract)
+                    dao.ink_vesting_wallet_contract = event['contract']
+                    dao.save()
+                elif event["name"] == 'VoteEscrowInitialized':
+                    asset_contract = event['args'][0]['value']
+                    dao = Dao.objects.get(ink_asset_contract=asset_contract)
+                    dao.ink_vote_escrow_contract = event['contract']
+                    dao.save()
 
     @staticmethod
     def _create_accounts(block: models.Block):
