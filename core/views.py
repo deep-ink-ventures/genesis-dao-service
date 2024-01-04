@@ -239,6 +239,10 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
         from core.substrate import substrate_service
 
         dao = self.get_object()
+        if not dao.has_asset():
+            return Response(
+                data={"message": "Dao requires an asset for contracts."}, status=HTTP_400_BAD_REQUEST
+            )
         substrate_service.initiate_dao_on_ink(dao)
         return Response(status=HTTP_200_OK, data=self.get_serializer(dao).data)
 

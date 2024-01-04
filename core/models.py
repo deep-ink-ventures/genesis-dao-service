@@ -41,6 +41,9 @@ class Dao(TimestampableMixin):
         verbose_name = "DAO"
         verbose_name_plural = "DAOs"
 
+    def has_asset(self) -> bool:
+        return hasattr(self, "asset") and self.asset.id is not None
+
     def number_of_token_holders(self) -> int:
         return hasattr(self, "asset") and self.asset.holdings.count() or 0
 
