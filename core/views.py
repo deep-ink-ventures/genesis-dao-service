@@ -133,6 +133,7 @@ class DaoViewSet(ReadOnlyModelViewSet, SearchableMixin):
             "list": serializers.DaoSerializer,
             "add_metadata": serializers.AddDaoMetadataSerializer,
             "create_multisig_transaction": serializers.CallSerializer,
+            "initiate_contracts": serializers.DaoSerializer,
         }.get(self.action)
 
     @staticmethod
