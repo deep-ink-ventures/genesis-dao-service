@@ -13,6 +13,7 @@ from pathlib import Path
 from substrateinterface import SubstrateInterface
 from corsheaders.defaults import default_headers
 
+TESTING = False
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
