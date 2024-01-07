@@ -14,7 +14,7 @@ from scalecodec import GenericCall, GenericExtrinsic, MultiAccountId
 from scalecodec.base import ScaleBytes
 from substrateinterface import ContractCode, ContractEvent, ContractInstance
 from substrateinterface.keypair import Keypair
-from websocket import WebSocketConnectionClosedException, create_connection
+from websocket import WebSocketConnectionClosedException
 
 from core import models
 from core.event_handler import substrate_event_handler
@@ -94,8 +94,7 @@ class SubstrateService(object):
     @retry("initializing blockchain connection")
     def __init__(self):
         self.substrate_interface = settings.SUBSTRATE_INTERFACE(
-            url=settings.BLOCKCHAIN_URL, type_registry_preset=settings.TYPE_REGISTRY_PRESET,
-            websocket=create_connection(settings.BLOCKCHAIN_URL) if not settings.TESTING else None
+            url=settings.BLOCKCHAIN_URL, type_registry_preset=settings.TYPE_REGISTRY_PRESET
         )
 
     def __exit__(self, exc_type, exc_val, exc_tb):

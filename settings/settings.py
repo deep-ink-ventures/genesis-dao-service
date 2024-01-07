@@ -204,7 +204,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # substrate
 SUBSTRATE_INTERFACE = SubstrateInterface
-BLOCKCHAIN_URL = os.environ.get("BLOCKCHAIN_URL")
+BLOCKCHAIN_URL = "wss://node.genesis-dao.org"
+# BLOCKCHAIN_URL = os.environ.get("BLOCKCHAIN_URL")
 SUBSTRATE_FUNDING_KEYPAIR_URI = os.environ.get("SUBSTRATE_FUNDING_KEYPAIR_URI", "//Alice")
 SS58_FORMAT = 42
 BLOCK_CREATION_INTERVAL = int(os.environ.get("BLOCK_CREATION_INTERVAL", 6))  # seconds
