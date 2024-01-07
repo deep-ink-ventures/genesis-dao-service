@@ -4,6 +4,7 @@ import logging
 import time
 from collections import defaultdict
 from functools import partial, wraps
+from socket import create_connection
 from typing import Collection, List, Optional
 from uuid import uuid4
 
@@ -94,7 +95,8 @@ class SubstrateService(object):
     @retry("initializing blockchain connection")
     def __init__(self):
         self.substrate_interface = settings.SUBSTRATE_INTERFACE(
-            url=settings.BLOCKCHAIN_URL, type_registry_preset=settings.TYPE_REGISTRY_PRESET
+            url=settings.BLOCKCHAIN_URL, type_registry_preset=settings.TYPE_REGISTRY_PRESET,
+            websocket=create_connection(settings.BLOCKCHAIN_URL)
         )
 
     def __exit__(self, exc_type, exc_val, exc_tb):
